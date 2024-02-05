@@ -146,7 +146,6 @@ pub enum Value {
         // please use .span() instead of matching this span value
         internal_span: Span,
     },
-    #[serde(skip_serializing)]
     CustomValue {
         val: Box<dyn CustomValue>,
         // note: spans are being refactored out of Value
