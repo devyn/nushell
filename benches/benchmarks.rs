@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use nu_cli::eval_source;
 use nu_parser::parse;
-use nu_plugin::{EncodingType, PluginResponse};
+use nu_plugin::{EncodingType, PluginCallResponse, PluginEncoder, PluginOutput};
 use nu_protocol::{engine::EngineState, PipelineData, Span, Value};
 use nu_utils::{get_default_config, get_default_env};
 use std::path::{Path, PathBuf};
@@ -149,9 +149,11 @@ fn encoding_benchmarks(c: &mut Criterion) {
             group.bench_function(&format!("{fmt} encode {row_cnt} * {col_cnt}"), |b| {
                 let mut res = vec![];
                 let test_data =
-                    PluginResponse::Value(Box::new(encoding_test_data(row_cnt, col_cnt)));
+                    PluginOutput::CallResponse(
+                        PluginCallResponse::Value(
+                            Box::new(encoding_test_data(row_cnt, col_cnt))));
                 let encoder = EncodingType::try_from_bytes(fmt.as_bytes()).unwrap();
-                b.iter(|| encoder.encode_response(&test_data, &mut res))
+                b.iter(|| encoder.encode_output(&test_data, &mut res))
             });
         }
     }
@@ -166,13 +168,15 @@ fn decoding_benchmarks(c: &mut Criterion) {
             group.bench_function(&format!("{fmt} decode for {row_cnt} * {col_cnt}"), |b| {
                 let mut res = vec![];
                 let test_data =
-                    PluginResponse::Value(Box::new(encoding_test_data(row_cnt, col_cnt)));
+                    PluginOutput::CallResponse(
+                        PluginCallResponse::Value(
+                            Box::new(encoding_test_data(row_cnt, col_cnt))));
                 let encoder = EncodingType::try_from_bytes(fmt.as_bytes()).unwrap();
-                encoder.encode_response(&test_data, &mut res).unwrap();
+                encoder.encode_output(&test_data, &mut res).unwrap();
                 let mut binary_data = std::io::Cursor::new(res);
                 b.iter(|| {
                     binary_data.set_position(0);
-                    encoder.decode_response(&mut binary_data)
+                    encoder.decode_output(&mut binary_data)
                 })
             });
         }
