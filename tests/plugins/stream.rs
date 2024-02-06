@@ -74,3 +74,36 @@ fn sum_accepts_stream_of_float() {
 
     assert_eq!(actual.out, "15");
 }
+
+#[test]
+fn collect_external_accepts_list_of_string() {
+    let actual = nu_with_plugins!(
+        cwd: "tests/fixtures/formats",
+        plugin: ("nu_plugin_stream_example"),
+        "[a b] | nu-stream-example collect-external"
+    );
+
+    assert_eq!(actual.out, "ab");
+}
+
+#[test]
+fn collect_external_accepts_list_of_binary() {
+    let actual = nu_with_plugins!(
+        cwd: "tests/fixtures/formats",
+        plugin: ("nu_plugin_stream_example"),
+        "[0x[41] 0x[42]] | nu-stream-example collect-external"
+    );
+
+    assert_eq!(actual.out, "AB");
+}
+
+#[test]
+fn collect_external_produces_raw_input() {
+    let actual = nu_with_plugins!(
+        cwd: "tests/fixtures/formats",
+        plugin: ("nu_plugin_stream_example"),
+        "[a b c] | nu-stream-example collect-external | describe"
+    );
+
+    assert_eq!(actual.out, "raw input");
+}

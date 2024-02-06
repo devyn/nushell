@@ -35,6 +35,19 @@ impl StreamingPlugin for Example {
                     result: Some(Value::int(15, span))
                 }])
                 .category(Category::Experimental),
+            PluginSignature::build("nu-stream-example collect-external")
+                .usage("Example transformer to raw external stream")
+                .search_terms(vec!["example".into()])
+                .input_output_types(vec![
+                    (Type::List(Type::String.into()), Type::String),
+                    (Type::List(Type::Binary.into()), Type::Binary),
+                ])
+                .plugin_examples(vec![PluginExample {
+                    example: "[a b] | nu-stream-example collect-external".into(),
+                    description: "collect strings into one stream".into(),
+                    result: Some(Value::string("ab", span))
+                }])
+                .category(Category::Experimental),
         ]
     }
 
@@ -48,6 +61,7 @@ impl StreamingPlugin for Example {
         match name {
             "nu-stream-example seq" => self.seq(call, input),
             "nu-stream-example sum" => self.sum(call, input),
+            "nu-stream-example collect-external" => self.collect_external(call, input),
             _ => Err(LabeledError {
                 label: "Plugin call with wrong name signature".into(),
                 msg: "the signature used to call the plugin does not match any name in the plugin signature vector".into(),
