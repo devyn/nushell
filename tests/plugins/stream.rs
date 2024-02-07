@@ -6,7 +6,7 @@ fn seq_produces_stream() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "nu-stream-example seq 1 5 | describe"
+        "stream_example seq 1 5 | describe"
     );
 
     assert_eq!(actual.out, "list<int> (stream)");
@@ -18,7 +18,7 @@ fn seq_describe_no_collect_succeeds_without_error() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "nu-stream-example seq 1 5 | describe --no-collect"
+        "stream_example seq 1 5 | describe --no-collect"
     );
 
     assert_eq!(actual.out, "stream");
@@ -30,7 +30,7 @@ fn seq_stream_collects_to_correct_list() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "nu-stream-example seq 1 5 | to json --raw"
+        "stream_example seq 1 5 | to json --raw"
     );
 
     assert_eq!(actual.out, "[1,2,3,4,5]");
@@ -38,7 +38,7 @@ fn seq_stream_collects_to_correct_list() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "nu-stream-example seq 1 0 | to json --raw"
+        "stream_example seq 1 0 | to json --raw"
     );
 
     assert_eq!(actual.out, "[]");
@@ -49,7 +49,7 @@ fn sum_accepts_list_of_int() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "[1 2 3] | nu-stream-example sum"
+        "[1 2 3] | stream_example sum"
     );
 
     assert_eq!(actual.out, "6");
@@ -60,7 +60,7 @@ fn sum_accepts_list_of_float() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "[1.0 2.0 3.5] | nu-stream-example sum"
+        "[1.0 2.0 3.5] | stream_example sum"
     );
 
     assert_eq!(actual.out, "6.5");
@@ -71,7 +71,7 @@ fn sum_accepts_stream_of_int() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "seq 1 5 | nu-stream-example sum"
+        "seq 1 5 | stream_example sum"
     );
 
     assert_eq!(actual.out, "15");
@@ -82,7 +82,7 @@ fn sum_accepts_stream_of_float() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "seq 1 5 | into float | nu-stream-example sum"
+        "seq 1 5 | into float | stream_example sum"
     );
 
     assert_eq!(actual.out, "15");
@@ -93,7 +93,7 @@ fn collect_external_accepts_list_of_string() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "[a b] | nu-stream-example collect-external"
+        "[a b] | stream_example collect-external"
     );
 
     assert_eq!(actual.out, "ab");
@@ -104,7 +104,7 @@ fn collect_external_accepts_list_of_binary() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "[0x[41] 0x[42]] | nu-stream-example collect-external"
+        "[0x[41] 0x[42]] | stream_example collect-external"
     );
 
     assert_eq!(actual.out, "AB");
@@ -115,7 +115,7 @@ fn collect_external_produces_raw_input() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
         plugin: ("nu_plugin_stream_example"),
-        "[a b c] | nu-stream-example collect-external | describe"
+        "[a b c] | stream_example collect-external | describe"
     );
 
     assert_eq!(actual.out, "raw input");

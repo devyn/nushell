@@ -2,6 +2,8 @@ use nu_protocol::Value;
 
 use nu_protocol::Span;
 
+/// Accumulates numbers into either an int or a float. Changes type to float on the first
+/// float received.
 #[derive(Clone, Copy)]
 pub(crate) enum IntOrFloat {
     Int(i64),
