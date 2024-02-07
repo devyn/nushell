@@ -191,6 +191,9 @@ pub fn get_signature(
 /// This is the trait that Nushell plugins must implement. The methods defined on
 /// `Plugin` are invoked by [serve_plugin] during plugin registration and execution.
 ///
+/// If large amounts of data are expected to need to be received or produced, it may be more
+/// appropriate to implement [StreamingPlugin] instead.
+///
 /// # Examples
 /// Basic usage:
 /// ```
@@ -236,6 +239,9 @@ pub trait Plugin {
     /// invoked command will be passed in via this argument. The `call` contains
     /// metadata describing how the plugin was invoked and `input` contains the structured
     /// data passed to the command implemented by this [Plugin].
+    ///
+    /// This variant does not support streaming. Consider implementing [StreamingPlugin] instead
+    /// if streaming is desired.
     fn run(
         &mut self,
         name: &str,
@@ -257,13 +263,14 @@ pub trait Plugin {
 /// Basic usage:
 /// ```
 /// # use nu_plugin::*;
-/// # use nu_protocol::{PluginSignature, Type, Value};
-/// struct HelloPlugin;
+/// # use nu_protocol::{PluginSignature, PipelineData, Type, Value};
+/// struct LowercasePlugin;
 ///
-/// impl Plugin for HelloPlugin {
+/// impl StreamingPlugin for LowercasePlugin {
 ///     fn signature(&self) -> Vec<PluginSignature> {
-///         let sig = PluginSignature::build("hello")
-///             .input_output_type(Type::Nothing, Type::String);
+///         let sig = PluginSignature::build("lowercase")
+///             .usage("Convert each string in a stream to lowercase")
+///             .input_output_type(Type::List(Type::String.into()), Type::List(Type::String.into()));
 ///
 ///         vec![sig]
 ///     }
@@ -273,9 +280,15 @@ pub trait Plugin {
 ///         name: &str,
 ///         config: &Option<Value>,
 ///         call: &EvaluatedCall,
-///         input: &Value,
-///     ) -> Result<Value, LabeledError> {
-///         Ok(Value::string("Hello, World!".to_owned(), call.head))
+///         input: PipelineData,
+///     ) -> Result<PipelineData, LabeledError> {
+///         let span = call.head;
+///         Ok(input.map(move |value| {
+///             value.as_string()
+///                 .map(|string| Value::string(string.to_lowercase(), span))
+///                 // Errors in a stream should be returned as values.
+///                 .unwrap_or_else(|err| Value::error(err, span))
+///         }, None)?)
 ///     }
 /// }
 /// ```
@@ -298,6 +311,11 @@ pub trait StreamingPlugin {
     /// invoked command will be passed in via this argument. The `call` contains
     /// metadata describing how the plugin was invoked and `input` contains the structured
     /// data passed to the command implemented by this [Plugin].
+    ///
+    /// This variant expects to receive and produce [PipelineData], which allows for stream-based
+    /// handling of I/O. This is recommended if the plugin is expected to transform large lists or
+    /// potentially large quantities of bytes. The API is more complex however, and [Plugin] is
+    /// recommended instead if this is not a concern.
     fn run(
         &mut self,
         name: &str,
@@ -307,6 +325,8 @@ pub trait StreamingPlugin {
     ) -> Result<PipelineData, LabeledError>;
 }
 
+/// All [Plugin]s can be used as [StreamingPlugin]s, but input streams will be fully consumed
+/// before the plugin runs.
 impl<T: Plugin> StreamingPlugin for T {
     fn signature(&self) -> Vec<PluginSignature> {
         <Self as Plugin>::signature(self)

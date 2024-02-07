@@ -28,13 +28,14 @@ pub struct EngineInterfaceImpl<R, W, E> {
     encoder: E,
 }
 
-// The trait indirection is so that we can hide the types with a trait object inside
+/// The trait indirection is so that we can hide the types with a trait object inside
 /// EngineInterface. As such, this trait must remain object safe.
 pub(crate) trait EngineInterfaceIo: StreamDataIo {
     fn read_call(&self) -> Result<Option<PluginCall>, ShellError>;
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError>;
 }
 
+// Implement the stream handling methods (see StreamDataIo).
 impl_stream_data_io!(EngineInterfaceImpl, PluginInput (decode_input), PluginOutput (encode_output));
 
 impl<R, W, E> EngineInterfaceIo for EngineInterfaceImpl<R, W, E>

@@ -15,7 +15,10 @@ pub use engine::EngineInterface;
 mod plugin;
 pub(crate) use plugin::{PluginInterface, PluginExecutionContext};
 
-// Non-fused iterator: should call .fuse()
+/// Iterate through values received on a `ListStream` input.
+///
+/// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
+/// attempted to be read after end-of-input.
 struct PluginListStream {
     io: Arc<dyn StreamDataIo>,
 }
@@ -33,10 +36,12 @@ impl Iterator for PluginListStream {
 
 impl Drop for PluginListStream {
     fn drop(&mut self) {
+        // Signal that we don't need the stream anymore.
         self.io.drop_list();
     }
 }
 
+/// Create [PipelineData] for receiving a [ListStream] input.
 fn make_list_stream(
     source: Arc<dyn StreamDataIo>,
     ctrlc: Option<Arc<AtomicBool>>
@@ -62,7 +67,10 @@ fn write_full_list_stream(io: &Arc<dyn StreamDataIo>, list_stream: ListStream)
     io.write_list(None)
 }
 
-// Non-fused iterator: should call .fuse()
+/// Iterate through byte chunks received on the `stdout` stream of an `ListStream` input.
+///
+/// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
+/// attempted to be read after end-of-input.
 struct PluginExternalStdoutStream {
     io: Arc<dyn StreamDataIo>,
 }
@@ -78,11 +86,15 @@ impl Iterator for PluginExternalStdoutStream
 
 impl Drop for PluginExternalStdoutStream {
     fn drop(&mut self) {
+        // Signal that we don't need the stream anymore.
         self.io.drop_external_stdout();
     }
 }
 
-// Non-fused iterator: should call .fuse()
+/// Iterate through byte chunks received on the `stderr` stream of an `ListStream` input.
+///
+/// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
+/// attempted to be read after end-of-input.
 struct PluginExternalStderrStream {
     io: Arc<dyn StreamDataIo>,
 }
@@ -98,11 +110,15 @@ impl Iterator for PluginExternalStderrStream
 
 impl Drop for PluginExternalStderrStream {
     fn drop(&mut self) {
+        // Signal that we don't need the stream anymore.
         self.io.drop_external_stderr();
     }
 }
 
-// Non-fused iterator: should call .fuse()
+/// Iterate through values received on the `exit_code` stream of an `ListStream` input.
+///
+/// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
+/// attempted to be read after end-of-input.
 struct PluginExternalExitCodeStream {
     io: Arc<dyn StreamDataIo>,
 }
@@ -121,10 +137,12 @@ impl Iterator for PluginExternalExitCodeStream
 
 impl Drop for PluginExternalExitCodeStream {
     fn drop(&mut self) {
+        // Signal that we don't need the stream anymore.
         self.io.drop_external_exit_code();
     }
 }
 
+/// Create [PipelineData] for receiving an [ExternalStream] input.
 fn make_external_stream(
     source: Arc<dyn StreamDataIo>,
     info: &ExternalStreamInfo,

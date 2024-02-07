@@ -42,10 +42,11 @@ struct PluginInterfaceImpl<R, W, E> {
     context: Option<Arc<PluginExecutionContext>>,
 }
 
+// Implement the stream handling methods (see StreamDataIo).
 impl_stream_data_io!(PluginInterfaceImpl, PluginOutput (decode_output), PluginInput (encode_input));
 
-// The trait indirection is so that we can hide the types with a trait object inside
-/// EngineInterface. As such, this trait must remain object safe.
+/// The trait indirection is so that we can hide the types with a trait object inside
+/// PluginInterface. As such, this trait must remain object safe.
 trait PluginInterfaceIo: StreamDataIo {
     fn context(&self) -> Option<&Arc<PluginExecutionContext>>;
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError>;
