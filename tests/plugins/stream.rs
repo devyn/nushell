@@ -13,6 +13,19 @@ fn seq_produces_stream() {
 }
 
 #[test]
+fn seq_describe_no_collect_succeeds_without_error() {
+    // This tests to ensure that there's no error if the stream is suddenly closed
+    let actual = nu_with_plugins!(
+        cwd: "tests/fixtures/formats",
+        plugin: ("nu_plugin_stream_example"),
+        "nu-stream-example seq 1 5 | describe --no-collect"
+    );
+
+    assert_eq!(actual.out, "stream");
+    assert_eq!(actual.err, "");
+}
+
+#[test]
 fn seq_stream_collects_to_correct_list() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
