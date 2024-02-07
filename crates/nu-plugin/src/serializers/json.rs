@@ -21,12 +21,8 @@ impl PluginEncoder for JsonSerializer {
         plugin_input: &PluginInput,
         writer: &mut impl std::io::Write,
     ) -> Result<(), nu_protocol::ShellError> {
-        serde_json::to_writer(&mut *writer, plugin_input).map_err(|err| ShellError::PluginFailedToEncode {
-            msg: err.to_string(),
-        })?;
-        writer.write_all(b"\n").map_err(|err| ShellError::PluginFailedToEncode {
-            msg: err.to_string()
-        })
+        serde_json::to_writer(&mut *writer, plugin_input).map_err(json_encode_err)?;
+        writer.write_all(b"\n").map_err(|err| ShellError::IOError { msg: err.to_string() })
     }
 
     fn decode_input(
@@ -34,15 +30,7 @@ impl PluginEncoder for JsonSerializer {
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginInput>, nu_protocol::ShellError> {
         let mut de = serde_json::Deserializer::from_reader(reader);
-        PluginInput::deserialize(&mut de).map(Some).or_else(|err| {
-            if err.is_eof() {
-                Ok(None)
-            } else {
-                Err(ShellError::PluginFailedToDecode {
-                    msg: err.to_string(),
-                })
-            }
-        })
+        PluginInput::deserialize(&mut de).map(Some).or_else(json_decode_err)
     }
 
     fn encode_output(
@@ -50,14 +38,8 @@ impl PluginEncoder for JsonSerializer {
         plugin_output: &PluginOutput,
         writer: &mut impl std::io::Write,
     ) -> Result<(), ShellError> {
-        serde_json::to_writer(&mut *writer, plugin_output).map_err(|err| {
-            ShellError::PluginFailedToEncode {
-                msg: err.to_string(),
-            }
-        })?;
-        writer.write_all(b"\n").map_err(|err| ShellError::PluginFailedToEncode {
-            msg: err.to_string()
-        })
+        serde_json::to_writer(&mut *writer, plugin_output).map_err(json_encode_err)?;
+        writer.write_all(b"\n").map_err(|err| ShellError::IOError { msg: err.to_string() })
     }
 
     fn decode_output(
@@ -65,14 +47,30 @@ impl PluginEncoder for JsonSerializer {
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginOutput>, ShellError> {
         let mut de = serde_json::Deserializer::from_reader(reader);
-        PluginOutput::deserialize(&mut de).map(Some).or_else(|err| {
-            if err.is_eof() {
-                Ok(None)
-            } else {
-                Err(ShellError::PluginFailedToDecode {
-                    msg: err.to_string(),
-                })
-            }
+        PluginOutput::deserialize(&mut de).map(Some).or_else(json_decode_err)
+    }
+}
+
+/// Handle a `serde_json` encode error.
+fn json_encode_err(err: serde_json::Error) -> ShellError {
+    if err.is_io() {
+        ShellError::IOError { msg: err.to_string() }
+    } else {
+        ShellError::PluginFailedToEncode { msg: err.to_string() }
+    }
+}
+
+/// Handle a `serde_json` decode error. Returns `Ok(None)` on eof.
+fn json_decode_err<T>(err: serde_json::Error) -> Result<Option<T>, ShellError> {
+    if err.is_eof() {
+        Ok(None)
+    } else if err.is_io() {
+        Err(ShellError::IOError {
+            msg: err.to_string()
+        })
+    } else {
+        Err(ShellError::PluginFailedToDecode {
+            msg: err.to_string()
         })
     }
 }

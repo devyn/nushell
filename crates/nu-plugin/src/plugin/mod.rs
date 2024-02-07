@@ -32,6 +32,9 @@ pub trait PluginEncoder: Clone + Send + Sync {
     fn name(&self) -> &str;
 
     /// Serialize a `PluginInput` in the `PluginEncoder`s format
+    ///
+    /// Returns [ShellError::IOError] if there was a problem writing, or
+    /// [ShellError::PluginFailedToEncode] for a serialization error.
     fn encode_input(
         &self,
         plugin_input: &PluginInput,
@@ -39,21 +42,32 @@ pub trait PluginEncoder: Clone + Send + Sync {
     ) -> Result<(), ShellError>;
 
     /// Deserialize a `PluginInput` from the `PluginEncoder`s format
+    ///
+    /// Returns `None` if there is no more input to receive, in which case the plugin should exit.
+    ///
+    /// Returns [ShellError::IOError] if there was a problem reading, or
+    /// [ShellError::PluginFailedToDecode] for a deserialization error.
     fn decode_input(
         &self,
         reader: &mut impl std::io::BufRead
     ) -> Result<Option<PluginInput>, ShellError>;
 
-    /// Serialize a `PluginOutput` from the plugin in this `PluginEncoder`'s preferred
-    /// format
+    /// Serialize a `PluginOutput` in this `PluginEncoder`'s format
+    ///
+    /// Returns [ShellError::IOError] if there was a problem writing, or
+    /// [ShellError::PluginFailedToEncode] for a serialization error.
     fn encode_output(
         &self,
         plugin_output: &PluginOutput,
         writer: &mut impl std::io::Write,
     ) -> Result<(), ShellError>;
 
-    /// Deserialize a `PluginOutput` from the plugin from this `PluginEncoder`'s
-    /// preferred format
+    /// Deserialize a `PluginOutput` from the `PluginEncoder`'s format
+    ///
+    /// Returns `None` if there is no more output to receive.
+    ///
+    /// Returns [ShellError::IOError] if there was a problem reading, or
+    /// [ShellError::PluginFailedToDecode] for a deserialization error.
     fn decode_output(
         &self,
         reader: &mut impl std::io::BufRead,
@@ -397,47 +411,61 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
 
     let interface = EngineInterface::new(stdin_buf, stdout, encoder);
 
-    loop {
-        match interface.read_call() {
+    // Try an operation that could result in ShellError. Exit if an I/O error is encountered.
+    // Try to report the error to nushell otherwise, and failing that, panic.
+    macro_rules! try_or_report {
+        ($expr:expr) => (match $expr {
+            Ok(val) => val,
+            // Just exit if there is an I/O error. Most likely this just means that nushell
+            // interrupted us. If not, the error probably happened on the other side too, so we
+            // don't need to also report it.
+            Err(ShellError::IOError { .. }) => std::process::exit(1),
+            // If there is another error, try to send it to nushell and then exit.
             Err(err) => {
-                let response = PluginCallResponse::Error(err.into());
-                interface.write_call_response(response)
-                    .expect("Error encoding response");
-                // If an error occurs while decoding a call, don't continue.
-                break;
+                let response = PluginCallResponse::Error(err.clone().into());
+                interface.write_call_response(response).unwrap_or_else(|_| {
+                    // If we can't send it to nushell, panic with it so at least we get the output
+                    panic!("{}", err)
+                });
+                std::process::exit(1)
             }
-            Ok(None) => break, // end of input
-            Ok(Some(plugin_call)) => {
-                match plugin_call {
-                    // Sending the signature back to nushell to create the declaration definition
-                    PluginCall::Signature => {
-                        let response = PluginCallResponse::Signature(plugin.signature());
-                        interface.write_call_response(response)
-                            .expect("Error encoding response");
-                    }
-                    PluginCall::Run(CallInfo { name, call, input, config }) => {
-                        interface.make_pipeline_data(input)
-                            .and_then(|input| plugin.run(&name, &config, &call, input).map_err(|err| err.into()))
-                            .and_then(|output| interface.write_pipeline_data_response(output))
-                            .unwrap_or_else(|err| {
-                                interface.write_call_response(PluginCallResponse::Error(err.into()))
-                                    .expect("Failed to write error response");
-                            });
-                    }
-                    PluginCall::CollapseCustomValue(plugin_data) => {
-                        let response = bincode::deserialize::<Box<dyn CustomValue>>(&plugin_data.data)
-                            .map_err(|err| ShellError::PluginFailedToDecode {
-                                msg: err.to_string(),
-                            })
-                            .and_then(|val| val.to_base_value(plugin_data.span))
-                            .map(Box::new)
-                            .map_err(LabeledError::from)
-                            .map_or_else(PluginCallResponse::Error, PluginCallResponse::Value);
+        })
+    }
 
-                        interface.write_call_response(response)
-                            .expect("Failed to write CollapseCustomValue response");
+    while let Some(plugin_call) = try_or_report!(interface.read_call()) {
+        match plugin_call {
+            // Sending the signature back to nushell to create the declaration definition
+            PluginCall::Signature => {
+                let response = PluginCallResponse::Signature(plugin.signature());
+                try_or_report!(interface.write_call_response(response));
+            }
+            // Run the plugin, handling any input or output streams
+            PluginCall::Run(CallInfo { name, call, input, config }) => {
+                let input = try_or_report!(interface.make_pipeline_data(input));
+                match plugin.run(&name, &config, &call, input) {
+                    Ok(output) => {
+                        // Write the output stream back to nushell.
+                        try_or_report!(interface.write_pipeline_data_response(output));
                     }
-                }
+                    Err(err) => {
+                        // Write the error response, and then loop to get the next call.
+                        let response = PluginCallResponse::Error(err);
+                        try_or_report!(interface.write_call_response(response));
+                    }
+                };
+            }
+            // Collapse a custom value into plain nushell data
+            PluginCall::CollapseCustomValue(plugin_data) => {
+                let response = bincode::deserialize::<Box<dyn CustomValue>>(&plugin_data.data)
+                    .map_err(|err| ShellError::PluginFailedToDecode {
+                        msg: err.to_string(),
+                    })
+                    .and_then(|val| val.to_base_value(plugin_data.span))
+                    .map(Box::new)
+                    .map_err(LabeledError::from)
+                    .map_or_else(PluginCallResponse::Error, PluginCallResponse::Value);
+
+                try_or_report!(interface.write_call_response(response));
             }
         }
     }

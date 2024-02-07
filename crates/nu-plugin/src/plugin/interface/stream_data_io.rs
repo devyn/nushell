@@ -84,7 +84,7 @@ macro_rules! impl_stream_data_io {
             fn read_list(&self) -> Result<Option<Value>, ShellError> {
                 let mut read = self.read.lock().expect("read mutex poisoned");
                 // Read from the buffer first
-                if let Some(value) = read.1.list.pop_front() {
+                if let Some(value) = read.1.list.pop_front()? {
                     Ok(value)
                 } else {
                     // If we are expecting list stream data, there aren't any other simultaneous
@@ -104,7 +104,7 @@ macro_rules! impl_stream_data_io {
                 loop {
                     let mut read = self.read.lock().expect("read mutex poisoned");
                     // Read from the buffer first
-                    if let Some(bytes) = read.1.external_stdout.pop_front() {
+                    if let Some(bytes) = read.1.external_stdout.pop_front()? {
                         return Ok(bytes.transpose()?);
                     } else {
                         // Skip messages from other streams until we get what we want
@@ -125,7 +125,7 @@ macro_rules! impl_stream_data_io {
                 loop {
                     let mut read = self.read.lock().expect("read mutex poisoned");
                     // Read from the buffer first
-                    if let Some(bytes) = read.1.external_stderr.pop_front() {
+                    if let Some(bytes) = read.1.external_stderr.pop_front()? {
                         return Ok(bytes.transpose()?);
                     } else {
                         // Skip messages from other streams until we get what we want
@@ -146,7 +146,7 @@ macro_rules! impl_stream_data_io {
                 loop {
                     let mut read = self.read.lock().expect("read mutex poisoned");
                     // Read from the buffer first
-                    if let Some(code) = read.1.external_exit_code.pop_front() {
+                    if let Some(code) = read.1.external_exit_code.pop_front()? {
                         return Ok(code);
                     } else {
                         // Skip messages from other streams until we get what we want
@@ -312,16 +312,22 @@ impl<T> StreamBuffer<T> {
         }
     }
 
-    pub fn pop_front(&mut self) -> Option<T> {
+    /// Try to pop a message from the front of the buffer.
+    ///
+    /// Returns `Ok(None)` if there are no messages waiting in the buffer, or an error if this
+    /// buffer is either `NotPresent` or `Dropped`.
+    pub fn pop_front(&mut self) -> Result<Option<T>, ShellError> {
         match self {
-            StreamBuffer::Present(ref mut buf) => buf.pop_back(),
+            StreamBuffer::Present(ref mut buf) => Ok(buf.pop_back()),
 
-            // Panics are used here because this would be a problem with code, not with the
-            // interface.
             StreamBuffer::NotPresent =>
-                panic!("Tried to read from a stream that is not present"),
+                Err(ShellError::PluginFailedToDecode {
+                    msg: "Tried to read from a stream that is not present".into()
+                }),
             StreamBuffer::Dropped =>
-                panic!("Tried to read from a stream that is already dropped"),
+                Err(ShellError::PluginFailedToDecode {
+                    msg: "Tried to read from a stream that is already dropped".into()
+                })
         }
     }
 

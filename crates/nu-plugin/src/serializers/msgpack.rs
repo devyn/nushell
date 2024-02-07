@@ -21,11 +21,7 @@ impl PluginEncoder for MsgPackSerializer {
         plugin_input: &PluginInput,
         writer: &mut impl std::io::Write,
     ) -> Result<(), nu_protocol::ShellError> {
-        rmp_serde::encode::write(writer, plugin_input).map_err(|err| {
-            ShellError::PluginFailedToEncode {
-                msg: err.to_string(),
-            }
-        })
+        rmp_serde::encode::write(writer, plugin_input).map_err(rmp_encode_err)
     }
 
     fn decode_input(
@@ -33,15 +29,7 @@ impl PluginEncoder for MsgPackSerializer {
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginInput>, ShellError> {
         let mut de = rmp_serde::Deserializer::new(reader);
-        PluginInput::deserialize(&mut de).map(Some).or_else(|err| {
-            if rmp_error_is_eof(&err) {
-                Ok(None)
-            } else {
-                Err(ShellError::PluginFailedToDecode {
-                    msg: err.to_string(),
-                })
-            }
-        })
+        PluginInput::deserialize(&mut de).map(Some).or_else(rmp_decode_err)
     }
 
     fn encode_output(
@@ -49,11 +37,7 @@ impl PluginEncoder for MsgPackSerializer {
         plugin_output: &PluginOutput,
         writer: &mut impl std::io::Write,
     ) -> Result<(), ShellError> {
-        rmp_serde::encode::write(writer, plugin_output).map_err(|err| {
-            ShellError::PluginFailedToEncode {
-                msg: err.to_string(),
-            }
-        })
+        rmp_serde::encode::write(writer, plugin_output).map_err(rmp_encode_err)
     }
 
     fn decode_output(
@@ -61,23 +45,46 @@ impl PluginEncoder for MsgPackSerializer {
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginOutput>, ShellError> {
         let mut de = rmp_serde::Deserializer::new(reader);
-        PluginOutput::deserialize(&mut de).map(Some).or_else(|err| {
-            if rmp_error_is_eof(&err) {
-                Ok(None)
-            } else {
-                Err(ShellError::PluginFailedToDecode {
-                    msg: err.to_string(),
-                })
-            }
-        })
+        PluginOutput::deserialize(&mut de).map(Some).or_else(rmp_decode_err)
     }
 }
 
-fn rmp_error_is_eof(err: &rmp_serde::decode::Error) -> bool {
+/// Handle a msgpack encode error
+fn rmp_encode_err(err: rmp_serde::encode::Error) -> ShellError {
+    match err {
+        rmp_serde::encode::Error::InvalidValueWrite(_) => {
+            // I/O error
+            ShellError::IOError { msg: err.to_string() }
+        }
+        _ => {
+            // Something else
+            ShellError::PluginFailedToEncode { msg: err.to_string() }
+        }
+    }
+}
+
+/// Handle a msgpack decode error. Returns `Ok(None)` on eof
+fn rmp_decode_err<T>(err: rmp_serde::decode::Error) -> Result<Option<T>, ShellError> {
     match err {
         rmp_serde::decode::Error::InvalidMarkerRead(err)
-            if matches!(err.kind(), ErrorKind::UnexpectedEof) => true,
-        _ => false
+            if matches!(err.kind(), ErrorKind::UnexpectedEof) =>
+        {
+            // EOF
+            Ok(None)
+        }
+        rmp_serde::decode::Error::InvalidMarkerRead(_) |
+        rmp_serde::decode::Error::InvalidDataRead(_) => {
+            // I/O error
+            Err(ShellError::IOError {
+                msg: err.to_string()
+            })
+        }
+        _ => {
+            // Something else
+            Err(ShellError::PluginFailedToEncode {
+                msg: err.to_string()
+            })
+        }
     }
 }
 
