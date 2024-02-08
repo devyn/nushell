@@ -4,7 +4,13 @@ use std::{sync::{Arc, atomic::AtomicBool}, path::Path};
 
 use nu_protocol::{ShellError, Value, Span, ListStream, PipelineData, RawStream};
 
-use crate::protocol::{ExternalStreamInfo, CallInput, PluginData, PluginCustomValue, RawStreamInfo};
+use crate::{
+    protocol::{
+        ExternalStreamInfo, CallInput, PluginData, PluginCustomValue, RawStreamInfo, PluginInput,
+        PluginOutput
+    },
+    plugin::PluginEncoder,
+};
 
 mod stream_data_io;
 use stream_data_io::*;
@@ -13,7 +19,68 @@ mod engine;
 pub use engine::EngineInterface;
 
 mod plugin;
-pub(crate) use plugin::{PluginInterface, PluginExecutionContext};
+pub(crate) use plugin::{PluginInterface, PluginExecutionContext, PluginExecutionNushellContext};
+
+#[cfg(test)]
+mod test_util;
+
+/// Read [PluginInput] or [PluginOutput] from the stream.
+///
+/// This abstraction is really only used to make testing easier; in general this will usually be
+/// used on a pair of a [reader](std::io::BufRead) and an [encoder](PluginEncoder).
+trait PluginRead: Send {
+    /// Returns `Ok(None)` on end of stream.
+    fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError>;
+
+    /// Returns `Ok(None)` on end of stream.
+    fn read_output(&mut self) -> Result<Option<PluginOutput>, ShellError>;
+}
+
+impl<R, E> PluginRead for (R, E)
+where
+    R: std::io::BufRead + Send,
+    E: PluginEncoder,
+{
+    fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError> {
+        self.1.decode_input(&mut self.0)
+    }
+
+    fn read_output(&mut self) -> Result<Option<PluginOutput>, ShellError> {
+        self.1.decode_output(&mut self.0)
+    }
+}
+
+/// Write [PluginInput] or [PluginOutput] to the stream.
+///
+/// This abstraction is really only used to make testing easier; in general this will usually be
+/// used on a pair of a [writer](std:::io::Write) and an [encoder](PluginEncoder).
+trait PluginWrite: Send {
+    fn write_input(&mut self, input: &PluginInput) -> Result<(), ShellError>;
+    fn write_output(&mut self, output: &PluginOutput) -> Result<(), ShellError>;
+
+    /// Flush any internal buffers, if applicable.
+    fn flush(&mut self) -> Result<(), ShellError>;
+}
+
+impl<W, E> PluginWrite for (W, E)
+where
+    W: std::io::Write + Send,
+    E: PluginEncoder,
+{
+    fn write_input(&mut self, input: &PluginInput) -> Result<(), ShellError> {
+        self.1.encode_input(input, &mut self.0)
+    }
+
+    fn write_output(&mut self, output: &PluginOutput) -> Result<(), ShellError> {
+        self.1.encode_output(output, &mut self.0)
+    }
+
+    fn flush(&mut self) -> Result<(), ShellError> {
+        self.0.flush().map_err(|err| {
+            ShellError::IOError { msg: err.to_string() }
+        })
+    }
+}
 
 /// Iterate through values received on a `ListStream` input.
 ///
@@ -153,13 +220,17 @@ fn make_external_stream(
             let stream = PluginExternalStdoutStream {
                 io: source.clone()
             }.fuse();
-            RawStream::new(Box::new(stream), ctrlc.clone(), info.span, stdout_info.known_size)
+            let mut raw = RawStream::new(Box::new(stream), ctrlc.clone(), info.span, stdout_info.known_size);
+            raw.is_binary = stdout_info.is_binary;
+            raw
         }),
         stderr: info.stderr.as_ref().map(|stderr_info| {
             let stream = PluginExternalStderrStream {
                 io: source.clone()
             }.fuse();
-            RawStream::new(Box::new(stream), ctrlc.clone(), info.span, stderr_info.known_size)
+            let mut raw = RawStream::new(Box::new(stream), ctrlc.clone(), info.span, stderr_info.known_size);
+            raw.is_binary = stderr_info.is_binary;
+            raw
         }),
         exit_code: info.has_exit_code.then(|| {
             ListStream::from_stream(PluginExternalExitCodeStream {

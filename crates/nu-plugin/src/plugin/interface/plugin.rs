@@ -1,8 +1,8 @@
 //! Interface used by the engine to communicate with the plugin.
 
-use std::{sync::{Mutex, Arc}, io::{BufRead, Write}, path::PathBuf};
+use std::{sync::{Mutex, Arc, atomic::AtomicBool}, io::{BufRead, Write}, path::{PathBuf, Path}};
 
-use nu_protocol::{ShellError, Value, PipelineData, engine::EngineState, ast::Call, ListStream, RawStream};
+use nu_protocol::{ShellError, Value, PipelineData, engine::{EngineState, Stack}, ast::Call, ListStream, RawStream, Span};
 
 use crate::{
     protocol::{
@@ -15,51 +15,121 @@ use crate::{
 use super::{
     stream_data_io::{impl_stream_data_io, StreamDataIo, StreamBuffers, StreamBuffer},
     make_list_stream,
-    make_external_stream, write_full_list_stream, write_full_external_stream
+    make_external_stream,
+    write_full_list_stream,
+    write_full_external_stream,
+    PluginRead,
+    PluginWrite,
 };
 
-/// The execution context of a plugin.
-pub(crate) struct PluginExecutionContext {
-    pub filename: PathBuf,
-    pub shell: Option<PathBuf>,
-    pub engine_state: EngineState,
-    //pub stack: Stack,
-    pub call: Call,
+#[cfg(test)]
+mod tests;
+
+/// Object safe trait for abstracting operations required of the plugin context.
+pub(crate) trait PluginExecutionContext: Send + Sync {
+    /// The plugin's filename
+    fn filename(&self) -> &Path;
+    /// The shell used to execute the plugin
+    fn shell(&self) -> Option<&Path>;
+    /// The [Span] for the command execution (`call.head`)
+    fn command_span(&self) -> Span;
+    /// The name of the command being executed
+    fn command_name(&self) -> &str;
+    /// The interrupt signal, if present
+    fn ctrlc(&self) -> Option<&Arc<AtomicBool>>;
 }
 
-impl PluginExecutionContext {
-    fn command_name(&self) -> &str {
-        self.engine_state.get_decl(self.call.decl_id).name()
+/// The execution context of a plugin.
+#[derive(Debug)]
+pub(crate) struct PluginExecutionNushellContext {
+    filename: PathBuf,
+    shell: Option<PathBuf>,
+    command_span: Span,
+    command_name: String,
+    ctrlc: Option<Arc<AtomicBool>>,
+    // If more operations are required of the context, fields can be added here.
+    //
+    // It may be required to insert the entire EngineState/Call/Stack in here to support
+    // future features and that's okay
+}
+
+impl PluginExecutionNushellContext {
+    pub fn new(
+        filename: impl Into<PathBuf>,
+        shell: Option<impl Into<PathBuf>>,
+        engine_state: &EngineState,
+        _stack: &Stack,
+        call: &Call,
+    ) -> PluginExecutionNushellContext {
+        PluginExecutionNushellContext {
+            filename: filename.into(),
+            shell: shell.map(Into::into),
+            command_span: call.head,
+            command_name: engine_state.get_decl(call.decl_id).name().to_owned(),
+            ctrlc: engine_state.ctrlc.clone(),
+        }
     }
 }
 
-struct PluginInterfaceImpl<R, W, E> {
+impl PluginExecutionContext for PluginExecutionNushellContext {
+    fn filename(&self) -> &Path {
+        &self.filename
+    }
+
+    fn shell(&self) -> Option<&Path> {
+        self.shell.as_deref()
+    }
+
+    fn command_span(&self) -> Span {
+        self.command_span
+    }
+
+    fn command_name(&self) -> &str {
+        &self.command_name
+    }
+
+    fn ctrlc(&self) -> Option<&Arc<AtomicBool>> {
+        self.ctrlc.as_ref()
+    }
+}
+
+pub(crate) struct PluginInterfaceImpl<R, W> {
     // Always lock read and then write mutex, if using both
     // Stream inputs that can't be handled immediately can be put on the buffer
     read: Mutex<(R, StreamBuffers)>,
     write: Mutex<W>,
-    encoder: E,
-    context: Option<Arc<PluginExecutionContext>>,
+    context: Option<Arc<dyn PluginExecutionContext>>,
+}
+
+impl<R, W> PluginInterfaceImpl<R, W> {
+    pub(crate) fn new(reader: R, writer: W, context: Option<Arc<dyn PluginExecutionContext>>)
+        -> PluginInterfaceImpl<R, W>
+    {
+        PluginInterfaceImpl {
+            read: Mutex::new((reader, StreamBuffers::default())),
+            write: Mutex::new(writer),
+            context,
+        }
+    }
 }
 
 // Implement the stream handling methods (see StreamDataIo).
-impl_stream_data_io!(PluginInterfaceImpl, PluginOutput (decode_output), PluginInput (encode_input));
+impl_stream_data_io!(PluginInterfaceImpl, PluginOutput (read_output), PluginInput (write_input));
 
 /// The trait indirection is so that we can hide the types with a trait object inside
 /// PluginInterface. As such, this trait must remain object safe.
-trait PluginInterfaceIo: StreamDataIo {
-    fn context(&self) -> Option<&Arc<PluginExecutionContext>>;
+pub(crate) trait PluginInterfaceIo: StreamDataIo {
+    fn context(&self) -> Option<&Arc<dyn PluginExecutionContext>>;
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError>;
     fn read_call_response(&self) -> Result<PluginCallResponse, ShellError>;
 }
 
-impl<R, W, E> PluginInterfaceIo for PluginInterfaceImpl<R, W, E>
+impl<R, W> PluginInterfaceIo for PluginInterfaceImpl<R, W>
 where
-    R: BufRead + Send,
-    W: Write + Send,
-    E: PluginEncoder + Send + Sync,
+    R: PluginRead,
+    W: PluginWrite,
 {
-    fn context(&self) -> Option<&Arc<PluginExecutionContext>> {
+    fn context(&self) -> Option<&Arc<dyn PluginExecutionContext>> {
         self.context.as_ref()
     }
 
@@ -67,17 +137,8 @@ where
         let mut write = self.write.lock().expect("write mutex poisoned");
         log::trace!("Writing plugin call: {call:?}");
 
-        self.encoder.encode_input(&PluginInput::Call(call), &mut *write)?;
-
-        write.flush().map_err(|err| {
-            ShellError::GenericError {
-                error: err.to_string(),
-                msg: "failed to flush buffer".into(),
-                span: None,
-                help: None,
-                inner: vec![]
-            }
-        })?;
+        write.write_input(&PluginInput::Call(call))?;
+        write.flush()?;
 
         log::trace!("Wrote plugin call");
         Ok(())
@@ -88,7 +149,7 @@ where
 
         let mut read = self.read.lock().expect("read mutex poisoned");
         loop {
-            match self.encoder.decode_output(&mut read.0)? {
+            match read.0.read_output()? {
                 Some(PluginOutput::CallResponse(response)) => {
                     // Check the call input type to set the stream buffers up
                     match &response {
@@ -148,30 +209,34 @@ pub(crate) struct PluginInterface {
     io_stream: Arc<dyn StreamDataIo>,
 }
 
+impl<R, W> From<PluginInterfaceImpl<R, W>> for PluginInterface
+where
+    R: PluginRead + 'static,
+    W: PluginWrite + 'static,
+{
+    fn from(plugin_impl: PluginInterfaceImpl<R, W>) -> Self {
+        let arc = Arc::new(plugin_impl);
+        PluginInterface {
+            io: arc.clone(),
+            io_stream: arc
+        }
+    }
+}
+
 impl PluginInterface {
     /// Create the plugin interface from the given reader, writer, encoder, and context.
     pub(crate) fn new<R, W, E>(
         reader: R,
         writer: W,
         encoder: E,
-        context: Option<Arc<PluginExecutionContext>>,
+        context: Option<Arc<dyn PluginExecutionContext>>,
     ) -> PluginInterface
     where
         R: BufRead + Send + 'static,
         W: Write + Send + 'static,
-        E: PluginEncoder + Send + Sync + 'static,
+        E: PluginEncoder + 'static,
     {
-        let plugin_impl = PluginInterfaceImpl {
-            read: Mutex::new((reader, StreamBuffers::default())),
-            write: Mutex::new(writer),
-            encoder,
-            context,
-        };
-        let arc = Arc::new(plugin_impl);
-        PluginInterface {
-            io: arc.clone(),
-            io_stream: arc
-        }
+        PluginInterfaceImpl::new((reader, encoder.clone()), (writer, encoder), context).into()
     }
 
     /// Write a [PluginCall] to the plugin
@@ -204,7 +269,7 @@ impl PluginInterface {
                 Err(ShellError::GenericError {
                     error: "Plugin missing value".into(),
                     msg: "Received a signature from plugin instead of value or stream".into(),
-                    span: Some(context.call.head),
+                    span: Some(context.command_span()),
                     help: None,
                     inner: vec![],
                 }),
@@ -218,8 +283,8 @@ impl PluginInterface {
                     Box::new(PluginCustomValue {
                         name,
                         data: plugin_data.data,
-                        filename: context.filename.clone(),
-                        shell: context.shell.clone(),
+                        filename: context.filename().to_owned(),
+                        shell: context.shell().map(|p| p.to_owned()),
                         source: context.command_name().to_owned(),
                     }),
                     plugin_data.span
@@ -227,12 +292,12 @@ impl PluginInterface {
                 Ok(PipelineData::Value(value, None))
             }
             PluginCallResponse::ListStream =>
-                Ok(make_list_stream(self.io_stream.clone(), context.engine_state.ctrlc.clone())),
+                Ok(make_list_stream(self.io_stream.clone(), context.ctrlc().cloned())),
             PluginCallResponse::ExternalStream(info) =>
                 Ok(make_external_stream(
                     self.io_stream.clone(),
                     &info,
-                    context.engine_state.ctrlc.clone()
+                    context.ctrlc().cloned()
                 )),
         }
     }

@@ -120,7 +120,7 @@ pub(crate) fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
 
 pub(crate) fn make_plugin_interface(
     child: &mut Child,
-    context: Option<Arc<PluginExecutionContext>>,
+    context: Option<Arc<dyn PluginExecutionContext>>,
 ) -> Result<PluginInterface, ShellError> {
     let stdin = child.stdin.take().ok_or_else(|| ShellError::PluginFailedToLoad {
         msg: "plugin missing stdin writer".into()

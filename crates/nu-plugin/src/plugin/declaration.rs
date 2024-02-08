@@ -1,6 +1,8 @@
 use crate::EvaluatedCall;
 
-use super::interface::{PluginExecutionContext, make_call_input_from_pipeline_data};
+use super::interface::{
+    PluginExecutionNushellContext, make_call_input_from_pipeline_data
+};
 use super::{create_command, make_plugin_interface};
 use crate::protocol::{CallInfo, PluginCall};
 use std::path::{Path, PathBuf};
@@ -145,13 +147,13 @@ impl Command for PluginDeclaration {
             config,
         });
 
-        let context = Arc::new(PluginExecutionContext {
-            filename: self.filename.clone(),
-            shell: self.shell.clone(),
-            engine_state: engine_state.clone(),
-            //stack: stack.clone(),
-            call: call.clone(),
-        });
+        let context = Arc::new(PluginExecutionNushellContext::new(
+            self.filename.clone(),
+            self.shell.clone(),
+            &engine_state,
+            &stack,
+            &call
+        ));
 
         let interface = make_plugin_interface(&mut child, Some(context))?;
         let interface_clone = interface.clone();

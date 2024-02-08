@@ -17,16 +17,33 @@ use super::{
     make_list_stream,
     make_external_stream,
     write_full_external_stream,
-    write_full_list_stream
+    write_full_list_stream,
+    PluginRead,
+    PluginWrite,
 };
 
-pub struct EngineInterfaceImpl<R, W, E> {
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug)]
+pub(crate) struct EngineInterfaceImpl<R, W> {
     // Always lock read and then write mutex, if using both
     // Stream inputs that can't be handled immediately can be put on the buffer
     read: Mutex<(R, StreamBuffers)>,
     write: Mutex<W>,
-    encoder: E,
 }
+
+impl<R, W> EngineInterfaceImpl<R, W> {
+    pub(crate) fn new(reader: R, writer: W) -> EngineInterfaceImpl<R, W> {
+        EngineInterfaceImpl {
+            read: Mutex::new((reader, StreamBuffers::default())),
+            write: Mutex::new(writer),
+        }
+    }
+}
+
+// Implement the stream handling methods (see StreamDataIo).
+impl_stream_data_io!(EngineInterfaceImpl, PluginInput (read_input), PluginOutput (write_output));
 
 /// The trait indirection is so that we can hide the types with a trait object inside
 /// EngineInterface. As such, this trait must remain object safe.
@@ -35,19 +52,15 @@ pub(crate) trait EngineInterfaceIo: StreamDataIo {
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError>;
 }
 
-// Implement the stream handling methods (see StreamDataIo).
-impl_stream_data_io!(EngineInterfaceImpl, PluginInput (decode_input), PluginOutput (encode_output));
-
-impl<R, W, E> EngineInterfaceIo for EngineInterfaceImpl<R, W, E>
+impl<R, W> EngineInterfaceIo for EngineInterfaceImpl<R, W>
 where
-    R: BufRead + Send,
-    W: Write + Send,
-    E: PluginEncoder,
+    R: PluginRead,
+    W: PluginWrite,
 {
     fn read_call(&self) -> Result<Option<PluginCall>, ShellError> {
         let mut read = self.read.lock().expect("read mutex poisoned");
         loop {
-            let input = self.encoder.decode_input(&mut read.0)?;
+            let input = read.0.read_input()?;
             match input {
                 Some(PluginInput::Call(call)) => {
                     // Check the call input type to set the stream buffers up
@@ -98,18 +111,8 @@ where
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError> {
         let mut write = self.write.lock().expect("write mutex poisoned");
 
-        self.encoder.encode_output(
-            &PluginOutput::CallResponse(response), &mut *write)?;
-
-        write.flush().map_err(|err| {
-            ShellError::GenericError {
-                error: err.to_string(),
-                msg: "failed to flush buffer".into(),
-                span: None,
-                help: None,
-                inner: vec![]
-            }
-        })
+        write.write_output(&PluginOutput::CallResponse(response))?;
+        write.flush()
     }
 }
 
@@ -123,6 +126,20 @@ pub struct EngineInterface {
     io_stream: Arc<dyn StreamDataIo>,
 }
 
+impl<R, W> From<EngineInterfaceImpl<R, W>> for EngineInterface
+where
+    R: PluginRead + 'static,
+    W: PluginWrite + 'static,
+{
+    fn from(engine_impl: EngineInterfaceImpl<R, W>) -> Self {
+        let arc = Arc::new(engine_impl);
+        EngineInterface {
+            io: arc.clone(),
+            io_stream: arc
+        }
+    }
+}
+
 impl EngineInterface {
     /// Create the engine interface from the given reader, writer, and encoder.
     pub(crate) fn new<R, W, E>(reader: R, writer: W, encoder: E) -> EngineInterface
@@ -131,16 +148,7 @@ impl EngineInterface {
         W: Write + Send + 'static,
         E: PluginEncoder + 'static,
     {
-        let engine_impl = EngineInterfaceImpl {
-            read: Mutex::new((reader, StreamBuffers::default())),
-            write: Mutex::new(writer),
-            encoder
-        };
-        let arc = Arc::new(engine_impl);
-        EngineInterface {
-            io: arc.clone(),
-            io_stream: arc
-        }
+        EngineInterfaceImpl::new((reader, encoder.clone()), (writer, encoder)).into()
     }
 
     /// Read a plugin call from the engine
@@ -149,8 +157,6 @@ impl EngineInterface {
     }
 
     /// Create [PipelineData] appropriate for the given [CallInput].
-    ///
-    /// Will cause a panic unless called after `read_call` returns [PluginCall::Run]
     pub(crate) fn make_pipeline_data(&self, call_input: CallInput)
         -> Result<PipelineData, ShellError>
     {

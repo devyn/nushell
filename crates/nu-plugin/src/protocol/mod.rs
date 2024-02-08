@@ -8,7 +8,7 @@ pub use plugin_custom_value::PluginCustomValue;
 pub use plugin_data::PluginData;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CallInfo {
     pub name: String,
     pub call: EvaluatedCall,
@@ -17,7 +17,7 @@ pub struct CallInfo {
 }
 
 /// Pipeline input to a plugin call
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum CallInput {
     /// No input
     Empty,
@@ -36,7 +36,7 @@ pub enum CallInput {
 }
 
 /// Additional information about external streams
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ExternalStreamInfo {
     pub span: Span,
     pub stdout: Option<RawStreamInfo>,
@@ -46,7 +46,7 @@ pub struct ExternalStreamInfo {
 }
 
 /// Additional information about raw streams
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct RawStreamInfo {
     pub is_binary: bool,
     pub known_size: Option<u64>,
@@ -62,7 +62,7 @@ impl From<&RawStream> for RawStreamInfo {
 }
 
 /// Initial message sent to the plugin
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PluginCall {
     Signature,
     Run(CallInfo),
@@ -70,7 +70,7 @@ pub enum PluginCall {
 }
 
 /// Any data sent to the plugin
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PluginInput {
     Call(PluginCall),
     StreamData(StreamData),
@@ -81,7 +81,7 @@ pub enum PluginInput {
 /// A `None` value ends the stream. An `Error` ends all streams, and the error should be propagated.
 ///
 /// Note: exported for internal use, not public.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[doc(hidden)]
 pub enum StreamData {
     List(Option<Value>),
@@ -96,7 +96,7 @@ pub enum StreamData {
 /// a [Plugin](crate::Plugin)'s [`run`](crate::Plugin::run()) method. It contains
 /// the error message along with optional [Span] data to support highlighting in the
 /// shell.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct LabeledError {
     /// The name of the error
     pub label: String,
@@ -178,7 +178,7 @@ impl From<ShellError> for LabeledError {
 /// Response to a [PluginCall]
 ///
 /// Note: exported for internal use, not public.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[doc(hidden)]
 pub enum PluginCallResponse {
     Error(LabeledError),
@@ -193,7 +193,7 @@ pub enum PluginCallResponse {
 /// Information received from the plugin
 ///
 /// Note: exported for internal use, not public.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[doc(hidden)]
 pub enum PluginOutput {
     CallResponse(PluginCallResponse),

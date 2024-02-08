@@ -2,6 +2,14 @@ use std::collections::VecDeque;
 
 use nu_protocol::{ShellError, Value};
 
+use crate::protocol::StreamData;
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+pub(crate) use tests::gen_stream_data_tests;
+
 /// Methods for reading and writing [crate::protocol::StreamData] contents on an interface.
 ///
 /// This trait must be object safe.
@@ -66,20 +74,18 @@ pub(crate) trait StreamDataIo: Send + Sync {
 /// Implement [StreamDataIo] for the given type. The type is expected to have a shape similar to
 /// `EngineInterfaceImpl` or `PluginInterfaceImpl`. The following struct fields must be defined:
 ///
-/// * `read: Mutex<(R, StreamBuffers)>` where `R` implements [std::io::BufRead]
-/// * `write: Mutex<W>` where `W` implements [std::io::Write]
-/// * `encoder: E` where `E` implements [crate::PluginEncoder]
+/// * `read: Mutex<(R, StreamBuffers)>` where `R` implements [`PluginRead`](super::PluginRead)
+/// * `write: Mutex<W>` where `W` implements [`PluginWrite`](super::PluginWrite)
 macro_rules! impl_stream_data_io {
     (
         $type:ident,
-        $read_type:ident ($decode_method:ident),
-        $write_type:ident ($encode_method:ident)
+        $read_type:ident ($read_method:ident),
+        $write_type:ident ($write_method:ident)
     ) => {
-        impl<R, W, E> StreamDataIo for $type<R, W, E>
+        impl<R, W> StreamDataIo for $type<R, W>
         where
-            R: BufRead + Send,
-            W: Write + Send,
-            E: PluginEncoder,
+            R: $crate::plugin::interface::PluginRead,
+            W: $crate::plugin::interface::PluginWrite,
         {
             fn read_list(&self) -> Result<Option<Value>, ShellError> {
                 let mut read = self.read.lock().expect("read mutex poisoned");
@@ -90,7 +96,7 @@ macro_rules! impl_stream_data_io {
                     // If we are expecting list stream data, there aren't any other simultaneous
                     // streams, so we don't need to loop. Just try to read and reject it
                     // otherwise
-                    match self.encoder.$decode_method(&mut read.0)? {
+                    match read.0.$read_method()? {
                         Some($read_type::StreamData(StreamData::List(value))) => Ok(value),
                         _ => Err(ShellError::PluginFailedToDecode {
                             msg: "Expected list stream data".into(),
@@ -108,7 +114,7 @@ macro_rules! impl_stream_data_io {
                         return Ok(bytes.transpose()?);
                     } else {
                         // Skip messages from other streams until we get what we want
-                        match self.encoder.$decode_method(&mut read.0)? {
+                        match read.0.$read_method()? {
                             Some($read_type::StreamData(StreamData::ExternalStdout(bytes))) =>
                                 return Ok(bytes.transpose()?),
                             Some($read_type::StreamData(other)) => read.1.skip(other)?,
@@ -129,7 +135,7 @@ macro_rules! impl_stream_data_io {
                         return Ok(bytes.transpose()?);
                     } else {
                         // Skip messages from other streams until we get what we want
-                        match self.encoder.$decode_method(&mut read.0)? {
+                        match read.0.$read_method()? {
                             Some($read_type::StreamData(StreamData::ExternalStderr(bytes))) =>
                                 return Ok(bytes.transpose()?),
                             Some($read_type::StreamData(other)) => read.1.skip(other)?,
@@ -150,7 +156,7 @@ macro_rules! impl_stream_data_io {
                         return Ok(code);
                     } else {
                         // Skip messages from other streams until we get what we want
-                        match self.encoder.$decode_method(&mut read.0)? {
+                        match read.0.$read_method()? {
                             Some($read_type::StreamData(StreamData::ExternalExitCode(code))) =>
                                 return Ok(code),
                             Some($read_type::StreamData(other)) => read.1.skip(other)?,
@@ -201,11 +207,10 @@ macro_rules! impl_stream_data_io {
             fn write_list(&self, value: Option<Value>) -> Result<(), ShellError> {
                 let mut write = self.write.lock().expect("write mutex poisoned");
                 let is_final = value.is_none();
-                self.encoder.$encode_method(
-                    &$write_type::StreamData(StreamData::List(value)), &mut *write)?;
+                write.$write_method(&$write_type::StreamData(StreamData::List(value)))?;
                 // Try to flush final value
                 if is_final {
-                    let _ = write.flush();
+                    write.flush()?;
                 }
                 Ok(())
             }
@@ -215,11 +220,10 @@ macro_rules! impl_stream_data_io {
             {
                 let mut write = self.write.lock().expect("write mutex poisoned");
                 let is_final = bytes.is_none();
-                self.encoder.$encode_method(
-                    &$write_type::StreamData(StreamData::ExternalStdout(bytes)), &mut *write)?;
+                write.$write_method(&$write_type::StreamData(StreamData::ExternalStdout(bytes)))?;
                 // Try to flush final value
                 if is_final {
-                    let _ = write.flush();
+                    write.flush()?;
                 }
                 Ok(())
             }
@@ -229,11 +233,10 @@ macro_rules! impl_stream_data_io {
             {
                 let mut write = self.write.lock().expect("write mutex poisoned");
                 let is_final = bytes.is_none();
-                self.encoder.$encode_method(
-                    &$write_type::StreamData(StreamData::ExternalStderr(bytes)), &mut *write)?;
+                write.$write_method(&$write_type::StreamData(StreamData::ExternalStderr(bytes)))?;
                 // Try to flush final value
                 if is_final {
-                    let _ = write.flush();
+                    write.flush()?;
                 }
                 Ok(())
             }
@@ -241,11 +244,11 @@ macro_rules! impl_stream_data_io {
             fn write_external_exit_code(&self, code: Option<Value>) -> Result<(), ShellError> {
                 let mut write = self.write.lock().expect("write mutex poisoned");
                 let is_final = code.is_none();
-                self.encoder.$encode_method(
-                    &$write_type::StreamData(StreamData::ExternalExitCode(code)), &mut *write)?;
+                write.$write_method(
+                    &$write_type::StreamData(StreamData::ExternalExitCode(code)))?;
                 // Try to flush final value
                 if is_final {
-                    let _ = write.flush();
+                    write.flush()?;
                 }
                 Ok(())
             }
@@ -255,10 +258,8 @@ macro_rules! impl_stream_data_io {
 
 pub(crate) use impl_stream_data_io;
 
-use crate::protocol::StreamData;
-
 /// Buffers for stream messages that temporarily can't be handled
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) struct StreamBuffers {
     pub list: StreamBuffer<Option<Value>>,
     pub external_stdout: StreamBuffer<Option<Result<Vec<u8>, ShellError>>>,
@@ -270,7 +271,7 @@ pub(crate) struct StreamBuffers {
 /// to be consumed.
 ///
 /// The buffer is a LIFO queue.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) enum StreamBuffer<T> {
     /// The default state: this stream was not specified for use, so there is no buffer available
     /// and reading a message directed for this stream will cause an error.
@@ -318,7 +319,7 @@ impl<T> StreamBuffer<T> {
     /// buffer is either `NotPresent` or `Dropped`.
     pub fn pop_front(&mut self) -> Result<Option<T>, ShellError> {
         match self {
-            StreamBuffer::Present(ref mut buf) => Ok(buf.pop_back()),
+            StreamBuffer::Present(ref mut buf) => Ok(buf.pop_front()),
 
             StreamBuffer::NotPresent =>
                 Err(ShellError::PluginFailedToDecode {
