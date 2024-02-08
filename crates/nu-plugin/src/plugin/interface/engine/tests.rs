@@ -241,9 +241,8 @@ fn read_call_run_with_external_stream_all_input_accepts_only_all_external_stream
 #[test]
 fn read_call_end_of_input() {
     let test = TestCase::new();
-    match test.engine_interface().read_call().expect("should succeed") {
-        Some(call) => panic!("should have been end of input, but read {call:?}"),
-        None => ()
+    if let Some(call) = test.engine_interface().read_call().expect("should succeed") {
+        panic!("should have been end of input, but read {call:?}");
     }
 }
 
@@ -442,20 +441,20 @@ fn make_pipeline_data_external_stream() {
             assert!(stderr.is_some());
             assert!(exit_code.is_some());
             assert_eq!(Span::test_data(), span, "span");
-            assert_eq!(false, trim_end_newline, "trim_end_newline");
+            assert!(!trim_end_newline);
 
             if let Some(rs) = stdout.as_ref() {
-                assert_eq!(true, rs.is_binary, "stdout.is_binary");
+                assert!(rs.is_binary, "stdout.is_binary=false");
                 assert_eq!(Some(7), rs.known_size, "stdout.known_size");
             }
             if let Some(rs) = stderr.as_ref() {
-                assert_eq!(false, rs.is_binary, "stderr.is_binary");
+                assert!(!rs.is_binary, "stderr.is_binary=false");
                 assert_eq!(None, rs.known_size, "stderr.known_size");
             }
 
             let out_bytes = stdout.unwrap().into_bytes().expect("failed to read stdout");
             let err_bytes = stderr.unwrap().into_bytes().expect("failed to read stderr");
-            let exit_code_vals: Vec<_> = exit_code.unwrap().into_iter().collect();
+            let exit_code_vals: Vec<_> = exit_code.unwrap().collect();
 
             assert_eq!(b"foofooo", &out_bytes.item[..]);
             assert_eq!(b"barbarr", &err_bytes.item[..]);
@@ -642,8 +641,8 @@ fn write_pipeline_data_response_external_stream_stdout_only() {
                 None => todo!(),
             }
             assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
-            assert_eq!(false, info.has_exit_code, "info.has_exit_code");
-            assert_eq!(false, info.trim_end_newline, "info.trim_end_newline");
+            assert!(!info.has_exit_code, "info.has_exit_code=true");
+            assert!(!info.trim_end_newline, "info.trim_end_newline=true");
         }
         Some(other) => panic!("unexpected response written: {other:?}"),
         None => panic!("no response written"),
@@ -715,7 +714,7 @@ fn write_pipeline_data_response_external_stream_stdout_err() {
         Some(PluginOutput::CallResponse(PluginCallResponse::ExternalStream(info))) => {
             assert!(info.stdout.is_some(), "info.stdout is not present");
             assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
-            assert_eq!(false, info.has_exit_code, "info.has_exit_code");
+            assert!(!info.has_exit_code, "info.has_exit_code=true");
         }
         Some(other) => panic!("unexpected response written: {other:?}"),
         None => panic!("no response written"),
@@ -775,7 +774,7 @@ fn write_pipeline_data_response_external_stream_exit_code_only() {
             // just check what matters here, the other tests cover other bits
             assert!(info.stdout.is_none(), "info.stdout: {:?}", info.stdout);
             assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
-            assert_eq!(true, info.has_exit_code);
+            assert!(info.has_exit_code);
         }
         Some(other) => panic!("unexpected response: {other:?}"),
         None => panic!("didn't write any response")
@@ -871,8 +870,8 @@ fn write_pipeline_data_response_external_stream_full() {
                 }
                 None => todo!(),
             }
-            assert_eq!(true, info.has_exit_code, "info.has_exit_code");
-            assert_eq!(true, info.trim_end_newline, "info.trim_end_newline");
+            assert!(info.has_exit_code);
+            assert!(info.trim_end_newline);
         }
         Some(other) => panic!("unexpected response written: {other:?}"),
         None => panic!("no response written"),

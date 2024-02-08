@@ -111,12 +111,12 @@ macro_rules! impl_stream_data_io {
                     let mut read = self.read.lock().expect("read mutex poisoned");
                     // Read from the buffer first
                     if let Some(bytes) = read.1.external_stdout.pop_front()? {
-                        return Ok(bytes.transpose()?);
+                        return bytes.transpose();
                     } else {
                         // Skip messages from other streams until we get what we want
                         match read.0.$read_method()? {
                             Some($read_type::StreamData(StreamData::ExternalStdout(bytes))) =>
-                                return Ok(bytes.transpose()?),
+                                return bytes.transpose(),
                             Some($read_type::StreamData(other)) => read.1.skip(other)?,
                             _ => return Err(ShellError::PluginFailedToDecode {
                                 msg: "Expected external stream data".into()
@@ -132,12 +132,12 @@ macro_rules! impl_stream_data_io {
                     let mut read = self.read.lock().expect("read mutex poisoned");
                     // Read from the buffer first
                     if let Some(bytes) = read.1.external_stderr.pop_front()? {
-                        return Ok(bytes.transpose()?);
+                        return bytes.transpose();
                     } else {
                         // Skip messages from other streams until we get what we want
                         match read.0.$read_method()? {
                             Some($read_type::StreamData(StreamData::ExternalStderr(bytes))) =>
-                                return Ok(bytes.transpose()?),
+                                return bytes.transpose(),
                             Some($read_type::StreamData(other)) => read.1.skip(other)?,
                             _ => return Err(ShellError::PluginFailedToDecode {
                                 msg: "Expected external stream data".into()

@@ -471,20 +471,20 @@ fn make_pipeline_data_external_stream() {
             assert!(stderr.is_some());
             assert!(exit_code.is_some());
             assert_eq!(Span::test_data(), span, "span");
-            assert_eq!(false, trim_end_newline, "trim_end_newline");
+            assert!(!trim_end_newline);
 
             if let Some(rs) = stdout.as_ref() {
-                assert_eq!(true, rs.is_binary, "stdout.is_binary");
+                assert!(rs.is_binary, "stdout.is_binary=false");
                 assert_eq!(Some(7), rs.known_size, "stdout.known_size");
             }
             if let Some(rs) = stderr.as_ref() {
-                assert_eq!(false, rs.is_binary, "stderr.is_binary");
+                assert!(!rs.is_binary, "stderr.is_binary=true");
                 assert_eq!(None, rs.known_size, "stderr.known_size");
             }
 
             let out_bytes = stdout.unwrap().into_bytes().expect("failed to read stdout");
             let err_bytes = stderr.unwrap().into_bytes().expect("failed to read stderr");
-            let exit_code_vals: Vec<_> = exit_code.unwrap().into_iter().collect();
+            let exit_code_vals: Vec<_> = exit_code.unwrap().collect();
 
             assert_eq!(b"foofooo", &out_bytes.item[..]);
             assert_eq!(b"barbarr", &err_bytes.item[..]);

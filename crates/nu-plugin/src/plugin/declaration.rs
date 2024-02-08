@@ -150,9 +150,9 @@ impl Command for PluginDeclaration {
         let context = Arc::new(PluginExecutionNushellContext::new(
             self.filename.clone(),
             self.shell.clone(),
-            &engine_state,
-            &stack,
-            &call
+            engine_state,
+            stack,
+            call
         ));
 
         let interface = make_plugin_interface(&mut child, Some(context))?;

@@ -279,10 +279,8 @@ fn write_full_external_stream(
                 io.write_external_exit_code(None)
             })
         }),
-    ] {
-        if let Some(thread) = thread {
-            thread.join().expect("stream consumer thread panicked")?;
-        }
+    ].into_iter().flatten() {
+        thread.join().expect("stream consumer thread panicked")?;
     }
     Ok(())
 }
