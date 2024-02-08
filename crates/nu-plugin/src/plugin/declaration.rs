@@ -1,8 +1,6 @@
 use crate::EvaluatedCall;
 
-use super::interface::{
-    PluginExecutionNushellContext, make_call_input_from_pipeline_data
-};
+use super::interface::{make_call_input_from_pipeline_data, PluginExecutionNushellContext};
 use super::{create_command, make_plugin_interface};
 use crate::protocol::{CallInfo, PluginCall};
 use std::path::{Path, PathBuf};
@@ -99,9 +97,7 @@ impl Command for PluginDeclaration {
             }
         })?;
 
-        let call_input = make_call_input_from_pipeline_data(
-            &input, &self.name, &self.filename
-        )?;
+        let call_input = make_call_input_from_pipeline_data(&input, &self.name, &self.filename)?;
 
         // Fetch the configuration for a plugin
         //
@@ -152,7 +148,7 @@ impl Command for PluginDeclaration {
             self.shell.clone(),
             engine_state,
             stack,
-            call
+            call,
         ));
 
         let interface = make_plugin_interface(&mut child, Some(context))?;
@@ -165,10 +161,15 @@ impl Command for PluginDeclaration {
             interface_clone.write_call(plugin_call)?;
             match input {
                 PipelineData::Value(_, _) => Ok(()),
-                PipelineData::ListStream(list_stream, _) =>
-                    interface_clone.write_full_list_stream(list_stream),
-                PipelineData::ExternalStream { stdout, stderr, exit_code, .. } =>
-                    interface_clone.write_full_external_stream(stdout, stderr, exit_code),
+                PipelineData::ListStream(list_stream, _) => {
+                    interface_clone.write_full_list_stream(list_stream)
+                }
+                PipelineData::ExternalStream {
+                    stdout,
+                    stderr,
+                    exit_code,
+                    ..
+                } => interface_clone.write_full_external_stream(stdout, stderr, exit_code),
                 PipelineData::Empty => Ok(()),
             }
         });

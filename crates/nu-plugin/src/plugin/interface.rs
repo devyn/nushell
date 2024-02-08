@@ -1,15 +1,18 @@
 //! Implements the stream multiplexing interface for both the plugin side and the engine side.
 
-use std::{sync::{Arc, atomic::AtomicBool}, path::Path};
+use std::{
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+};
 
-use nu_protocol::{ShellError, Value, Span, ListStream, PipelineData, RawStream};
+use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Span, Value};
 
 use crate::{
-    protocol::{
-        ExternalStreamInfo, CallInput, PluginData, PluginCustomValue, RawStreamInfo, PluginInput,
-        PluginOutput
-    },
     plugin::PluginEncoder,
+    protocol::{
+        CallInput, ExternalStreamInfo, PluginCustomValue, PluginData, PluginInput, PluginOutput,
+        RawStreamInfo,
+    },
 };
 
 mod stream_data_io;
@@ -19,7 +22,7 @@ mod engine;
 pub use engine::EngineInterface;
 
 mod plugin;
-pub(crate) use plugin::{PluginInterface, PluginExecutionContext, PluginExecutionNushellContext};
+pub(crate) use plugin::{PluginExecutionContext, PluginExecutionNushellContext, PluginInterface};
 
 #[cfg(test)]
 mod test_util;
@@ -76,8 +79,8 @@ where
     }
 
     fn flush(&mut self) -> Result<(), ShellError> {
-        self.0.flush().map_err(|err| {
-            ShellError::IOError { msg: err.to_string() }
+        self.0.flush().map_err(|err| ShellError::IOError {
+            msg: err.to_string(),
         })
     }
 }
@@ -96,7 +99,7 @@ impl Iterator for PluginListStream {
     fn next(&mut self) -> Option<Value> {
         match self.io.read_list() {
             Ok(value) => value,
-            Err(err) => Some(Value::error(err, Span::unknown()))
+            Err(err) => Some(Value::error(err, Span::unknown())),
         }
     }
 }
@@ -109,25 +112,23 @@ impl Drop for PluginListStream {
 }
 
 /// Create [PipelineData] for receiving a [ListStream] input.
-fn make_list_stream(
-    source: Arc<dyn StreamDataIo>,
-    ctrlc: Option<Arc<AtomicBool>>
-) -> PipelineData {
+fn make_list_stream(source: Arc<dyn StreamDataIo>, ctrlc: Option<Arc<AtomicBool>>) -> PipelineData {
     PipelineData::ListStream(
         ListStream::from_stream(PluginListStream { io: source }.fuse(), ctrlc),
-        None
+        None,
     )
 }
 
 /// Write the contents of a [ListStream] to `io`.
-fn write_full_list_stream(io: &Arc<dyn StreamDataIo>, list_stream: ListStream)
-    -> Result<(), ShellError>
-{
+fn write_full_list_stream(
+    io: &Arc<dyn StreamDataIo>,
+    list_stream: ListStream,
+) -> Result<(), ShellError> {
     // Consume the stream and write it via StreamDataIo.
     for value in list_stream {
         io.write_list(Some(match value {
             Value::LazyRecord { val, .. } => val.collect()?,
-            _ => value
+            _ => value,
         }))?;
     }
     // End of stream
@@ -142,8 +143,7 @@ struct PluginExternalStdoutStream {
     io: Arc<dyn StreamDataIo>,
 }
 
-impl Iterator for PluginExternalStdoutStream
-{
+impl Iterator for PluginExternalStdoutStream {
     type Item = Result<Vec<u8>, ShellError>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>, ShellError>> {
@@ -166,8 +166,7 @@ struct PluginExternalStderrStream {
     io: Arc<dyn StreamDataIo>,
 }
 
-impl Iterator for PluginExternalStderrStream
-{
+impl Iterator for PluginExternalStderrStream {
     type Item = Result<Vec<u8>, ShellError>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>, ShellError>> {
@@ -190,14 +189,13 @@ struct PluginExternalExitCodeStream {
     io: Arc<dyn StreamDataIo>,
 }
 
-impl Iterator for PluginExternalExitCodeStream
-{
+impl Iterator for PluginExternalExitCodeStream {
     type Item = Value;
 
     fn next(&mut self) -> Option<Value> {
         match self.io.read_external_exit_code() {
             Ok(value) => value,
-            Err(err) => Some(Value::error(err, Span::unknown()))
+            Err(err) => Some(Value::error(err, Span::unknown())),
         }
     }
 }
@@ -213,29 +211,36 @@ impl Drop for PluginExternalExitCodeStream {
 fn make_external_stream(
     source: Arc<dyn StreamDataIo>,
     info: &ExternalStreamInfo,
-    ctrlc: Option<Arc<AtomicBool>>
+    ctrlc: Option<Arc<AtomicBool>>,
 ) -> PipelineData {
     PipelineData::ExternalStream {
         stdout: info.stdout.as_ref().map(|stdout_info| {
-            let stream = PluginExternalStdoutStream {
-                io: source.clone()
-            }.fuse();
-            let mut raw = RawStream::new(Box::new(stream), ctrlc.clone(), info.span, stdout_info.known_size);
+            let stream = PluginExternalStdoutStream { io: source.clone() }.fuse();
+            let mut raw = RawStream::new(
+                Box::new(stream),
+                ctrlc.clone(),
+                info.span,
+                stdout_info.known_size,
+            );
             raw.is_binary = stdout_info.is_binary;
             raw
         }),
         stderr: info.stderr.as_ref().map(|stderr_info| {
-            let stream = PluginExternalStderrStream {
-                io: source.clone()
-            }.fuse();
-            let mut raw = RawStream::new(Box::new(stream), ctrlc.clone(), info.span, stderr_info.known_size);
+            let stream = PluginExternalStderrStream { io: source.clone() }.fuse();
+            let mut raw = RawStream::new(
+                Box::new(stream),
+                ctrlc.clone(),
+                info.span,
+                stderr_info.known_size,
+            );
             raw.is_binary = stderr_info.is_binary;
             raw
         }),
         exit_code: info.has_exit_code.then(|| {
-            ListStream::from_stream(PluginExternalExitCodeStream {
-                io: source.clone()
-            }.fuse(), ctrlc.clone())
+            ListStream::from_stream(
+                PluginExternalExitCodeStream { io: source.clone() }.fuse(),
+                ctrlc.clone(),
+            )
         }),
         span: info.span,
         metadata: None,
@@ -248,7 +253,7 @@ fn write_full_external_stream(
     io: &Arc<dyn StreamDataIo>,
     stdout: Option<RawStream>,
     stderr: Option<RawStream>,
-    exit_code: Option<ListStream>
+    exit_code: Option<ListStream>,
 ) -> Result<(), ShellError> {
     // Consume all streams simultaneously by launching three threads
     for thread in [
@@ -279,7 +284,10 @@ fn write_full_external_stream(
                 io.write_external_exit_code(None)
             })
         }),
-    ].into_iter().flatten() {
+    ]
+    .into_iter()
+    .flatten()
+    {
         thread.join().expect("stream consumer thread panicked")?;
     }
     Ok(())
@@ -320,8 +328,9 @@ pub(crate) fn make_call_input_from_pipeline_data(
                 }
             }
         }
-        PipelineData::Value(Value::LazyRecord { ref val, .. }, _) =>
-            Ok(CallInput::Value(val.collect()?)),
+        PipelineData::Value(Value::LazyRecord { ref val, .. }, _) => {
+            Ok(CallInput::Value(val.collect()?))
+        }
         PipelineData::Value(ref value, _) => Ok(CallInput::Value(value.clone())),
         PipelineData::ListStream(_, _) => Ok(CallInput::ListStream),
         PipelineData::ExternalStream {
@@ -331,15 +340,13 @@ pub(crate) fn make_call_input_from_pipeline_data(
             ref exit_code,
             trim_end_newline,
             ..
-        } => {
-            Ok(CallInput::ExternalStream(ExternalStreamInfo {
-                span,
-                stdout: stdout.as_ref().map(RawStreamInfo::from),
-                stderr: stderr.as_ref().map(RawStreamInfo::from),
-                has_exit_code: exit_code.is_some(),
-                trim_end_newline,
-            }))
-        }
+        } => Ok(CallInput::ExternalStream(ExternalStreamInfo {
+            span,
+            stdout: stdout.as_ref().map(RawStreamInfo::from),
+            stderr: stderr.as_ref().map(RawStreamInfo::from),
+            has_exit_code: exit_code.is_some(),
+            trim_end_newline,
+        })),
         PipelineData::Empty => Ok(CallInput::Empty),
     }
 }

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::protocol::{
-    LabeledError, PluginCall, PluginCallResponse, PluginOutput, PluginInput, CallInfo
+    CallInfo, LabeledError, PluginCall, PluginCallResponse, PluginInput, PluginOutput,
 };
 use crate::EncodingType;
 use std::env;
@@ -15,9 +15,9 @@ use std::io::{BufReader, ErrorKind, Read, Write as WriteTrait};
 use std::path::Path;
 use std::process::{Child, ChildStdout, Command as CommandSys, Stdio};
 
-use nu_protocol::{CustomValue, PluginSignature, ShellError, Value, PipelineData};
+use nu_protocol::{CustomValue, PipelineData, PluginSignature, ShellError, Value};
 
-use self::interface::{PluginInterface, PluginExecutionContext, EngineInterface};
+use self::interface::{EngineInterface, PluginExecutionContext, PluginInterface};
 
 use super::EvaluatedCall;
 
@@ -49,7 +49,7 @@ pub trait PluginEncoder: Clone + Send + Sync {
     /// [ShellError::PluginFailedToDecode] for a deserialization error.
     fn decode_input(
         &self,
-        reader: &mut impl std::io::BufRead
+        reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginInput>, ShellError>;
 
     /// Serialize a `PluginOutput` in this `PluginEncoder`'s format
@@ -122,13 +122,19 @@ pub(crate) fn make_plugin_interface(
     child: &mut Child,
     context: Option<Arc<dyn PluginExecutionContext>>,
 ) -> Result<PluginInterface, ShellError> {
-    let stdin = child.stdin.take().ok_or_else(|| ShellError::PluginFailedToLoad {
-        msg: "plugin missing stdin writer".into()
-    })?;
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| ShellError::PluginFailedToLoad {
+            msg: "plugin missing stdin writer".into(),
+        })?;
 
-    let mut stdout = child.stdout.take().ok_or_else(|| ShellError::PluginFailedToLoad {
-        msg: "Plugin missing stdout writer".into()
-    })?;
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| ShellError::PluginFailedToLoad {
+            msg: "Plugin missing stdout writer".into(),
+        })?;
 
     let encoder = get_plugin_encoding(&mut stdout)?;
 
@@ -174,9 +180,7 @@ pub fn get_signature(
     // If the child process fills its stdout buffer, it may end up waiting until the parent
     // reads the stdout, and not be able to read stdin in the meantime, causing a deadlock.
     // Writing from another thread ensures that stdout is being read at the same time, avoiding the problem.
-    std::thread::spawn(move || {
-        interface_clone.write_call(PluginCall::Signature)
-    });
+    std::thread::spawn(move || interface_clone.write_call(PluginCall::Signature));
 
     // deserialize response from plugin to extract the signature
     let response = interface.read_call_response()?;
@@ -440,7 +444,12 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
                 try_or_report!(interface.write_call_response(response));
             }
             // Run the plugin, handling any input or output streams
-            PluginCall::Run(CallInfo { name, call, input, config }) => {
+            PluginCall::Run(CallInfo {
+                name,
+                call,
+                input,
+                config,
+            }) => {
                 let input = try_or_report!(interface.make_pipeline_data(input));
                 match plugin.run(&name, &config, &call, input) {
                     Ok(output) => {

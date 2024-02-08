@@ -1,10 +1,14 @@
-use crate::{plugin::PluginEncoder, protocol::{PluginOutput, PluginInput}};
+use crate::{
+    plugin::PluginEncoder,
+    protocol::{PluginInput, PluginOutput},
+};
 use nu_protocol::ShellError;
 
 pub mod json;
 pub mod msgpack;
 
-#[cfg(test)] mod tests;
+#[cfg(test)]
+mod tests;
 
 #[doc(hidden)]
 #[derive(Clone, Debug)]
@@ -48,7 +52,7 @@ impl PluginEncoder for EncodingType {
 
     fn decode_input(
         &self,
-        reader: &mut impl std::io::BufRead
+        reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginInput>, ShellError> {
         match self {
             EncodingType::Json(encoder) => encoder.decode_input(reader),

@@ -48,10 +48,12 @@ mod plugin;
 mod protocol;
 mod serializers;
 
-pub use plugin::{get_signature, serve_plugin, StreamingPlugin, Plugin, PluginDeclaration, PluginEncoder};
+pub use plugin::{
+    get_signature, serve_plugin, Plugin, PluginDeclaration, PluginEncoder, StreamingPlugin,
+};
 pub use protocol::{EvaluatedCall, LabeledError};
 pub use serializers::{json::JsonSerializer, msgpack::MsgPackSerializer, EncodingType};
 
 // Used by external benchmarks.
 #[cfg(test)]
-pub use protocol::{PluginOutput, PluginCallResponse, StreamData};
+pub use protocol::{PluginCallResponse, PluginOutput, StreamData};

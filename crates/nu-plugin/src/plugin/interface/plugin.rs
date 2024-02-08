@@ -1,25 +1,29 @@
 //! Interface used by the engine to communicate with the plugin.
 
-use std::{sync::{Mutex, Arc, atomic::AtomicBool}, io::{BufRead, Write}, path::{PathBuf, Path}};
+use std::{
+    io::{BufRead, Write},
+    path::{Path, PathBuf},
+    sync::{atomic::AtomicBool, Arc, Mutex},
+};
 
-use nu_protocol::{ShellError, Value, PipelineData, engine::{EngineState, Stack}, ast::Call, ListStream, RawStream, Span};
+use nu_protocol::{
+    ast::Call,
+    engine::{EngineState, Stack},
+    ListStream, PipelineData, RawStream, ShellError, Span, Value,
+};
 
 use crate::{
-    protocol::{
-        PluginInput, PluginOutput, StreamData, PluginCallResponse, ExternalStreamInfo, PluginCall,
-        PluginCustomValue
-    },
     plugin::PluginEncoder,
+    protocol::{
+        ExternalStreamInfo, PluginCall, PluginCallResponse, PluginCustomValue, PluginInput,
+        PluginOutput, StreamData,
+    },
 };
 
 use super::{
-    stream_data_io::{impl_stream_data_io, StreamDataIo, StreamBuffers, StreamBuffer},
-    make_list_stream,
-    make_external_stream,
-    write_full_list_stream,
-    write_full_external_stream,
-    PluginRead,
-    PluginWrite,
+    make_external_stream, make_list_stream,
+    stream_data_io::{impl_stream_data_io, StreamBuffer, StreamBuffers, StreamDataIo},
+    write_full_external_stream, write_full_list_stream, PluginRead, PluginWrite,
 };
 
 #[cfg(test)]
@@ -102,9 +106,11 @@ pub(crate) struct PluginInterfaceImpl<R, W> {
 }
 
 impl<R, W> PluginInterfaceImpl<R, W> {
-    pub(crate) fn new(reader: R, writer: W, context: Option<Arc<dyn PluginExecutionContext>>)
-        -> PluginInterfaceImpl<R, W>
-    {
+    pub(crate) fn new(
+        reader: R,
+        writer: W,
+        context: Option<Arc<dyn PluginExecutionContext>>,
+    ) -> PluginInterfaceImpl<R, W> {
         PluginInterfaceImpl {
             read: Mutex::new((reader, StreamBuffers::default())),
             write: Mutex::new(writer),
@@ -114,7 +120,11 @@ impl<R, W> PluginInterfaceImpl<R, W> {
 }
 
 // Implement the stream handling methods (see StreamDataIo).
-impl_stream_data_io!(PluginInterfaceImpl, PluginOutput (read_output), PluginInput (write_input));
+impl_stream_data_io!(
+    PluginInterfaceImpl,
+    PluginOutput(read_output),
+    PluginInput(write_input)
+);
 
 /// The trait indirection is so that we can hide the types with a trait object inside
 /// PluginInterface. As such, this trait must remain object safe.
@@ -166,7 +176,7 @@ where
                             read.1 = StreamBuffers::new_external(
                                 stdout.is_some(),
                                 stderr.is_some(),
-                                *has_exit_code
+                                *has_exit_code,
                             );
                             log::trace!("Read plugin call response. Expecting external stream");
                         }
@@ -178,22 +188,36 @@ where
                     return Ok(response);
                 }
                 // Skip over any remaining stream data for dropped streams
-                Some(PluginOutput::StreamData(StreamData::List(_)))
-                    if read.1.list.is_dropped() => continue,
+                Some(PluginOutput::StreamData(StreamData::List(_))) if read.1.list.is_dropped() => {
+                    continue
+                }
                 Some(PluginOutput::StreamData(StreamData::ExternalStdout(_)))
-                    if read.1.external_stdout.is_dropped() => continue,
+                    if read.1.external_stdout.is_dropped() =>
+                {
+                    continue
+                }
                 Some(PluginOutput::StreamData(StreamData::ExternalStderr(_)))
-                    if read.1.external_stderr.is_dropped() => continue,
+                    if read.1.external_stderr.is_dropped() =>
+                {
+                    continue
+                }
                 Some(PluginOutput::StreamData(StreamData::ExternalExitCode(_)))
-                    if read.1.external_exit_code.is_dropped() => continue,
+                    if read.1.external_exit_code.is_dropped() =>
+                {
+                    continue
+                }
                 // Other stream data is an error
-                Some(PluginOutput::StreamData(_)) => return Err(ShellError::PluginFailedToDecode {
-                    msg: "expected CallResponse, got unexpected StreamData".into()
-                }),
+                Some(PluginOutput::StreamData(_)) => {
+                    return Err(ShellError::PluginFailedToDecode {
+                        msg: "expected CallResponse, got unexpected StreamData".into(),
+                    })
+                }
                 // End of input
-                None => return Err(ShellError::PluginFailedToDecode {
-                    msg: "unexpected end of stream before receiving call response".into()
-                }),
+                None => {
+                    return Err(ShellError::PluginFailedToDecode {
+                        msg: "unexpected end of stream before receiving call response".into(),
+                    })
+                }
             }
         }
     }
@@ -218,7 +242,7 @@ where
         let arc = Arc::new(plugin_impl);
         PluginInterface {
             io: arc.clone(),
-            io_stream: arc
+            io_stream: arc,
         }
     }
 }
@@ -256,27 +280,26 @@ impl PluginInterface {
     /// # Panics
     ///
     /// If [PluginExecutionContext] was not provided when creating the interface.
-    pub(crate) fn make_pipeline_data(&self, response: PluginCallResponse)
-        -> Result<PipelineData, ShellError>
-    {
-        let context = self.io.context()
+    pub(crate) fn make_pipeline_data(
+        &self,
+        response: PluginCallResponse,
+    ) -> Result<PipelineData, ShellError> {
+        let context = self
+            .io
+            .context()
             .expect("PluginExecutionContext must be provided to call make_pipeline_data");
 
         match response {
-            PluginCallResponse::Error(err) =>
-                Err(err.into()),
-            PluginCallResponse::Signature(_) =>
-                Err(ShellError::GenericError {
-                    error: "Plugin missing value".into(),
-                    msg: "Received a signature from plugin instead of value or stream".into(),
-                    span: Some(context.command_span()),
-                    help: None,
-                    inner: vec![],
-                }),
-            PluginCallResponse::Empty =>
-                Ok(PipelineData::Empty),
-            PluginCallResponse::Value(value) =>
-                Ok(PipelineData::Value(*value, None)),
+            PluginCallResponse::Error(err) => Err(err.into()),
+            PluginCallResponse::Signature(_) => Err(ShellError::GenericError {
+                error: "Plugin missing value".into(),
+                msg: "Received a signature from plugin instead of value or stream".into(),
+                span: Some(context.command_span()),
+                help: None,
+                inner: vec![],
+            }),
+            PluginCallResponse::Empty => Ok(PipelineData::Empty),
+            PluginCallResponse::Value(value) => Ok(PipelineData::Value(*value, None)),
             PluginCallResponse::PluginData(name, plugin_data) => {
                 // Convert to PluginCustomData
                 let value = Value::custom_value(
@@ -287,18 +310,19 @@ impl PluginInterface {
                         shell: context.shell().map(|p| p.to_owned()),
                         source: context.command_name().to_owned(),
                     }),
-                    plugin_data.span
+                    plugin_data.span,
                 );
                 Ok(PipelineData::Value(value, None))
             }
-            PluginCallResponse::ListStream =>
-                Ok(make_list_stream(self.io_stream.clone(), context.ctrlc().cloned())),
-            PluginCallResponse::ExternalStream(info) =>
-                Ok(make_external_stream(
-                    self.io_stream.clone(),
-                    &info,
-                    context.ctrlc().cloned()
-                )),
+            PluginCallResponse::ListStream => Ok(make_list_stream(
+                self.io_stream.clone(),
+                context.ctrlc().cloned(),
+            )),
+            PluginCallResponse::ExternalStream(info) => Ok(make_external_stream(
+                self.io_stream.clone(),
+                &info,
+                context.ctrlc().cloned(),
+            )),
         }
     }
 
@@ -312,7 +336,7 @@ impl PluginInterface {
         &self,
         stdout: Option<RawStream>,
         stderr: Option<RawStream>,
-        exit_code: Option<ListStream>
+        exit_code: Option<ListStream>,
     ) -> Result<(), ShellError> {
         write_full_external_stream(&self.io_stream, stdout, stderr, exit_code)
     }

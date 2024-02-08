@@ -1,5 +1,5 @@
 use nu_plugin::{EvaluatedCall, LabeledError};
-use nu_protocol::{Value, PipelineData, ListStream, RawStream};
+use nu_protocol::{ListStream, PipelineData, RawStream, Value};
 
 pub struct Example;
 
@@ -7,9 +7,11 @@ mod int_or_float;
 use self::int_or_float::IntOrFloat;
 
 impl Example {
-    pub fn seq(&self, call: &EvaluatedCall, _input: PipelineData)
-        -> Result<PipelineData, LabeledError>
-    {
+    pub fn seq(
+        &self,
+        call: &EvaluatedCall,
+        _input: PipelineData,
+    ) -> Result<PipelineData, LabeledError> {
         let first: i64 = call.req(0)?;
         let last: i64 = call.req(1)?;
         let span = call.head;
@@ -18,9 +20,11 @@ impl Example {
         Ok(PipelineData::ListStream(list_stream, None))
     }
 
-    pub fn sum(&self, call: &EvaluatedCall, input: PipelineData)
-        -> Result<PipelineData, LabeledError>
-    {
+    pub fn sum(
+        &self,
+        call: &EvaluatedCall,
+        input: PipelineData,
+    ) -> Result<PipelineData, LabeledError> {
         let mut acc = IntOrFloat::Int(0);
         let span = input.span();
         for value in input {
@@ -39,19 +43,21 @@ impl Example {
         Ok(PipelineData::Value(acc.to_value(call.head), None))
     }
 
-    pub fn collect_external(&self, call: &EvaluatedCall, input: PipelineData)
-        -> Result<PipelineData, LabeledError>
-    {
-        let stream = input.into_iter().map(|value| {
-            value.as_binary().map(|bin| bin.to_vec())
-        });
+    pub fn collect_external(
+        &self,
+        call: &EvaluatedCall,
+        input: PipelineData,
+    ) -> Result<PipelineData, LabeledError> {
+        let stream = input
+            .into_iter()
+            .map(|value| value.as_binary().map(|bin| bin.to_vec()));
         Ok(PipelineData::ExternalStream {
             stdout: Some(RawStream::new(Box::new(stream), None, call.head, None)),
             stderr: None,
             exit_code: None,
             span: call.head,
             metadata: None,
-            trim_end_newline: false
+            trim_end_newline: false,
         })
     }
 }

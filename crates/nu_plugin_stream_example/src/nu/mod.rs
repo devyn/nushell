@@ -1,6 +1,8 @@
 use crate::Example;
 use nu_plugin::{EvaluatedCall, LabeledError, StreamingPlugin};
-use nu_protocol::{Category, PluginExample, PluginSignature, SyntaxShape, Type, Value, Span, PipelineData};
+use nu_protocol::{
+    Category, PipelineData, PluginExample, PluginSignature, Span, SyntaxShape, Type, Value,
+};
 
 impl StreamingPlugin for Example {
     fn signature(&self) -> Vec<PluginSignature> {
@@ -19,11 +21,14 @@ impl StreamingPlugin for Example {
                 .plugin_examples(vec![PluginExample {
                     example: "stream_example seq 1 3".into(),
                     description: "generate a sequence from 1 to 3".into(),
-                    result: Some(Value::list(vec![
-                        Value::int(1, span),
-                        Value::int(2, span),
-                        Value::int(3, span)
-                    ], span)),
+                    result: Some(Value::list(
+                        vec![
+                            Value::int(1, span),
+                            Value::int(2, span),
+                            Value::int(3, span),
+                        ],
+                        span,
+                    )),
                 }])
                 .category(Category::Experimental),
             PluginSignature::build("stream_example sum")
@@ -36,7 +41,7 @@ impl StreamingPlugin for Example {
                 .plugin_examples(vec![PluginExample {
                     example: "seq 1 5 | stream_example sum".into(),
                     description: "sum values from 1 to 5".into(),
-                    result: Some(Value::int(15, span))
+                    result: Some(Value::int(15, span)),
                 }])
                 .category(Category::Experimental),
             PluginSignature::build("stream_example collect-external")
@@ -49,7 +54,7 @@ impl StreamingPlugin for Example {
                 .plugin_examples(vec![PluginExample {
                     example: "[a b] | stream_example collect-external".into(),
                     description: "collect strings into one stream".into(),
-                    result: Some(Value::string("ab", span))
+                    result: Some(Value::string("ab", span)),
                 }])
                 .category(Category::Experimental),
         ]

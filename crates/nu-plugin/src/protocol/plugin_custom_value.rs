@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::plugin::{create_command, make_plugin_interface};
 
-use super::{PluginCall, PluginData, PluginCallResponse};
+use super::{PluginCall, PluginCallResponse, PluginData};
 
 /// An opaque container for a custom value that is handled fully by a plugin
 ///
@@ -67,12 +67,11 @@ impl CustomValue for PluginCustomValue {
         let interface_clone = interface.clone();
 
         // Write the call on another thread to avoid blocking
-        std::thread::spawn(move || {
-            interface_clone.write_call(plugin_call)
-        });
+        std::thread::spawn(move || interface_clone.write_call(plugin_call));
 
-        let response = interface.read_call_response().map_err(|err| {
-            ShellError::GenericError {
+        let response = interface
+            .read_call_response()
+            .map_err(|err| ShellError::GenericError {
                 error: format!(
                     "Unable to decode call for {} to get base value",
                     self.source
@@ -81,8 +80,7 @@ impl CustomValue for PluginCustomValue {
                 span: Some(span),
                 help: None,
                 inner: vec![],
-            }
-        });
+            });
 
         drop(interface);
 
@@ -95,9 +93,9 @@ impl CustomValue for PluginCustomValue {
                 help: None,
                 inner: vec![],
             }),
-            Ok(PluginCallResponse::Empty) |
-            Ok(PluginCallResponse::ListStream) |
-            Ok(PluginCallResponse::ExternalStream(..)) => Err(ShellError::GenericError {
+            Ok(PluginCallResponse::Empty)
+            | Ok(PluginCallResponse::ListStream)
+            | Ok(PluginCallResponse::ExternalStream(..)) => Err(ShellError::GenericError {
                 error: "Plugin misbehaving".into(),
                 msg: "Plugin returned stream as a response to a collapse call".into(),
                 span: Some(span),

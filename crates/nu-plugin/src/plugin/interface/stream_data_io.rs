@@ -58,13 +58,17 @@ pub(crate) trait StreamDataIo: Send + Sync {
 
     /// Write some bytes for an `ExternalStream`'s `stdout` stream, or `None` to signal end of
     /// stream.
-    fn write_external_stdout(&self, bytes: Option<Result<Vec<u8>, ShellError>>)
-        -> Result<(), ShellError>;
+    fn write_external_stdout(
+        &self,
+        bytes: Option<Result<Vec<u8>, ShellError>>,
+    ) -> Result<(), ShellError>;
 
     /// Write some bytes for an `ExternalStream`'s `stderr` stream, or `None` to signal end of
     /// stream.
-    fn write_external_stderr(&self, bytes: Option<Result<Vec<u8>, ShellError>>)
-        -> Result<(), ShellError>;
+    fn write_external_stderr(
+        &self,
+        bytes: Option<Result<Vec<u8>, ShellError>>,
+    ) -> Result<(), ShellError>;
 
     /// Write a value for an `ExternalStream`'s `exit_code` stream, or `None` to signal end of
     /// stream.
@@ -115,12 +119,15 @@ macro_rules! impl_stream_data_io {
                     } else {
                         // Skip messages from other streams until we get what we want
                         match read.0.$read_method()? {
-                            Some($read_type::StreamData(StreamData::ExternalStdout(bytes))) =>
-                                return bytes.transpose(),
+                            Some($read_type::StreamData(StreamData::ExternalStdout(bytes))) => {
+                                return bytes.transpose()
+                            }
                             Some($read_type::StreamData(other)) => read.1.skip(other)?,
-                            _ => return Err(ShellError::PluginFailedToDecode {
-                                msg: "Expected external stream data".into()
-                            }),
+                            _ => {
+                                return Err(ShellError::PluginFailedToDecode {
+                                    msg: "Expected external stream data".into(),
+                                })
+                            }
                         }
                     }
                 }
@@ -136,12 +143,15 @@ macro_rules! impl_stream_data_io {
                     } else {
                         // Skip messages from other streams until we get what we want
                         match read.0.$read_method()? {
-                            Some($read_type::StreamData(StreamData::ExternalStderr(bytes))) =>
-                                return bytes.transpose(),
+                            Some($read_type::StreamData(StreamData::ExternalStderr(bytes))) => {
+                                return bytes.transpose()
+                            }
                             Some($read_type::StreamData(other)) => read.1.skip(other)?,
-                            _ => return Err(ShellError::PluginFailedToDecode {
-                                msg: "Expected external stream data".into()
-                            }),
+                            _ => {
+                                return Err(ShellError::PluginFailedToDecode {
+                                    msg: "Expected external stream data".into(),
+                                })
+                            }
                         }
                     }
                 }
@@ -157,12 +167,15 @@ macro_rules! impl_stream_data_io {
                     } else {
                         // Skip messages from other streams until we get what we want
                         match read.0.$read_method()? {
-                            Some($read_type::StreamData(StreamData::ExternalExitCode(code))) =>
-                                return Ok(code),
+                            Some($read_type::StreamData(StreamData::ExternalExitCode(code))) => {
+                                return Ok(code)
+                            }
                             Some($read_type::StreamData(other)) => read.1.skip(other)?,
-                            _ => return Err(ShellError::PluginFailedToDecode {
-                                msg: "Expected external stream data".into()
-                            }),
+                            _ => {
+                                return Err(ShellError::PluginFailedToDecode {
+                                    msg: "Expected external stream data".into(),
+                                })
+                            }
                         }
                     }
                 }
@@ -215,9 +228,10 @@ macro_rules! impl_stream_data_io {
                 Ok(())
             }
 
-            fn write_external_stdout(&self, bytes: Option<Result<Vec<u8>, ShellError>>)
-                -> Result<(), ShellError>
-            {
+            fn write_external_stdout(
+                &self,
+                bytes: Option<Result<Vec<u8>, ShellError>>,
+            ) -> Result<(), ShellError> {
                 let mut write = self.write.lock().expect("write mutex poisoned");
                 let is_final = bytes.is_none();
                 write.$write_method(&$write_type::StreamData(StreamData::ExternalStdout(bytes)))?;
@@ -228,9 +242,10 @@ macro_rules! impl_stream_data_io {
                 Ok(())
             }
 
-            fn write_external_stderr(&self, bytes: Option<Result<Vec<u8>, ShellError>>)
-                -> Result<(), ShellError>
-            {
+            fn write_external_stderr(
+                &self,
+                bytes: Option<Result<Vec<u8>, ShellError>>,
+            ) -> Result<(), ShellError> {
                 let mut write = self.write.lock().expect("write mutex poisoned");
                 let is_final = bytes.is_none();
                 write.$write_method(&$write_type::StreamData(StreamData::ExternalStderr(bytes)))?;
@@ -244,8 +259,8 @@ macro_rules! impl_stream_data_io {
             fn write_external_exit_code(&self, code: Option<Value>) -> Result<(), ShellError> {
                 let mut write = self.write.lock().expect("write mutex poisoned");
                 let is_final = code.is_none();
-                write.$write_method(
-                    &$write_type::StreamData(StreamData::ExternalExitCode(code)))?;
+                write
+                    .$write_method(&$write_type::StreamData(StreamData::ExternalExitCode(code)))?;
                 // Try to flush final value
                 if is_final {
                     write.flush()?;
@@ -253,7 +268,7 @@ macro_rules! impl_stream_data_io {
                 Ok(())
             }
         }
-    }
+    };
 }
 
 pub(crate) use impl_stream_data_io;
@@ -283,7 +298,7 @@ pub(crate) enum StreamBuffer<T> {
     Dropped,
     /// This stream was specified for use, and there is still a living reader that expects messages
     /// from it. We store messages temporarily to allow another stream to proceed out-of-order.
-    Present(VecDeque<T>)
+    Present(VecDeque<T>),
 }
 
 impl<T> StreamBuffer<T> {
@@ -321,14 +336,12 @@ impl<T> StreamBuffer<T> {
         match self {
             StreamBuffer::Present(ref mut buf) => Ok(buf.pop_front()),
 
-            StreamBuffer::NotPresent =>
-                Err(ShellError::PluginFailedToDecode {
-                    msg: "Tried to read from a stream that is not present".into()
-                }),
-            StreamBuffer::Dropped =>
-                Err(ShellError::PluginFailedToDecode {
-                    msg: "Tried to read from a stream that is already dropped".into()
-                })
+            StreamBuffer::NotPresent => Err(ShellError::PluginFailedToDecode {
+                msg: "Tried to read from a stream that is not present".into(),
+            }),
+            StreamBuffer::Dropped => Err(ShellError::PluginFailedToDecode {
+                msg: "Tried to read from a stream that is already dropped".into(),
+            }),
         }
     }
 
@@ -367,11 +380,7 @@ impl StreamBuffers {
     ///
     /// The buffers will be `Present` according to the values of the parameters. Any stream messages
     /// that do not belong to streams specified as present here will be rejected with an error.
-    pub fn new_external(
-        has_stdout: bool,
-        has_stderr: bool,
-        has_exit_code: bool
-    ) -> StreamBuffers {
+    pub fn new_external(has_stdout: bool, has_stderr: bool, has_exit_code: bool) -> StreamBuffers {
         StreamBuffers {
             list: StreamBuffer::NotPresent,
             external_stdout: StreamBuffer::present_if(has_stdout),
@@ -391,4 +400,3 @@ impl StreamBuffers {
         }
     }
 }
-

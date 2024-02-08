@@ -1,17 +1,15 @@
-use std::{collections::VecDeque, sync::{Mutex, Arc}};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
 
 use nu_protocol::ShellError;
 
 use crate::protocol::{PluginInput, PluginOutput};
 
 use super::{
-    PluginRead,
-    PluginWrite,
-    engine::EngineInterfaceImpl,
-    EngineInterface,
-    plugin::PluginInterfaceImpl,
-    PluginInterface,
-    PluginExecutionContext
+    engine::EngineInterfaceImpl, plugin::PluginInterfaceImpl, EngineInterface,
+    PluginExecutionContext, PluginInterface, PluginRead, PluginWrite,
 };
 
 /// Mock read/write helper for the engine and plugin interfaces.
@@ -113,12 +111,12 @@ impl TestCase {
     }
 
     /// Add multiple inputs that will be read by the interface.
-    pub(crate) fn extend_input(&self, inputs: impl IntoIterator<Item=PluginInput>) {
+    pub(crate) fn extend_input(&self, inputs: impl IntoIterator<Item = PluginInput>) {
         self.r#in.lock().unwrap().inputs.extend(inputs);
     }
 
     /// Add multiple outputs that will be read by the interface.
-    pub(crate) fn extend_output(&self, outputs: impl IntoIterator<Item=PluginOutput>) {
+    pub(crate) fn extend_output(&self, outputs: impl IntoIterator<Item = PluginOutput>) {
         self.r#in.lock().unwrap().outputs.extend(outputs);
     }
 
@@ -143,12 +141,12 @@ impl TestCase {
     }
 
     /// Iterator over written inputs.
-    pub(crate) fn written_inputs(&self) -> impl Iterator<Item=PluginInput> + '_ {
+    pub(crate) fn written_inputs(&self) -> impl Iterator<Item = PluginInput> + '_ {
         std::iter::from_fn(|| self.next_written_input())
     }
 
     /// Iterator over written outputs.
-    pub(crate) fn written_outputs(&self) -> impl Iterator<Item=PluginOutput> + '_ {
+    pub(crate) fn written_outputs(&self) -> impl Iterator<Item = PluginOutput> + '_ {
         std::iter::from_fn(|| self.next_written_output())
     }
 
@@ -180,16 +178,18 @@ impl TestCase {
     }
 
     /// Create a [PluginInterfaceImpl] using the test data.
-    pub(crate) fn plugin_interface_impl(&self, context: Option<Arc<dyn PluginExecutionContext>>)
-        -> PluginInterfaceImpl<TestIo, TestIo>
-    {
+    pub(crate) fn plugin_interface_impl(
+        &self,
+        context: Option<Arc<dyn PluginExecutionContext>>,
+    ) -> PluginInterfaceImpl<TestIo, TestIo> {
         PluginInterfaceImpl::new(self.r#in.clone(), self.out.clone(), context)
     }
 
     /// Create a [PluginInterface] using the test data.
-    pub(crate) fn plugin_interface(&self, context: Option<Arc<dyn PluginExecutionContext>>)
-        -> PluginInterface
-    {
+    pub(crate) fn plugin_interface(
+        &self,
+        context: Option<Arc<dyn PluginExecutionContext>>,
+    ) -> PluginInterface {
         self.plugin_interface_impl(context).into()
     }
 }

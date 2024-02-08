@@ -1,8 +1,8 @@
 macro_rules! generate_tests {
     ($encoder:expr) => {
         use crate::protocol::{
-            CallInfo, CallInput, EvaluatedCall, LabeledError, PluginCall, PluginData,
-            PluginCallResponse, PluginInput, PluginOutput, StreamData,
+            CallInfo, CallInput, EvaluatedCall, LabeledError, PluginCall, PluginCallResponse,
+            PluginData, PluginInput, PluginOutput, StreamData,
         };
         use nu_protocol::{PluginSignature, Span, Spanned, SyntaxShape, Value};
 
@@ -10,10 +10,12 @@ macro_rules! generate_tests {
         fn decode_eof() {
             let mut buffer: &[u8] = &[];
             let encoder = $encoder;
-            let result = encoder.decode_input(&mut buffer)
+            let result = encoder
+                .decode_input(&mut buffer)
                 .expect("eof should not result in an error");
             assert!(result.is_none(), "decode_input result: {result:?}");
-            let result = encoder.decode_output(&mut buffer)
+            let result = encoder
+                .decode_output(&mut buffer)
                 .expect("eof should not result in an error");
             assert!(result.is_none(), "decode_output result: {result:?}");
         }
@@ -31,14 +33,18 @@ macro_rules! generate_tests {
             match encoder.decode_input(&mut buffered) {
                 Ok(_) => panic!("decode_input: i/o error was not passed through"),
                 Err(ShellError::IOError { .. }) => (), // okay
-                Err(other) => panic!("decode_input: got other error, should have been a \
-                    ShellError::IOError: {other:?}")
+                Err(other) => panic!(
+                    "decode_input: got other error, should have been a \
+                    ShellError::IOError: {other:?}"
+                ),
             }
             match encoder.decode_output(&mut buffered) {
                 Ok(_) => panic!("decode_output: i/o error was not passed through"),
                 Err(ShellError::IOError { .. }) => (), // okay
-                Err(other) => panic!("decode_output: got other error, should have been a \
-                    ShellError::IOError: {other:?}")
+                Err(other) => panic!(
+                    "decode_output: got other error, should have been a \
+                    ShellError::IOError: {other:?}"
+                ),
             }
         }
 
@@ -47,7 +53,7 @@ macro_rules! generate_tests {
             // just a sequence of bytes that shouldn't be valid in anything we use
             let gibberish: &[u8] = &[
                 0, 80, 74, 85, 117, 122, 86, 100, 74, 115, 20, 104, 55, 98, 67, 203, 83, 85, 77,
-                112, 74, 79, 254, 71, 80
+                112, 74, 79, 254, 71, 80,
             ];
             let encoder = $encoder;
 
@@ -55,16 +61,20 @@ macro_rules! generate_tests {
             match encoder.decode_input(&mut buffered) {
                 Ok(value) => panic!("decode_input: parsed successfully => {value:?}"),
                 Err(ShellError::PluginFailedToDecode { .. }) => (), // okay
-                Err(other) => panic!("decode_input: got other error, should have been a \
-                    ShellError::PluginFailedToDecode: {other:?}")
+                Err(other) => panic!(
+                    "decode_input: got other error, should have been a \
+                    ShellError::PluginFailedToDecode: {other:?}"
+                ),
             }
 
             let mut buffered = std::io::BufReader::new(&gibberish[..]);
             match encoder.decode_output(&mut buffered) {
                 Ok(value) => panic!("decode_output: parsed successfully => {value:?}"),
                 Err(ShellError::PluginFailedToDecode { .. }) => (), // okay
-                Err(other) => panic!("decode_output: got other error, should have been a \
-                    ShellError::PluginFailedToDecode: {other:?}")
+                Err(other) => panic!(
+                    "decode_output: got other error, should have been a \
+                    ShellError::PluginFailedToDecode: {other:?}"
+                ),
             }
         }
 
@@ -85,7 +95,7 @@ macro_rules! generate_tests {
 
             match returned {
                 PluginInput::Call(PluginCall::Signature) => {}
-                _ => panic!("decoded into wrong value: {returned:?}")
+                _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
 
@@ -254,7 +264,7 @@ macro_rules! generate_tests {
                         returned_signature[0].sig.rest_positional,
                     );
                 }
-                _ => panic!("decoded into wrong value: {returned:?}")
+                _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
 
@@ -279,7 +289,7 @@ macro_rules! generate_tests {
                 PluginOutput::CallResponse(PluginCallResponse::Value(returned_value)) => {
                     assert_eq!(&value, returned_value.as_ref())
                 }
-                _ => panic!("decoded into wrong value: {returned:?}")
+                _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
 
@@ -310,14 +320,15 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(
-                    PluginCallResponse::PluginData(returned_name, returned_plugin_data)
-                ) => {
+                PluginOutput::CallResponse(PluginCallResponse::PluginData(
+                    returned_name,
+                    returned_plugin_data,
+                )) => {
                     assert_eq!(name, returned_name);
                     assert_eq!(data, returned_plugin_data.data);
                     assert_eq!(span, returned_plugin_data.span);
                 }
-                _ => panic!("decoded into wrong value: {returned:?}")
+                _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
 
@@ -342,9 +353,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::Error(msg)) =>
-                    assert_eq!(error, msg),
-                _ => panic!("decoded into wrong value: {returned:?}")
+                PluginOutput::CallResponse(PluginCallResponse::Error(msg)) => {
+                    assert_eq!(error, msg)
+                }
+                _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
 
@@ -369,9 +381,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::Error(msg)) =>
-                    assert_eq!(error, msg),
-                _ => panic!("decoded into wrong value: {returned:?}")
+                PluginOutput::CallResponse(PluginCallResponse::Error(msg)) => {
+                    assert_eq!(error, msg)
+                }
+                _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
 
@@ -419,12 +432,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::StreamData(StreamData::ExternalStdout(Some(bytes))) => {
-                    match bytes {
-                        Ok(bytes) => assert_eq!(data, &bytes[..]),
-                        Err(err) => panic!("decoded into error variant: {err:?}")
-                    }
-                }
+                PluginInput::StreamData(StreamData::ExternalStdout(Some(bytes))) => match bytes {
+                    Ok(bytes) => assert_eq!(data, &bytes[..]),
+                    Err(err) => panic!("decoded into error variant: {err:?}"),
+                },
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -447,12 +458,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::StreamData(StreamData::ExternalStderr(Some(bytes))) => {
-                    match bytes {
-                        Ok(bytes) => assert_eq!(data, &bytes[..]),
-                        Err(err) => panic!("decoded into error variant: {err:?}")
-                    }
-                }
+                PluginInput::StreamData(StreamData::ExternalStderr(Some(bytes))) => match bytes {
+                    Ok(bytes) => assert_eq!(data, &bytes[..]),
+                    Err(err) => panic!("decoded into error variant: {err:?}"),
+                },
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -527,12 +536,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::StreamData(StreamData::ExternalStdout(Some(bytes))) => {
-                    match bytes {
-                        Ok(bytes) => assert_eq!(data, &bytes[..]),
-                        Err(err) => panic!("decoded into error variant: {err:?}")
-                    }
-                }
+                PluginOutput::StreamData(StreamData::ExternalStdout(Some(bytes))) => match bytes {
+                    Ok(bytes) => assert_eq!(data, &bytes[..]),
+                    Err(err) => panic!("decoded into error variant: {err:?}"),
+                },
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -555,12 +562,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::StreamData(StreamData::ExternalStderr(Some(bytes))) => {
-                    match bytes {
-                        Ok(bytes) => assert_eq!(data, &bytes[..]),
-                        Err(err) => panic!("decoded into error variant: {err:?}")
-                    }
-                }
+                PluginOutput::StreamData(StreamData::ExternalStderr(Some(bytes))) => match bytes {
+                    Ok(bytes) => assert_eq!(data, &bytes[..]),
+                    Err(err) => panic!("decoded into error variant: {err:?}"),
+                },
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -590,7 +595,7 @@ macro_rules! generate_tests {
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
-    }
+    };
 }
 
 pub(crate) use generate_tests;

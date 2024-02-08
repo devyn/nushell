@@ -3,7 +3,7 @@ mod plugin_custom_value;
 mod plugin_data;
 
 pub use evaluated_call::EvaluatedCall;
-use nu_protocol::{PluginSignature, ShellError, Span, Value, RawStream};
+use nu_protocol::{PluginSignature, RawStream, ShellError, Span, Value};
 pub use plugin_custom_value::PluginCustomValue;
 pub use plugin_data::PluginData;
 use serde::{Deserialize, Serialize};

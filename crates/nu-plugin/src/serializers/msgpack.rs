@@ -1,6 +1,9 @@
 use std::io::ErrorKind;
 
-use crate::{plugin::PluginEncoder, protocol::{PluginOutput, PluginInput}};
+use crate::{
+    plugin::PluginEncoder,
+    protocol::{PluginInput, PluginOutput},
+};
 use nu_protocol::ShellError;
 use serde::Deserialize;
 
@@ -29,7 +32,9 @@ impl PluginEncoder for MsgPackSerializer {
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginInput>, ShellError> {
         let mut de = rmp_serde::Deserializer::new(reader);
-        PluginInput::deserialize(&mut de).map(Some).or_else(rmp_decode_err)
+        PluginInput::deserialize(&mut de)
+            .map(Some)
+            .or_else(rmp_decode_err)
     }
 
     fn encode_output(
@@ -45,7 +50,9 @@ impl PluginEncoder for MsgPackSerializer {
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginOutput>, ShellError> {
         let mut de = rmp_serde::Deserializer::new(reader);
-        PluginOutput::deserialize(&mut de).map(Some).or_else(rmp_decode_err)
+        PluginOutput::deserialize(&mut de)
+            .map(Some)
+            .or_else(rmp_decode_err)
     }
 }
 
@@ -54,11 +61,15 @@ fn rmp_encode_err(err: rmp_serde::encode::Error) -> ShellError {
     match err {
         rmp_serde::encode::Error::InvalidValueWrite(_) => {
             // I/O error
-            ShellError::IOError { msg: err.to_string() }
+            ShellError::IOError {
+                msg: err.to_string(),
+            }
         }
         _ => {
             // Something else
-            ShellError::PluginFailedToEncode { msg: err.to_string() }
+            ShellError::PluginFailedToEncode {
+                msg: err.to_string(),
+            }
         }
     }
 }
@@ -72,17 +83,17 @@ fn rmp_decode_err<T>(err: rmp_serde::decode::Error) -> Result<Option<T>, ShellEr
             // EOF
             Ok(None)
         }
-        rmp_serde::decode::Error::InvalidMarkerRead(_) |
-        rmp_serde::decode::Error::InvalidDataRead(_) => {
+        rmp_serde::decode::Error::InvalidMarkerRead(_)
+        | rmp_serde::decode::Error::InvalidDataRead(_) => {
             // I/O error
             Err(ShellError::IOError {
-                msg: err.to_string()
+                msg: err.to_string(),
             })
         }
         _ => {
             // Something else
             Err(ShellError::PluginFailedToDecode {
-                msg: err.to_string()
+                msg: err.to_string(),
             })
         }
     }

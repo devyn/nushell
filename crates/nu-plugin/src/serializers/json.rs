@@ -1,4 +1,7 @@
-use crate::{plugin::PluginEncoder, protocol::{PluginInput, PluginOutput}};
+use crate::{
+    plugin::PluginEncoder,
+    protocol::{PluginInput, PluginOutput},
+};
 use nu_protocol::ShellError;
 use serde::Deserialize;
 
@@ -22,7 +25,9 @@ impl PluginEncoder for JsonSerializer {
         writer: &mut impl std::io::Write,
     ) -> Result<(), nu_protocol::ShellError> {
         serde_json::to_writer(&mut *writer, plugin_input).map_err(json_encode_err)?;
-        writer.write_all(b"\n").map_err(|err| ShellError::IOError { msg: err.to_string() })
+        writer.write_all(b"\n").map_err(|err| ShellError::IOError {
+            msg: err.to_string(),
+        })
     }
 
     fn decode_input(
@@ -30,7 +35,9 @@ impl PluginEncoder for JsonSerializer {
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginInput>, nu_protocol::ShellError> {
         let mut de = serde_json::Deserializer::from_reader(reader);
-        PluginInput::deserialize(&mut de).map(Some).or_else(json_decode_err)
+        PluginInput::deserialize(&mut de)
+            .map(Some)
+            .or_else(json_decode_err)
     }
 
     fn encode_output(
@@ -39,7 +46,9 @@ impl PluginEncoder for JsonSerializer {
         writer: &mut impl std::io::Write,
     ) -> Result<(), ShellError> {
         serde_json::to_writer(&mut *writer, plugin_output).map_err(json_encode_err)?;
-        writer.write_all(b"\n").map_err(|err| ShellError::IOError { msg: err.to_string() })
+        writer.write_all(b"\n").map_err(|err| ShellError::IOError {
+            msg: err.to_string(),
+        })
     }
 
     fn decode_output(
@@ -47,16 +56,22 @@ impl PluginEncoder for JsonSerializer {
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginOutput>, ShellError> {
         let mut de = serde_json::Deserializer::from_reader(reader);
-        PluginOutput::deserialize(&mut de).map(Some).or_else(json_decode_err)
+        PluginOutput::deserialize(&mut de)
+            .map(Some)
+            .or_else(json_decode_err)
     }
 }
 
 /// Handle a `serde_json` encode error.
 fn json_encode_err(err: serde_json::Error) -> ShellError {
     if err.is_io() {
-        ShellError::IOError { msg: err.to_string() }
+        ShellError::IOError {
+            msg: err.to_string(),
+        }
     } else {
-        ShellError::PluginFailedToEncode { msg: err.to_string() }
+        ShellError::PluginFailedToEncode {
+            msg: err.to_string(),
+        }
     }
 }
 
@@ -66,11 +81,11 @@ fn json_decode_err<T>(err: serde_json::Error) -> Result<Option<T>, ShellError> {
         Ok(None)
     } else if err.is_io() {
         Err(ShellError::IOError {
-            msg: err.to_string()
+            msg: err.to_string(),
         })
     } else {
         Err(ShellError::PluginFailedToDecode {
-            msg: err.to_string()
+            msg: err.to_string(),
         })
     }
 }
@@ -83,26 +98,28 @@ mod tests {
     #[test]
     fn json_ends_in_newline() {
         let mut out = vec![];
-        JsonSerializer {}.encode_input(&PluginInput::Call(PluginCall::Signature), &mut out)
+        JsonSerializer {}
+            .encode_input(&PluginInput::Call(PluginCall::Signature), &mut out)
             .expect("serialization error");
         let string = std::str::from_utf8(&out).expect("utf-8 error");
-        assert!(string.ends_with('\n'), "doesn't end with newline: {:?}", string);
+        assert!(
+            string.ends_with('\n'),
+            "doesn't end with newline: {:?}",
+            string
+        );
     }
 
     #[test]
     fn json_has_no_other_newlines() {
         let mut out = vec![];
         // use something deeply nested, to try to trigger any pretty printing
-        let output = PluginOutput::StreamData(
-            StreamData::List(
-                Some(Value::test_list(vec![
-                    Value::test_int(4),
-                    // in case escaping failed
-                    Value::test_string("newline\ncontaining\nstring")
-                ]))
-            )
-        );
-        JsonSerializer {}.encode_output(&output, &mut out)
+        let output = PluginOutput::StreamData(StreamData::List(Some(Value::test_list(vec![
+            Value::test_int(4),
+            // in case escaping failed
+            Value::test_string("newline\ncontaining\nstring"),
+        ]))));
+        JsonSerializer {}
+            .encode_output(&output, &mut out)
             .expect("serialization error");
         let string = std::str::from_utf8(&out).expect("utf-8 error");
         assert_eq!(1, string.chars().filter(|ch| *ch == '\n').count());
