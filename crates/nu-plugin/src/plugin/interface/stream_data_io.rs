@@ -332,6 +332,18 @@ impl<T> StreamBuffer<T> {
         }
     }
 
+    /// True if the buffer is [Present].
+    #[allow(dead_code)]
+    pub fn is_present(&self) -> bool {
+        matches!(self, StreamBuffer::Present(..))
+    }
+
+    /// True if the buffer is [NotPresent].
+    #[allow(dead_code)]
+    pub fn is_not_present(&self) -> bool {
+        matches!(self, StreamBuffer::NotPresent)
+    }
+
     /// True if the buffer is [Dropped].
     pub fn is_dropped(&self) -> bool {
         matches!(self, StreamBuffer::Dropped)

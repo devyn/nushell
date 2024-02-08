@@ -92,9 +92,14 @@ impl TestCase {
         }
     }
 
-    /// Clear the input buffer.
+    /// Clear the input read buffer.
     pub(crate) fn clear_input(&self) {
         self.r#in.lock().unwrap().inputs.truncate(0);
+    }
+
+    /// Clear the output read buffer.
+    pub(crate) fn clear_output(&self) {
+        self.r#in.lock().unwrap().outputs.truncate(0);
     }
 
     /// Add input that will be read by the interface.
