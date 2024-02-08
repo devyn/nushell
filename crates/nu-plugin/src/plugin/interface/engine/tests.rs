@@ -1,4 +1,4 @@
-use nu_protocol::{Span, Value, ShellError, PipelineData, CustomValue};
+use nu_protocol::{Span, Value, ShellError, PipelineData, CustomValue, ListStream, RawStream};
 use serde::{Serialize, Deserialize};
 
 use crate::{StreamData, PluginCallResponse};
@@ -268,6 +268,7 @@ fn write_call_response() {
         Some(other) => panic!("wrote the wrong message: {other:?}"),
         None => panic!("didn't write anything")
     }
+    assert!(!test.has_unconsumed_write());
 }
 
 #[test]
@@ -280,6 +281,7 @@ fn write_call_response_error() {
         ShellError::IOError { msg } if msg == "test error" => (),
         other => panic!("got some other error: {other}")
     }
+    assert!(!test.has_unconsumed_write());
 }
 
 #[test]
@@ -466,21 +468,448 @@ fn make_pipeline_data_external_stream() {
 }
 
 #[test]
-#[ignore = "TODO"]
+fn make_pipeline_data_external_stream_error() {
+    let test = TestCase::new();
+
+    // Just test stdout, but with an error
+    let spec_msg = "failure";
+    let stream_data = [
+        StreamData::ExternalExitCode(Some(Value::int(1, Span::test_data()))),
+        StreamData::ExternalStdout(Some(Err(ShellError::NushellFailed { msg: spec_msg.into() }))),
+        StreamData::ExternalStdout(None),
+    ];
+
+    for data in stream_data {
+        test.add_input(PluginInput::StreamData(data));
+    }
+
+    // Still enable the other streams, to ensure ignoring the other data works
+    let call_input = CallInput::ExternalStream(ExternalStreamInfo {
+        span: Span::test_data(),
+        stdout: Some(RawStreamInfo { is_binary: false, known_size: None }),
+        stderr: Some(RawStreamInfo { is_binary: false, known_size: None }),
+        has_exit_code: true,
+        trim_end_newline: false,
+    });
+
+    let interface = EngineInterface::from({
+        let interface = test.engine_interface_impl();
+        interface.read.lock().unwrap().1 = StreamBuffers::new_external(true, true, true);
+        interface
+    });
+
+    let pipe = interface.make_pipeline_data(call_input).expect("failed to make pipeline data");
+
+    match pipe {
+        PipelineData::ExternalStream { stdout, stderr, exit_code, .. } => {
+            assert!(stdout.is_some());
+            assert!(stderr.is_some());
+            assert!(exit_code.is_some());
+
+            match stdout.unwrap().into_bytes().expect_err("stdout read successfully") {
+                ShellError::NushellFailed { msg } => assert_eq!(spec_msg, msg),
+                other => panic!("unexpected other error while reading stdout: {other}")
+            }
+        }
+        PipelineData::Empty => panic!("expected external stream, got empty"),
+        PipelineData::Value(..) => panic!("expected external stream, got value"),
+        PipelineData::ListStream(..) => panic!("expected external stream, got list stream"),
+    }
+}
+
+#[test]
 fn write_pipeline_data_response_empty() {
+    let test = TestCase::new();
+    test.engine_interface().write_pipeline_data_response(PipelineData::Empty)
+        .expect("failed to write empty response");
+
+    match test.next_written_output() {
+        Some(output) => match output {
+            PluginOutput::CallResponse(PluginCallResponse::Empty) => (),
+            PluginOutput::CallResponse(other) => panic!("unexpected response: {other:?}"),
+            other => panic!("unexpected output: {other:?}")
+        }
+        None => panic!("no response written"),
+    }
+
+    assert!(!test.has_unconsumed_write());
 }
 
 #[test]
-#[ignore = "TODO"]
 fn write_pipeline_data_response_value() {
+    let test = TestCase::new();
+    let value = Value::test_string("hello");
+    let data = PipelineData::Value(value.clone(), None);
+    test.engine_interface().write_pipeline_data_response(data)
+        .expect("failed to write value response");
+
+    match test.next_written_output() {
+        Some(output) => match output {
+            PluginOutput::CallResponse(PluginCallResponse::Value(v)) => assert_eq!(value, *v),
+            PluginOutput::CallResponse(other) => panic!("unexpected response: {other:?}"),
+            other => panic!("unexpected output: {other:?}")
+        }
+        None => panic!("no response written"),
+    }
+
+    assert!(!test.has_unconsumed_write());
 }
 
 #[test]
-#[ignore = "TODO"]
 fn write_pipeline_data_response_list_stream() {
+    let test = TestCase::new();
+
+    let values = vec![
+        Value::test_int(4),
+        Value::test_bool(false),
+        Value::test_string("foobar"),
+    ];
+
+    let list_stream = ListStream::from_stream(values.clone().into_iter(), None);
+    let data = PipelineData::ListStream(list_stream, None);
+    test.engine_interface().write_pipeline_data_response(data)
+        .expect("failed to write list stream response");
+
+    // Response starts by signaling a ListStream return value:
+    match test.next_written_output() {
+        Some(PluginOutput::CallResponse(PluginCallResponse::ListStream)) => (),
+        Some(other) => panic!("unexpected response: {other:?}"),
+        None => panic!("response not written")
+    }
+
+    // Followed by each stream value...
+    for (expected_value, output) in values.into_iter().zip(test.written_outputs()) {
+        match output {
+            PluginOutput::StreamData(StreamData::List(Some(read_value))) =>
+                assert_eq!(expected_value, read_value),
+            PluginOutput::StreamData(StreamData::List(None)) =>
+                panic!("unexpected early end of stream"),
+            other =>
+                panic!("unexpected other output: {other:?}")
+        }
+    }
+
+    // Followed by List(None) to end the stream
+    match test.next_written_output() {
+        Some(PluginOutput::StreamData(StreamData::List(None))) => (),
+        Some(other) => panic!("expected list end, unexpected output: {other:?}"),
+        None => panic!("missing list stream end signal")
+    }
+
+    assert!(!test.has_unconsumed_write());
 }
 
 #[test]
-#[ignore = "TODO"]
-fn write_pipeline_data_response_external_stream() {
+fn write_pipeline_data_response_external_stream_stdout_only() {
+    let test = TestCase::new();
+
+    let stdout_chunks = vec![
+        b"nushel".to_vec(),
+        b"l rock".to_vec(),
+        b"s!\n".to_vec(),
+    ];
+
+    let stdout_raw_stream = RawStream::new(
+        Box::new(stdout_chunks.clone().into_iter().map(Ok)),
+        None,
+        Span::test_data(),
+        None
+    );
+
+    let span = Span::new(1000, 1050);
+
+    let data = PipelineData::ExternalStream {
+        stdout: Some(stdout_raw_stream),
+        stderr: None,
+        exit_code: None,
+        span,
+        metadata: None,
+        trim_end_newline: false,
+    };
+
+    test.engine_interface().write_pipeline_data_response(data)
+        .expect("failed to write external stream pipeline data");
+
+    // First, there should be a header telling us metadata about the external stream
+    match test.next_written_output() {
+        Some(PluginOutput::CallResponse(PluginCallResponse::ExternalStream(info))) => {
+            assert_eq!(span, info.span, "info.span");
+            match info.stdout {
+                Some(RawStreamInfo { is_binary, known_size }) => {
+                    let _ = is_binary; // undefined, could be anything
+                    assert_eq!(None, known_size);
+                }
+                None => todo!(),
+            }
+            assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
+            assert_eq!(false, info.has_exit_code, "info.has_exit_code");
+            assert_eq!(false, info.trim_end_newline, "info.trim_end_newline");
+        }
+        Some(other) => panic!("unexpected response written: {other:?}"),
+        None => panic!("no response written"),
+    }
+
+    // Then, just check the outputs. They should be in exactly the same order with nothing extra
+    for expected_chunk in stdout_chunks {
+        match test.next_written_output() {
+            Some(PluginOutput::StreamData(StreamData::ExternalStdout(option))) => {
+                let read_chunk = option.transpose()
+                    .expect("error in stdout stream")
+                    .expect("early EOF signal in stdout stream");
+                assert_eq!(expected_chunk, read_chunk);
+            }
+            Some(other) => panic!("unexpected output: {other:?}"),
+            None => panic!("unexpected end of output")
+        }
+    }
+
+    // And there should be an end of stream signal (`Ok(None)`)
+    match test.next_written_output() {
+        Some(PluginOutput::StreamData(StreamData::ExternalStdout(option))) => match option {
+            Some(Ok(data)) => panic!("unexpected extra data on stdout stream: {data:?}"),
+            Some(Err(err)) => panic!("unexpected error at end of stdout stream: {err}"),
+            None => (),
+        }
+        Some(other) => panic!("unexpected output: {other:?}"),
+        None => panic!("unexpected end of output")
+    }
+
+    assert!(!test.has_unconsumed_write());
+}
+
+#[test]
+fn write_pipeline_data_response_external_stream_stdout_err() {
+    let test = TestCase::new();
+
+    let spec_msg = "something bad";
+    let spec_val_span = Span::new(1090, 1100);
+    let spec_call_span = Span::new(1000, 1030);
+
+    let error = ShellError::IncorrectValue {
+        msg: spec_msg.into(),
+        val_span: spec_val_span,
+        call_span: spec_call_span,
+    };
+
+    let stdout_raw_stream = RawStream::new(
+        Box::new(std::iter::once(Err(error))),
+        None,
+        Span::test_data(),
+        None
+    );
+
+    let data = PipelineData::ExternalStream {
+        stdout: Some(stdout_raw_stream),
+        stderr: None,
+        exit_code: None,
+        span: Span::test_data(),
+        metadata: None,
+        trim_end_newline: false,
+    };
+
+    test.engine_interface().write_pipeline_data_response(data)
+        .expect("failed to write external stream pipeline data");
+
+    // Check response header
+    match test.next_written_output() {
+        Some(PluginOutput::CallResponse(PluginCallResponse::ExternalStream(info))) => {
+            assert!(info.stdout.is_some(), "info.stdout is not present");
+            assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
+            assert_eq!(false, info.has_exit_code, "info.has_exit_code");
+        }
+        Some(other) => panic!("unexpected response written: {other:?}"),
+        None => panic!("no response written"),
+    }
+
+    // Check error
+    match test.next_written_output() {
+        Some(PluginOutput::StreamData(StreamData::ExternalStdout(Some(result)))) => {
+            match result {
+                Ok(value) => panic!("unexpected value in stream: {value:?}"),
+                Err(ShellError::IncorrectValue { msg, val_span, call_span }) => {
+                    assert_eq!(spec_msg, msg, "msg");
+                    assert_eq!(spec_val_span, val_span, "val_span");
+                    assert_eq!(spec_call_span, call_span, "call_span");
+                }
+                Err(err) => panic!("unexpected other error on stream: {err}")
+            }
+        }
+        Some(other) => panic!("unexpected output: {other:?}"),
+        None => panic!("didn't write the exit code")
+    }
+
+    // Check end of stream
+    match test.next_written_output() {
+        Some(PluginOutput::StreamData(StreamData::ExternalStdout(None))) => (),
+        Some(other) => panic!("unexpected output: {other:?}"),
+        None => panic!("didn't write the exit code end of stream signal")
+    }
+
+    assert!(!test.has_unconsumed_write());
+}
+
+#[test]
+fn write_pipeline_data_response_external_stream_exit_code_only() {
+    let test = TestCase::new();
+
+    let exit_code_stream = ListStream::from_stream(
+        std::iter::once(Value::test_int(0)),
+        None
+    );
+
+    let data = PipelineData::ExternalStream {
+        stdout: None,
+        stderr: None,
+        exit_code: Some(exit_code_stream),
+        span: Span::test_data(),
+        metadata: None,
+        trim_end_newline: false,
+    };
+
+    test.engine_interface().write_pipeline_data_response(data)
+        .expect("failed to write external stream pipeline data");
+
+    // Check response header
+    match test.next_written_output() {
+        Some(PluginOutput::CallResponse(PluginCallResponse::ExternalStream(info))) => {
+            // just check what matters here, the other tests cover other bits
+            assert!(info.stdout.is_none(), "info.stdout: {:?}", info.stdout);
+            assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
+            assert_eq!(true, info.has_exit_code);
+        }
+        Some(other) => panic!("unexpected response: {other:?}"),
+        None => panic!("didn't write any response")
+    }
+
+    // Check exit code value
+    match test.next_written_output() {
+        Some(PluginOutput::StreamData(StreamData::ExternalExitCode(Some(value)))) => {
+            assert_eq!(Value::test_int(0), value);
+        }
+        Some(other) => panic!("unexpected output: {other:?}"),
+        None => panic!("didn't write the exit code")
+    }
+
+    // Check end of stream
+    match test.next_written_output() {
+        Some(PluginOutput::StreamData(StreamData::ExternalExitCode(None))) => (),
+        Some(other) => panic!("unexpected output: {other:?}"),
+        None => panic!("didn't write the exit code end of stream signal")
+    }
+
+    assert!(!test.has_unconsumed_write());
+}
+
+#[test]
+fn write_pipeline_data_response_external_stream_full() {
+    let test = TestCase::new();
+
+    // Consume three streams simultaneously. Can't predict which order the output will really be
+    // in, though
+    let stdout_chunks = vec![
+        b"hel".to_vec(),
+        b"lo ".to_vec(),
+        b"wor".to_vec(),
+        b"ld".to_vec(),
+    ];
+
+    let stderr_chunks = vec![
+        b"standard ".to_vec(),
+        b"error\n".to_vec(),
+    ];
+
+    let exit_code_values = vec![
+        // There probably wouldn't be more than one exit code normally, but try just in case...
+        Value::test_int(0),
+        Value::test_int(1),
+        Value::test_int(2),
+    ];
+
+    let stdout_len = stdout_chunks.iter().map(|c| c.len()).sum::<usize>() as u64;
+
+    let stdout_raw_stream = RawStream::new(
+        Box::new(stdout_chunks.clone().into_iter().map(Ok)),
+        None,
+        Span::test_data(),
+        Some(stdout_len)
+    );
+    let stderr_raw_stream = RawStream::new(
+        Box::new(stderr_chunks.clone().into_iter().map(Ok)),
+        None,
+        Span::test_data(),
+        None
+    );
+    let exit_code_stream = ListStream::from_stream(exit_code_values.clone().into_iter(), None);
+
+    let data = PipelineData::ExternalStream {
+        stdout: Some(stdout_raw_stream),
+        stderr: Some(stderr_raw_stream),
+        exit_code: Some(exit_code_stream),
+        span: Span::test_data(),
+        metadata: None,
+        trim_end_newline: true,
+    };
+
+    test.engine_interface().write_pipeline_data_response(data)
+        .expect("failed to write external stream pipeline data");
+
+    // First, there should be a header telling us metadata about the external stream
+    match test.next_written_output() {
+        Some(PluginOutput::CallResponse(PluginCallResponse::ExternalStream(info))) => {
+            assert_eq!(Span::test_data(), info.span, "info.span");
+            match info.stdout {
+                Some(RawStreamInfo { is_binary, known_size }) => {
+                    let _ = is_binary; // undefined, could be anything
+                    assert_eq!(Some(stdout_len), known_size);
+                }
+                None => todo!(),
+            }
+            match info.stderr {
+                Some(RawStreamInfo { is_binary, known_size }) => {
+                    let _ = is_binary; // undefined, could be anything
+                    assert_eq!(None, known_size);
+                }
+                None => todo!(),
+            }
+            assert_eq!(true, info.has_exit_code, "info.has_exit_code");
+            assert_eq!(true, info.trim_end_newline, "info.trim_end_newline");
+        }
+        Some(other) => panic!("unexpected response written: {other:?}"),
+        None => panic!("no response written"),
+    }
+
+    // Then comes the hard part: check for the StreamData responses matching each of the iterators
+    //
+    // Each stream should be in order, but the order of the responses of unrelated streams is
+    // not defined and may be random
+    let mut stdout_iter = stdout_chunks.into_iter();
+    let mut stderr_iter = stderr_chunks.into_iter();
+    let mut exit_code_iter = exit_code_values.into_iter();
+
+    for output in test.written_outputs() {
+        match output {
+            PluginOutput::StreamData(data) => match data {
+                StreamData::List(_) => panic!("got unexpected list stream data: {data:?}"),
+                StreamData::ExternalStdout(option) => {
+                    let received = option.transpose().expect("unexpected error in stdout stream");
+                    assert_eq!(stdout_iter.next(), received);
+                }
+                StreamData::ExternalStderr(option) => {
+                    let received = option.transpose().expect("unexpected error in stderr stream");
+                    assert_eq!(stderr_iter.next(), received);
+                }
+                StreamData::ExternalExitCode(received) => {
+                    assert_eq!(exit_code_iter.next(), received);
+                }
+            }
+            other => panic!("unexpected output: {other:?}")
+        }
+    }
+
+    // Make sure we got all of the messages we expected, and nothing extra
+    assert!(stdout_iter.next().is_none(), "didn't match all stdout messages");
+    assert!(stderr_iter.next().is_none(), "didn't match all stderr messages");
+    assert!(exit_code_iter.next().is_none(), "didn't match all exit code messages");
+
+    assert!(!test.has_unconsumed_write());
 }

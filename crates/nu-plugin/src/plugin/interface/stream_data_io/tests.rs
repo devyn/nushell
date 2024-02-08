@@ -180,6 +180,7 @@ macro_rules! gen_stream_data_tests {
                 ShellError::IOError { msg } => assert_eq!(test_msg, msg),
                 other => panic!("other error: {other}")
             }
+            assert!(!$test.has_unconsumed_write());
         }
 
         #[test]
@@ -204,6 +205,7 @@ macro_rules! gen_stream_data_tests {
                         panic!("no data was written for {item:?}"),
                 }
             }
+            assert!(!$test.has_unconsumed_write());
         }
 
         #[test]
@@ -234,6 +236,7 @@ macro_rules! gen_stream_data_tests {
                         panic!("no data was written for {item:?}"),
                 }
             }
+            assert!(!$test.has_unconsumed_write());
         }
 
         #[test]
@@ -264,6 +267,7 @@ macro_rules! gen_stream_data_tests {
                         panic!("no data was written for {item:?}"),
                 }
             }
+            assert!(!$test.has_unconsumed_write());
         }
 
         #[test]
@@ -288,6 +292,7 @@ macro_rules! gen_stream_data_tests {
                         panic!("no data was written for {item:?}"),
                 }
             }
+            assert!(!$test.has_unconsumed_write());
         }
     }
 }

@@ -232,7 +232,7 @@ impl EngineInterface {
                 write_full_external_stream(&self.io_stream, stdout, stderr, exit_code)
             }
             PipelineData::Empty => {
-                self.write_call_response(PluginCallResponse::Value(Default::default()))
+                self.write_call_response(PluginCallResponse::Empty)
             }
         }
     }

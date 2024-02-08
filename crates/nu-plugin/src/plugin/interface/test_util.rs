@@ -107,6 +107,16 @@ impl TestCase {
         self.r#in.lock().unwrap().outputs.push_back(output);
     }
 
+    /// Add multiple inputs that will be read by the interface.
+    pub(crate) fn extend_input(&self, inputs: impl IntoIterator<Item=PluginInput>) {
+        self.r#in.lock().unwrap().inputs.extend(inputs);
+    }
+
+    /// Add multiple outputs that will be read by the interface.
+    pub(crate) fn extend_output(&self, outputs: impl IntoIterator<Item=PluginOutput>) {
+        self.r#in.lock().unwrap().outputs.extend(outputs);
+    }
+
     /// Return an error from the next read operation.
     pub(crate) fn set_read_error(&self, err: ShellError) {
         self.r#in.lock().unwrap().error = Some(err);
@@ -127,6 +137,16 @@ impl TestCase {
         self.out.lock().unwrap().outputs.pop_front()
     }
 
+    /// Iterator over written inputs.
+    pub(crate) fn written_inputs(&self) -> impl Iterator<Item=PluginInput> + '_ {
+        std::iter::from_fn(|| self.next_written_input())
+    }
+
+    /// Iterator over written outputs.
+    pub(crate) fn written_outputs(&self) -> impl Iterator<Item=PluginOutput> + '_ {
+        std::iter::from_fn(|| self.next_written_output())
+    }
+
     /// Returns true if the writer was flushed after the last write operation.
     pub(crate) fn was_flushed(&self) -> bool {
         self.out.lock().unwrap().flushed
@@ -135,6 +155,12 @@ impl TestCase {
     /// Returns true if the reader has unconsumed read input/output.
     pub(crate) fn has_unconsumed_read(&self) -> bool {
         let lock = self.r#in.lock().unwrap();
+        !lock.inputs.is_empty() || !lock.outputs.is_empty()
+    }
+
+    /// Returns true if the writer has unconsumed write input/output.
+    pub(crate) fn has_unconsumed_write(&self) -> bool {
+        let lock = self.out.lock().unwrap();
         !lock.inputs.is_empty() || !lock.outputs.is_empty()
     }
 
