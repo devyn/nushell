@@ -55,5 +55,5 @@ pub use protocol::{EvaluatedCall, LabeledError};
 pub use serializers::{json::JsonSerializer, msgpack::MsgPackSerializer, EncodingType};
 
 // Used by external benchmarks.
-#[cfg(test)]
+#[doc(hidden)]
 pub use protocol::{PluginCallResponse, PluginOutput, StreamData};
