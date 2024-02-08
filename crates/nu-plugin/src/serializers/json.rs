@@ -79,4 +79,32 @@ fn json_decode_err<T>(err: serde_json::Error) -> Result<Option<T>, ShellError> {
 mod tests {
     use super::*;
     crate::serializers::tests::generate_tests!(JsonSerializer {});
+
+    #[test]
+    fn json_ends_in_newline() {
+        let mut out = vec![];
+        JsonSerializer {}.encode_input(&PluginInput::Call(PluginCall::Signature), &mut out)
+            .expect("serialization error");
+        let string = std::str::from_utf8(&out).expect("utf-8 error");
+        assert!(string.ends_with('\n'), "doesn't end with newline: {:?}", string);
+    }
+
+    #[test]
+    fn json_has_no_other_newlines() {
+        let mut out = vec![];
+        // use something deeply nested, to try to trigger any pretty printing
+        let output = PluginOutput::StreamData(
+            StreamData::List(
+                Some(Value::test_list(vec![
+                    Value::test_int(4),
+                    // in case escaping failed
+                    Value::test_string("newline\ncontaining\nstring")
+                ]))
+            )
+        );
+        JsonSerializer {}.encode_output(&output, &mut out)
+            .expect("serialization error");
+        let string = std::str::from_utf8(&out).expect("utf-8 error");
+        assert_eq!(1, string.chars().filter(|ch| *ch == '\n').count());
+    }
 }

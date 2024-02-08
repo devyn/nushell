@@ -81,7 +81,7 @@ fn rmp_decode_err<T>(err: rmp_serde::decode::Error) -> Result<Option<T>, ShellEr
         }
         _ => {
             // Something else
-            Err(ShellError::PluginFailedToEncode {
+            Err(ShellError::PluginFailedToDecode {
                 msg: err.to_string()
             })
         }

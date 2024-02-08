@@ -7,6 +7,68 @@ macro_rules! generate_tests {
         use nu_protocol::{PluginSignature, Span, Spanned, SyntaxShape, Value};
 
         #[test]
+        fn decode_eof() {
+            let mut buffer: &[u8] = &[];
+            let encoder = $encoder;
+            let result = encoder.decode_input(&mut buffer)
+                .expect("eof should not result in an error");
+            assert!(result.is_none(), "decode_input result: {result:?}");
+            let result = encoder.decode_output(&mut buffer)
+                .expect("eof should not result in an error");
+            assert!(result.is_none(), "decode_output result: {result:?}");
+        }
+
+        #[test]
+        fn decode_io_error() {
+            struct ErrorProducer;
+            impl std::io::Read for ErrorProducer {
+                fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                    Err(std::io::Error::from(std::io::ErrorKind::ConnectionReset))
+                }
+            }
+            let encoder = $encoder;
+            let mut buffered = std::io::BufReader::new(ErrorProducer);
+            match encoder.decode_input(&mut buffered) {
+                Ok(_) => panic!("decode_input: i/o error was not passed through"),
+                Err(ShellError::IOError { .. }) => (), // okay
+                Err(other) => panic!("decode_input: got other error, should have been a \
+                    ShellError::IOError: {other:?}")
+            }
+            match encoder.decode_output(&mut buffered) {
+                Ok(_) => panic!("decode_output: i/o error was not passed through"),
+                Err(ShellError::IOError { .. }) => (), // okay
+                Err(other) => panic!("decode_output: got other error, should have been a \
+                    ShellError::IOError: {other:?}")
+            }
+        }
+
+        #[test]
+        fn decode_gibberish() {
+            // just a sequence of bytes that shouldn't be valid in anything we use
+            let gibberish: &[u8] = &[
+                0, 80, 74, 85, 117, 122, 86, 100, 74, 115, 20, 104, 55, 98, 67, 203, 83, 85, 77,
+                112, 74, 79, 254, 71, 80
+            ];
+            let encoder = $encoder;
+
+            let mut buffered = std::io::BufReader::new(&gibberish[..]);
+            match encoder.decode_input(&mut buffered) {
+                Ok(value) => panic!("decode_input: parsed successfully => {value:?}"),
+                Err(ShellError::PluginFailedToDecode { .. }) => (), // okay
+                Err(other) => panic!("decode_input: got other error, should have been a \
+                    ShellError::PluginFailedToDecode: {other:?}")
+            }
+
+            let mut buffered = std::io::BufReader::new(&gibberish[..]);
+            match encoder.decode_output(&mut buffered) {
+                Ok(value) => panic!("decode_output: parsed successfully => {value:?}"),
+                Err(ShellError::PluginFailedToDecode { .. }) => (), // okay
+                Err(other) => panic!("decode_output: got other error, should have been a \
+                    ShellError::PluginFailedToDecode: {other:?}")
+            }
+        }
+
+        #[test]
         fn call_round_trip_signature() {
             let plugin_call = PluginCall::Signature;
             let plugin_input = PluginInput::Call(plugin_call);
