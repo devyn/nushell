@@ -1,28 +1,27 @@
 //! Implements the stream multiplexing interface for both the plugin side and the engine side.
 
-use std::{
-    path::Path,
-    sync::{atomic::AtomicBool, Arc},
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
+    Arc,
 };
 
 use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Span, Value};
 
 use crate::{
     plugin::PluginEncoder,
-    protocol::{
-        CallInput, ExternalStreamInfo, PluginCustomValue, PluginData, PluginInput, PluginOutput,
-        RawStreamInfo,
-    },
+    protocol::{ExternalStreamInfo, PluginInput, PluginOutput, StreamId},
 };
 
+mod buffers;
+
 mod stream_data_io;
-use stream_data_io::*;
+pub(crate) use stream_data_io::StreamDataIo;
 
 mod engine;
 pub use engine::EngineInterface;
 
 mod plugin;
-pub(crate) use plugin::{PluginExecutionContext, PluginExecutionNushellContext, PluginInterface};
+pub(crate) use plugin::PluginInterface;
 
 #[cfg(test)]
 mod test_util;
@@ -56,7 +55,7 @@ where
 /// Write [PluginInput] or [PluginOutput] to the stream.
 ///
 /// This abstraction is really only used to make testing easier; in general this will usually be
-/// used on a pair of a [writer](std:::io::Write) and an [encoder](PluginEncoder).
+/// used on a pair of a [writer](std::io::Write) and an [encoder](PluginEncoder).
 trait PluginWrite: Send {
     fn write_input(&mut self, input: &PluginInput) -> Result<(), ShellError>;
     fn write_output(&mut self, output: &PluginOutput) -> Result<(), ShellError>;
@@ -91,13 +90,14 @@ where
 /// attempted to be read after end-of-input.
 struct PluginListStream {
     io: Arc<dyn StreamDataIo>,
+    id: StreamId,
 }
 
 impl Iterator for PluginListStream {
     type Item = Value;
 
     fn next(&mut self) -> Option<Value> {
-        match self.io.read_list() {
+        match self.io.clone().read_list(self.id) {
             Ok(value) => value,
             Err(err) => Some(Value::error(err, Span::unknown())),
         }
@@ -107,32 +107,20 @@ impl Iterator for PluginListStream {
 impl Drop for PluginListStream {
     fn drop(&mut self) {
         // Signal that we don't need the stream anymore.
-        self.io.drop_list();
+        self.io.drop_list(self.id);
     }
 }
 
 /// Create [PipelineData] for receiving a [ListStream] input.
-fn make_list_stream(source: Arc<dyn StreamDataIo>, ctrlc: Option<Arc<AtomicBool>>) -> PipelineData {
+fn make_list_stream(
+    source: Arc<dyn StreamDataIo>,
+    id: StreamId,
+    ctrlc: Option<Arc<AtomicBool>>,
+) -> PipelineData {
     PipelineData::ListStream(
-        ListStream::from_stream(PluginListStream { io: source }.fuse(), ctrlc),
+        ListStream::from_stream(PluginListStream { io: source, id }.fuse(), ctrlc),
         None,
     )
-}
-
-/// Write the contents of a [ListStream] to `io`.
-fn write_full_list_stream(
-    io: &Arc<dyn StreamDataIo>,
-    list_stream: ListStream,
-) -> Result<(), ShellError> {
-    // Consume the stream and write it via StreamDataIo.
-    for value in list_stream {
-        io.write_list(Some(match value {
-            Value::LazyRecord { val, .. } => val.collect()?,
-            _ => value,
-        }))?;
-    }
-    // End of stream
-    io.write_list(None)
 }
 
 /// Iterate through byte chunks received on the `stdout` stream of an `ListStream` input.
@@ -141,20 +129,21 @@ fn write_full_list_stream(
 /// attempted to be read after end-of-input.
 struct PluginExternalStdoutStream {
     io: Arc<dyn StreamDataIo>,
+    id: StreamId,
 }
 
 impl Iterator for PluginExternalStdoutStream {
     type Item = Result<Vec<u8>, ShellError>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>, ShellError>> {
-        self.io.read_external_stdout().transpose()
+        self.io.clone().read_external_stdout(self.id).transpose()
     }
 }
 
 impl Drop for PluginExternalStdoutStream {
     fn drop(&mut self) {
         // Signal that we don't need the stream anymore.
-        self.io.drop_external_stdout();
+        self.io.drop_external_stdout(self.id);
     }
 }
 
@@ -164,20 +153,21 @@ impl Drop for PluginExternalStdoutStream {
 /// attempted to be read after end-of-input.
 struct PluginExternalStderrStream {
     io: Arc<dyn StreamDataIo>,
+    id: StreamId,
 }
 
 impl Iterator for PluginExternalStderrStream {
     type Item = Result<Vec<u8>, ShellError>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>, ShellError>> {
-        self.io.read_external_stderr().transpose()
+        self.io.clone().read_external_stderr(self.id).transpose()
     }
 }
 
 impl Drop for PluginExternalStderrStream {
     fn drop(&mut self) {
         // Signal that we don't need the stream anymore.
-        self.io.drop_external_stderr();
+        self.io.drop_external_stderr(self.id);
     }
 }
 
@@ -187,13 +177,14 @@ impl Drop for PluginExternalStderrStream {
 /// attempted to be read after end-of-input.
 struct PluginExternalExitCodeStream {
     io: Arc<dyn StreamDataIo>,
+    id: StreamId,
 }
 
 impl Iterator for PluginExternalExitCodeStream {
     type Item = Value;
 
     fn next(&mut self) -> Option<Value> {
-        match self.io.read_external_exit_code() {
+        match self.io.clone().read_external_exit_code(self.id) {
             Ok(value) => value,
             Err(err) => Some(Value::error(err, Span::unknown())),
         }
@@ -203,19 +194,24 @@ impl Iterator for PluginExternalExitCodeStream {
 impl Drop for PluginExternalExitCodeStream {
     fn drop(&mut self) {
         // Signal that we don't need the stream anymore.
-        self.io.drop_external_exit_code();
+        self.io.clone().drop_external_exit_code(self.id);
     }
 }
 
 /// Create [PipelineData] for receiving an [ExternalStream] input.
 fn make_external_stream(
     source: Arc<dyn StreamDataIo>,
+    id: StreamId,
     info: &ExternalStreamInfo,
     ctrlc: Option<Arc<AtomicBool>>,
 ) -> PipelineData {
     PipelineData::ExternalStream {
         stdout: info.stdout.as_ref().map(|stdout_info| {
-            let stream = PluginExternalStdoutStream { io: source.clone() }.fuse();
+            let stream = PluginExternalStdoutStream {
+                io: source.clone(),
+                id,
+            }
+            .fuse();
             let mut raw = RawStream::new(
                 Box::new(stream),
                 ctrlc.clone(),
@@ -226,7 +222,11 @@ fn make_external_stream(
             raw
         }),
         stderr: info.stderr.as_ref().map(|stderr_info| {
-            let stream = PluginExternalStderrStream { io: source.clone() }.fuse();
+            let stream = PluginExternalStderrStream {
+                io: source.clone(),
+                id,
+            }
+            .fuse();
             let mut raw = RawStream::new(
                 Box::new(stream),
                 ctrlc.clone(),
@@ -238,7 +238,11 @@ fn make_external_stream(
         }),
         exit_code: info.has_exit_code.then(|| {
             ListStream::from_stream(
-                PluginExternalExitCodeStream { io: source.clone() }.fuse(),
+                PluginExternalExitCodeStream {
+                    io: source.clone(),
+                    id,
+                }
+                .fuse(),
                 ctrlc.clone(),
             )
         }),
@@ -248,105 +252,32 @@ fn make_external_stream(
     }
 }
 
-/// Write the contents of a [PipelineData::ExternalStream] to `io`.
-fn write_full_external_stream(
-    io: &Arc<dyn StreamDataIo>,
-    stdout: Option<RawStream>,
-    stderr: Option<RawStream>,
-    exit_code: Option<ListStream>,
-) -> Result<(), ShellError> {
-    // Consume all streams simultaneously by launching three threads
-    for thread in [
-        stdout.map(|stdout| {
-            let io = io.clone();
-            std::thread::spawn(move || {
-                for bytes in stdout.stream {
-                    io.write_external_stdout(Some(bytes))?;
-                }
-                io.write_external_stdout(None)
-            })
-        }),
-        stderr.map(|stderr| {
-            let io = io.clone();
-            std::thread::spawn(move || {
-                for bytes in stderr.stream {
-                    io.write_external_stderr(Some(bytes))?;
-                }
-                io.write_external_stderr(None)
-            })
-        }),
-        exit_code.map(|exit_code| {
-            let io = io.clone();
-            std::thread::spawn(move || {
-                for value in exit_code {
-                    io.write_external_exit_code(Some(value))?;
-                }
-                io.write_external_exit_code(None)
-            })
-        }),
-    ]
-    .into_iter()
-    .flatten()
-    {
-        thread.join().expect("stream consumer thread panicked")?;
-    }
-    Ok(())
-}
-
-/// Prepare [CallInput] for [PipelineData].
-///
-/// Handles converting [PluginCustomValue] to [CallInput::Data] if the `plugin_filename` is correct.
-///
-/// Does not actually send any stream data. You still need to call either [write_full_list_stream]
-/// or [write_full_external_stream] as appropriate.
-pub(crate) fn make_call_input_from_pipeline_data(
-    input: &PipelineData,
-    plugin_name: &str,
-    plugin_filename: &Path,
-) -> Result<CallInput, ShellError> {
-    match *input {
-        PipelineData::Value(ref value @ Value::CustomValue { ref val, .. }, _) => {
-            match val.as_any().downcast_ref::<PluginCustomValue>() {
-                Some(plugin_data) if plugin_data.filename == plugin_filename => {
-                    Ok(CallInput::Data(PluginData {
-                        data: plugin_data.data.clone(),
-                        span: value.span(),
-                    }))
-                }
-                _ => {
-                    let custom_value_name = val.value_string();
-                    Err(ShellError::GenericError {
-                        error: format!(
-                            "Plugin {} can not handle the custom value {}",
-                            plugin_name, custom_value_name
-                        ),
-                        msg: format!("custom value {custom_value_name}"),
-                        span: Some(value.span()),
-                        help: None,
-                        inner: vec![],
-                    })
-                }
+/// Return the next available id from an accumulator, returning an error on overflow
+#[track_caller]
+fn next_id_from(accumulator: &AtomicUsize) -> Result<usize, ShellError> {
+    // This is implemented by load, add, then CAS, to ensure uniqueness even if another thread
+    // tries to get an id at the same time.
+    //
+    // It's totally safe to use Relaxed ordering here, as there aren't other memory operations
+    // that depend on this value having been set for safety
+    //
+    // We're only not using `fetch_add` so that we can check for overflow, as wrapping with the
+    // identifier would lead to a serious bug - however unlikely that is.
+    loop {
+        let current = accumulator.load(Relaxed);
+        if let Some(new) = current.checked_add(1) {
+            if accumulator
+                .compare_exchange_weak(current, new, Relaxed, Relaxed)
+                .is_ok()
+            {
+                // Successfully got the new id - guaranteed no other thread got the same one.
+                return Ok(current);
             }
+        } else {
+            return Err(ShellError::NushellFailedHelp {
+                msg: "an accumulator for identifiers overflowed".into(),
+                help: format!("see {}", std::panic::Location::caller()),
+            });
         }
-        PipelineData::Value(Value::LazyRecord { ref val, .. }, _) => {
-            Ok(CallInput::Value(val.collect()?))
-        }
-        PipelineData::Value(ref value, _) => Ok(CallInput::Value(value.clone())),
-        PipelineData::ListStream(_, _) => Ok(CallInput::ListStream),
-        PipelineData::ExternalStream {
-            span,
-            ref stdout,
-            ref stderr,
-            ref exit_code,
-            trim_end_newline,
-            ..
-        } => Ok(CallInput::ExternalStream(ExternalStreamInfo {
-            span,
-            stdout: stdout.as_ref().map(RawStreamInfo::from),
-            stderr: stderr.as_ref().map(RawStreamInfo::from),
-            has_exit_code: exit_code.is_some(),
-            trim_end_newline,
-        })),
-        PipelineData::Empty => Ok(CallInput::Empty),
     }
 }

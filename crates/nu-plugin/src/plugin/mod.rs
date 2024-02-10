@@ -1,6 +1,5 @@
 mod declaration;
 pub use declaration::PluginDeclaration;
-mod interface;
 use nu_engine::documentation::get_flags_section;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,7 +16,13 @@ use std::process::{Child, ChildStdout, Command as CommandSys, Stdio};
 
 use nu_protocol::{CustomValue, PipelineData, PluginSignature, ShellError, Value};
 
-use self::interface::{EngineInterface, PluginExecutionContext, PluginInterface};
+mod interface;
+pub use interface::EngineInterface;
+use interface::PluginInterface;
+
+mod context;
+
+use self::context::PluginExecutionContext;
 
 use super::EvaluatedCall;
 
@@ -470,9 +475,8 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
                         msg: err.to_string(),
                     })
                     .and_then(|val| val.to_base_value(plugin_data.span))
-                    .map(Box::new)
                     .map_err(LabeledError::from)
-                    .map_or_else(PluginCallResponse::Error, PluginCallResponse::Value);
+                    .map_or_else(PluginCallResponse::Error, PluginCallResponse::value);
 
                 try_or_report!(interface.write_call_response(response));
             }

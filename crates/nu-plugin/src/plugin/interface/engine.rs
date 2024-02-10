@@ -2,7 +2,7 @@
 
 use std::{
     io::{BufRead, Write},
-    sync::{Arc, Mutex},
+    sync::{atomic::AtomicUsize, Arc, Mutex},
 };
 
 use nu_protocol::{CustomValue, PipelineData, ShellError, Value};
@@ -10,15 +10,16 @@ use nu_protocol::{CustomValue, PipelineData, ShellError, Value};
 use crate::{
     plugin::PluginEncoder,
     protocol::{
-        CallInfo, CallInput, ExternalStreamInfo, PluginCall, PluginCallResponse, PluginData,
-        PluginInput, PluginOutput, RawStreamInfo, StreamData,
+        CallInfo, ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginCallResponse,
+        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId,
     },
 };
 
 use super::{
+    buffers::StreamBuffers,
     make_external_stream, make_list_stream,
-    stream_data_io::{impl_stream_data_io, StreamBuffer, StreamBuffers, StreamDataIo},
-    write_full_external_stream, write_full_list_stream, PluginRead, PluginWrite,
+    stream_data_io::{impl_stream_data_io, StreamDataIo, StreamDataIoExt},
+    PluginRead, PluginWrite,
 };
 
 #[cfg(test)]
@@ -28,15 +29,27 @@ mod tests;
 pub(crate) struct EngineInterfaceImpl<R, W> {
     // Always lock read and then write mutex, if using both
     // Stream inputs that can't be handled immediately can be put on the buffer
-    read: Mutex<(R, StreamBuffers)>,
+    read: Mutex<ReadPart<R>>,
     write: Mutex<W>,
+    /// The next available stream id
+    next_stream_id: AtomicUsize,
+}
+
+#[derive(Debug)]
+struct ReadPart<R> {
+    reader: R,
+    stream_buffers: StreamBuffers,
 }
 
 impl<R, W> EngineInterfaceImpl<R, W> {
     pub(crate) fn new(reader: R, writer: W) -> EngineInterfaceImpl<R, W> {
         EngineInterfaceImpl {
-            read: Mutex::new((reader, StreamBuffers::default())),
+            read: Mutex::new(ReadPart {
+                reader,
+                stream_buffers: StreamBuffers::default(),
+            }),
             write: Mutex::new(writer),
+            next_stream_id: AtomicUsize::new(0),
         }
     }
 }
@@ -45,7 +58,9 @@ impl<R, W> EngineInterfaceImpl<R, W> {
 impl_stream_data_io!(
     EngineInterfaceImpl,
     PluginInput(read_input),
-    PluginOutput(write_output)
+    PluginOutput(write_output),
+    read other match {
+    }
 );
 
 /// The trait indirection is so that we can hide the types with a trait object inside
@@ -53,74 +68,41 @@ impl_stream_data_io!(
 pub(crate) trait EngineInterfaceIo: StreamDataIo {
     fn read_call(&self) -> Result<Option<PluginCall>, ShellError>;
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError>;
+
+    /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
+    fn make_pipeline_data(
+        self: Arc<Self>,
+        header: PipelineDataHeader,
+    ) -> Result<PipelineData, ShellError>;
+
+    /// Create a valid header to send the given PipelineData.
+    ///
+    /// Returns the header, and the PipelineData to be sent with `write_pipeline_data_stream`
+    /// if necessary.
+    fn make_pipeline_data_header(
+        &self,
+        data: PipelineData,
+    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError>;
 }
 
 impl<R, W> EngineInterfaceIo for EngineInterfaceImpl<R, W>
 where
-    R: PluginRead,
-    W: PluginWrite,
+    R: PluginRead + 'static,
+    W: PluginWrite + 'static,
 {
     fn read_call(&self) -> Result<Option<PluginCall>, ShellError> {
         let mut read = self.read.lock().expect("read mutex poisoned");
         loop {
-            let input = read.0.read_input()?;
-            match input {
+            match read.reader.read_input()? {
                 Some(PluginInput::Call(call)) => {
                     // Check the call input type to set the stream buffers up
-                    match &call {
-                        PluginCall::Run(CallInfo {
-                            input: CallInput::ListStream,
-                            ..
-                        }) => {
-                            read.1 = StreamBuffers::new_list();
-                        }
-                        PluginCall::Run(CallInfo {
-                            input:
-                                CallInput::ExternalStream(ExternalStreamInfo {
-                                    stdout,
-                                    stderr,
-                                    has_exit_code,
-                                    ..
-                                }),
-                            ..
-                        }) => {
-                            read.1 = StreamBuffers::new_external(
-                                stdout.is_some(),
-                                stderr.is_some(),
-                                *has_exit_code,
-                            );
-                        }
-                        _ => {
-                            read.1 = StreamBuffers::default(); // no buffers
-                        }
+                    if let PluginCall::Run(CallInfo { ref input, .. }) = call {
+                        read.stream_buffers.init_stream(input)?;
                     }
                     return Ok(Some(call));
                 }
-                // Skip over any remaining stream data for dropped streams
-                Some(PluginInput::StreamData(StreamData::List(_))) if read.1.list.is_dropped() => {
-                    continue
-                }
-                Some(PluginInput::StreamData(StreamData::ExternalStdout(_)))
-                    if read.1.external_stdout.is_dropped() =>
-                {
-                    continue
-                }
-                Some(PluginInput::StreamData(StreamData::ExternalStderr(_)))
-                    if read.1.external_stderr.is_dropped() =>
-                {
-                    continue
-                }
-                Some(PluginInput::StreamData(StreamData::ExternalExitCode(_)))
-                    if read.1.external_exit_code.is_dropped() =>
-                {
-                    continue
-                }
-                // Other stream data is an error
-                Some(PluginInput::StreamData(_)) => {
-                    return Err(ShellError::PluginFailedToDecode {
-                        msg: "expected Call, got unexpected StreamData".into(),
-                    })
-                }
+                // Skip over any remaining stream data
+                Some(PluginInput::StreamData(id, data)) => read.stream_buffers.skip(id, data)?,
                 // End of input
                 None => return Ok(None),
             }
@@ -133,16 +115,93 @@ where
         write.write_output(&PluginOutput::CallResponse(response))?;
         write.flush()
     }
+
+    fn make_pipeline_data(
+        self: Arc<Self>,
+        header: PipelineDataHeader,
+    ) -> Result<PipelineData, ShellError> {
+        match header {
+            PipelineDataHeader::Empty => Ok(PipelineData::Empty),
+            PipelineDataHeader::Value(value) => Ok(PipelineData::Value(value, None)),
+            PipelineDataHeader::PluginData(plugin_data) => {
+                // Deserialize custom value
+                bincode::deserialize::<Box<dyn CustomValue>>(&plugin_data.data)
+                    .map(|custom_value| {
+                        let value = Value::custom_value(custom_value, plugin_data.span);
+                        PipelineData::Value(value, None)
+                    })
+                    .map_err(|err| ShellError::PluginFailedToDecode {
+                        msg: err.to_string(),
+                    })
+            }
+            PipelineDataHeader::ListStream(id) => Ok(make_list_stream(self, id, None)),
+            PipelineDataHeader::ExternalStream(id, info) => {
+                Ok(make_external_stream(self, id, &info, None))
+            }
+        }
+    }
+
+    fn make_pipeline_data_header(
+        &self,
+        data: PipelineData,
+    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError> {
+        match data {
+            PipelineData::Value(value, _) => {
+                let span = value.span();
+                match value {
+                    // Serialize custom values as PluginData
+                    Value::CustomValue { val, .. } => match bincode::serialize(&val) {
+                        Ok(data) => {
+                            let name = Some(val.value_string());
+                            Ok((
+                                PipelineDataHeader::PluginData(PluginData { name, data, span }),
+                                None,
+                            ))
+                        }
+                        Err(err) => {
+                            return Err(ShellError::PluginFailedToEncode {
+                                msg: err.to_string(),
+                            })
+                        }
+                    },
+                    // Other values can be serialized as-is
+                    value => Ok((PipelineDataHeader::Value(value), None)),
+                }
+            }
+            PipelineData::ListStream(..) => Ok((
+                PipelineDataHeader::ListStream(self.new_stream_id()?),
+                Some(data),
+            )),
+            PipelineData::ExternalStream {
+                ref stdout,
+                ref stderr,
+                ref exit_code,
+                span,
+                trim_end_newline,
+                ..
+            } => {
+                // Gather info from the stream
+                let info = ExternalStreamInfo {
+                    span,
+                    stdout: stdout.as_ref().map(RawStreamInfo::from),
+                    stderr: stderr.as_ref().map(RawStreamInfo::from),
+                    has_exit_code: exit_code.is_some(),
+                    trim_end_newline,
+                };
+                Ok((
+                    PipelineDataHeader::ExternalStream(self.new_stream_id()?, info),
+                    Some(data),
+                ))
+            }
+            PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
+        }
+    }
 }
 
 /// A reference through which the nushell engine can be interacted with during execution.
 #[derive(Clone)]
 pub struct EngineInterface {
     io: Arc<dyn EngineInterfaceIo>,
-    // FIXME: This is only necessary because trait upcasting is not yet supported, so we have to
-    // generate this variant of the Arc while we know the actual type. It can be removed once
-    // https://github.com/rust-lang/rust/issues/65991 is closed and released.
-    io_stream: Arc<dyn StreamDataIo>,
 }
 
 impl<R, W> From<EngineInterfaceImpl<R, W>> for EngineInterface
@@ -152,10 +211,7 @@ where
 {
     fn from(engine_impl: EngineInterfaceImpl<R, W>) -> Self {
         let arc = Arc::new(engine_impl);
-        EngineInterface {
-            io: arc.clone(),
-            io_stream: arc,
-        }
+        EngineInterface { io: arc.clone() }
     }
 }
 
@@ -175,30 +231,12 @@ impl EngineInterface {
         self.io.read_call()
     }
 
-    /// Create [PipelineData] appropriate for the given [CallInput].
+    /// Create [PipelineData] appropriate for the given [PipelineDataHeader].
     pub(crate) fn make_pipeline_data(
         &self,
-        call_input: CallInput,
+        header: PipelineDataHeader,
     ) -> Result<PipelineData, ShellError> {
-        match call_input {
-            CallInput::Empty => Ok(PipelineData::Empty),
-            CallInput::Value(value) => Ok(PipelineData::Value(value, None)),
-            CallInput::Data(plugin_data) => {
-                // Deserialize custom value
-                bincode::deserialize::<Box<dyn CustomValue>>(&plugin_data.data)
-                    .map(|custom_value| {
-                        let value = Value::custom_value(custom_value, plugin_data.span);
-                        PipelineData::Value(value, None)
-                    })
-                    .map_err(|err| ShellError::PluginFailedToDecode {
-                        msg: err.to_string(),
-                    })
-            }
-            CallInput::ListStream => Ok(make_list_stream(self.io_stream.clone(), None)),
-            CallInput::ExternalStream(info) => {
-                Ok(make_external_stream(self.io_stream.clone(), &info, None))
-            }
-        }
+        self.io.clone().make_pipeline_data(header)
     }
 
     /// Write a plugin call response back to the engine
@@ -215,52 +253,18 @@ impl EngineInterface {
         &self,
         data: PipelineData,
     ) -> Result<(), ShellError> {
-        match data {
-            PipelineData::Value(value, _) => {
-                let span = value.span();
-                let response = match value {
-                    // Serialize custom values as PluginData
-                    Value::CustomValue { val, .. } => match bincode::serialize(&val) {
-                        Ok(data) => {
-                            let name = val.value_string();
-                            PluginCallResponse::PluginData(name, PluginData { data, span })
-                        }
-                        Err(err) => {
-                            return Err(ShellError::PluginFailedToEncode {
-                                msg: err.to_string(),
-                            })
-                        }
-                    },
-                    // Other values can be serialized as-is
-                    value => PluginCallResponse::Value(Box::new(value)),
-                };
-                // Simple response, no stream.
-                self.write_call_response(response)
+        match self.io.make_pipeline_data_header(data)? {
+            (header, Some(data)) => {
+                // Write the full stream of data
+                self.io
+                    .write_call_response(PluginCallResponse::PipelineData(header.clone()))?;
+                self.io.write_pipeline_data_stream(&header, data)
             }
-            PipelineData::ListStream(stream, _) => {
-                self.write_call_response(PluginCallResponse::ListStream)?;
-                write_full_list_stream(&self.io_stream, stream)
+            (header, None) => {
+                // Just the response
+                self.io
+                    .write_call_response(PluginCallResponse::PipelineData(header))
             }
-            PipelineData::ExternalStream {
-                stdout,
-                stderr,
-                exit_code,
-                span,
-                trim_end_newline,
-                ..
-            } => {
-                // Gather info from the stream
-                let info = ExternalStreamInfo {
-                    span,
-                    stdout: stdout.as_ref().map(RawStreamInfo::from),
-                    stderr: stderr.as_ref().map(RawStreamInfo::from),
-                    has_exit_code: exit_code.is_some(),
-                    trim_end_newline,
-                };
-                self.write_call_response(PluginCallResponse::ExternalStream(info))?;
-                write_full_external_stream(&self.io_stream, stdout, stderr, exit_code)
-            }
-            PipelineData::Empty => self.write_call_response(PluginCallResponse::Empty),
         }
     }
 }

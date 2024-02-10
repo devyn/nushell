@@ -1,16 +1,17 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::plugin::interface::stream_data_io::{
-    gen_stream_data_tests, StreamBuffers, StreamDataIo,
+use crate::plugin::context::PluginExecutionContext;
+use crate::plugin::interface::{
+    buffers::PerStreamBuffers,
+    stream_data_io::{def_streams, gen_stream_data_tests, StreamDataIo},
+    test_util::TestCase,
+    PluginInterface,
 };
-use crate::plugin::interface::test_util::TestCase;
-use crate::plugin::interface::{PluginExecutionContext, PluginInterface};
 use crate::protocol::{
-    CallInfo, CallInput, ExternalStreamInfo, PluginCall, PluginCustomValue, PluginData,
-    PluginInput, PluginOutput, RawStreamInfo, StreamData,
+    CallInfo, ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginCallResponse,
+    PluginCustomValue, PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId,
 };
-use crate::PluginCallResponse;
 
 use super::PluginInterfaceIo;
 
@@ -93,10 +94,12 @@ fn read_call_response_signature() {
 #[test]
 fn read_call_response_empty() {
     let test = TestCase::new();
-    test.add_output(PluginOutput::CallResponse(PluginCallResponse::Empty));
+    test.add_output(PluginOutput::CallResponse(
+        PluginCallResponse::PipelineData(PipelineDataHeader::Empty),
+    ));
 
     match test.plugin_interface(None).read_call_response().unwrap() {
-        PluginCallResponse::Empty => (),
+        PluginCallResponse::PipelineData(PipelineDataHeader::Empty) => (),
         other => panic!("read unexpected response: {:?}", other),
     }
 }
@@ -104,13 +107,15 @@ fn read_call_response_empty() {
 #[test]
 fn read_call_response_value() {
     let test = TestCase::new();
-    let value = Box::new(Value::test_int(5));
-    test.add_output(PluginOutput::CallResponse(PluginCallResponse::Value(
-        value.clone(),
-    )));
+    let value = Value::test_int(5);
+    test.add_output(PluginOutput::CallResponse(
+        PluginCallResponse::PipelineData(PipelineDataHeader::Value(value.clone())),
+    ));
 
     match test.plugin_interface(None).read_call_response().unwrap() {
-        PluginCallResponse::Value(read_value) => assert_eq!(value, read_value),
+        PluginCallResponse::PipelineData(PipelineDataHeader::Value(read_value)) => {
+            assert_eq!(value, read_value)
+        }
         other => panic!("read unexpected response: {:?}", other),
     }
 }
@@ -119,18 +124,16 @@ fn read_call_response_value() {
 fn read_call_response_data() {
     let test = TestCase::new();
     let data = PluginData {
+        name: Some("Foo".into()),
         data: vec![4, 6],
         span: Span::new(40, 60),
     };
-    let name = "Foo";
-    test.add_output(PluginOutput::CallResponse(PluginCallResponse::PluginData(
-        name.into(),
-        data.clone(),
-    )));
+    test.add_output(PluginOutput::CallResponse(
+        PluginCallResponse::PipelineData(PipelineDataHeader::PluginData(data.clone())),
+    ));
 
     match test.plugin_interface(None).read_call_response().unwrap() {
-        PluginCallResponse::PluginData(read_name, read_data) => {
-            assert_eq!(name, read_name);
+        PluginCallResponse::PipelineData(PipelineDataHeader::PluginData(read_data)) => {
             assert_eq!(data, read_data);
         }
         other => panic!("read unexpected response: {:?}", other),
@@ -140,21 +143,23 @@ fn read_call_response_data() {
 #[test]
 fn read_call_response_list_stream() {
     let test = TestCase::new();
-    test.add_output(PluginOutput::CallResponse(PluginCallResponse::ListStream));
+    let id = 7;
+    test.add_output(PluginOutput::CallResponse(
+        PluginCallResponse::PipelineData(PipelineDataHeader::ListStream(id)),
+    ));
 
     let interface = test.plugin_interface_impl(None);
 
-    match interface.read_call_response().unwrap() {
-        PluginCallResponse::ListStream => (),
+    let read_id = match interface.read_call_response().unwrap() {
+        PluginCallResponse::PipelineData(PipelineDataHeader::ListStream(id)) => id,
         other => panic!("read unexpected response: {:?}", other),
-    }
+    };
+    assert_eq!(id, read_id);
 
     {
-        let read = interface.read.lock().unwrap();
-        assert!(read.1.list.is_present());
-        assert!(read.1.external_stdout.is_not_present());
-        assert!(read.1.external_stderr.is_not_present());
-        assert!(read.1.external_exit_code.is_not_present());
+        let mut read = interface.read.lock().unwrap();
+        let bufs = read.stream_buffers.get(id).unwrap();
+        assert!(matches!(bufs, PerStreamBuffers::List(..)));
     }
 }
 
@@ -175,30 +180,43 @@ fn read_call_response_external_stream() {
         trim_end_newline: false,
     };
     test.add_output(PluginOutput::CallResponse(
-        PluginCallResponse::ExternalStream(info),
+        PluginCallResponse::PipelineData(PipelineDataHeader::ExternalStream(0, info)),
     ));
 
     let interface = test.plugin_interface_impl(None);
 
     match interface.read_call_response().unwrap() {
-        PluginCallResponse::ExternalStream(..) => (),
+        PluginCallResponse::PipelineData(PipelineDataHeader::ExternalStream(read_id, _)) => {
+            assert_eq!(0, read_id)
+        }
         other => panic!("read unexpected response: {:?}", other),
     }
 
     {
-        let read = interface.read.lock().unwrap();
-        assert!(read.1.list.is_not_present());
-        assert!(read.1.external_stdout.is_present());
-        assert!(read.1.external_stderr.is_present());
-        assert!(read.1.external_exit_code.is_present());
+        let mut read = interface.read.lock().unwrap();
+        let buf = read.stream_buffers.get(0).unwrap();
+        if let PerStreamBuffers::External {
+            stdout,
+            stderr,
+            exit_code,
+        } = buf
+        {
+            assert!(stdout.is_present());
+            assert!(stderr.is_present());
+            assert!(exit_code.is_present());
+        } else {
+            panic!("should be external");
+        }
     }
 }
 
 #[test]
 fn read_call_response_unexpected_stream_data() {
     let test = TestCase::new();
-    test.add_output(PluginOutput::StreamData(StreamData::List(None)));
-    test.add_output(PluginOutput::CallResponse(PluginCallResponse::Empty));
+    test.add_output(PluginOutput::StreamData(0, StreamData::List(None)));
+    test.add_output(PluginOutput::CallResponse(
+        PluginCallResponse::PipelineData(PipelineDataHeader::Empty),
+    ));
 
     test.plugin_interface(None)
         .read_call_response()
@@ -212,11 +230,13 @@ where
     format!("{:?}", val)
 }
 
-fn validate_stream_data_acceptance(response: PluginCallResponse, accepts: [bool; 4]) {
+fn validate_stream_data_acceptance(id: StreamId, header: PipelineDataHeader, accepts: [bool; 4]) {
     let test = TestCase::new();
-    test.add_output(PluginOutput::CallResponse(response));
+    test.add_output(PluginOutput::CallResponse(
+        PluginCallResponse::PipelineData(header),
+    ));
 
-    let interface = test.plugin_interface_impl(None);
+    let interface = Arc::new(test.plugin_interface_impl(None));
 
     interface.read_call_response().expect("call failed");
 
@@ -229,12 +249,14 @@ fn validate_stream_data_acceptance(response: PluginCallResponse, accepts: [bool;
 
     for (data, accept) in data_types.iter().zip(accepts) {
         test.clear_output();
-        test.add_output(PluginOutput::StreamData(data.clone()));
+        test.add_output(PluginOutput::StreamData(id, data.clone()));
         let result = match data {
-            StreamData::List(_) => interface.read_list().map(dbg),
-            StreamData::ExternalStdout(_) => interface.read_external_stdout().map(dbg),
-            StreamData::ExternalStderr(_) => interface.read_external_stderr().map(dbg),
-            StreamData::ExternalExitCode(_) => interface.read_external_exit_code().map(dbg),
+            StreamData::List(_) => interface.clone().read_list(id).map(dbg),
+            StreamData::ExternalStdout(_) => interface.clone().read_external_stdout(id).map(dbg),
+            StreamData::ExternalStderr(_) => interface.clone().read_external_stderr(id).map(dbg),
+            StreamData::ExternalExitCode(_) => {
+                interface.clone().read_external_exit_code(id).map(dbg)
+            }
         };
         match result {
             Ok(success) if !accept => {
@@ -250,13 +272,14 @@ fn validate_stream_data_acceptance(response: PluginCallResponse, accepts: [bool;
 
 #[test]
 fn read_call_response_empty_doesnt_accept_stream_data() {
-    validate_stream_data_acceptance(PluginCallResponse::Empty, [false; 4])
+    validate_stream_data_acceptance(0, PipelineDataHeader::Empty, [false; 4])
 }
 
 #[test]
 fn read_call_response_value_doesnt_accept_stream_data() {
     validate_stream_data_acceptance(
-        PluginCallResponse::Value(Value::test_int(4).into()),
+        1,
+        PipelineDataHeader::Value(Value::test_int(4).into()),
         [false; 4],
     )
 }
@@ -264,7 +287,8 @@ fn read_call_response_value_doesnt_accept_stream_data() {
 #[test]
 fn read_call_response_list_stream_accepts_only_list_stream_data() {
     validate_stream_data_acceptance(
-        PluginCallResponse::ListStream,
+        2,
+        PipelineDataHeader::ListStream(2),
         [
             true, // list stream
             false, false, false,
@@ -274,18 +298,22 @@ fn read_call_response_list_stream_accepts_only_list_stream_data() {
 
 #[test]
 fn read_call_response_external_stream_stdout_accepts_only_external_stream_stdout_data() {
-    let response = PluginCallResponse::ExternalStream(ExternalStreamInfo {
-        span: Span::test_data(),
-        stdout: Some(RawStreamInfo {
-            is_binary: false,
-            known_size: None,
-        }),
-        stderr: None,
-        has_exit_code: false,
-        trim_end_newline: false,
-    });
+    let response = PipelineDataHeader::ExternalStream(
+        3,
+        ExternalStreamInfo {
+            span: Span::test_data(),
+            stdout: Some(RawStreamInfo {
+                is_binary: false,
+                known_size: None,
+            }),
+            stderr: None,
+            has_exit_code: false,
+            trim_end_newline: false,
+        },
+    );
 
     validate_stream_data_acceptance(
+        3,
         response,
         [
             false, true, // external stdout
@@ -297,18 +325,22 @@ fn read_call_response_external_stream_stdout_accepts_only_external_stream_stdout
 #[test]
 fn read_call_response_run_with_external_stream_stderr_input_accepts_only_external_stream_stderr_data(
 ) {
-    let response = PluginCallResponse::ExternalStream(ExternalStreamInfo {
-        span: Span::test_data(),
-        stdout: None,
-        stderr: Some(RawStreamInfo {
-            is_binary: false,
-            known_size: None,
-        }),
-        has_exit_code: false,
-        trim_end_newline: false,
-    });
+    let response = PipelineDataHeader::ExternalStream(
+        4,
+        ExternalStreamInfo {
+            span: Span::test_data(),
+            stdout: None,
+            stderr: Some(RawStreamInfo {
+                is_binary: false,
+                known_size: None,
+            }),
+            has_exit_code: false,
+            trim_end_newline: false,
+        },
+    );
 
     validate_stream_data_acceptance(
+        4,
         response,
         [
             false, false, true, // external stderr
@@ -319,15 +351,19 @@ fn read_call_response_run_with_external_stream_stderr_input_accepts_only_externa
 
 #[test]
 fn read_call_response_external_stream_exit_code_accepts_only_external_stream_exit_code_data() {
-    let response = PluginCallResponse::ExternalStream(ExternalStreamInfo {
-        span: Span::test_data(),
-        stdout: None,
-        stderr: None,
-        has_exit_code: true,
-        trim_end_newline: false,
-    });
+    let response = PipelineDataHeader::ExternalStream(
+        5,
+        ExternalStreamInfo {
+            span: Span::test_data(),
+            stdout: None,
+            stderr: None,
+            has_exit_code: true,
+            trim_end_newline: false,
+        },
+    );
 
     validate_stream_data_acceptance(
+        5,
         response,
         [
             false, false, false, true, // external exit code
@@ -337,21 +373,25 @@ fn read_call_response_external_stream_exit_code_accepts_only_external_stream_exi
 
 #[test]
 fn read_call_response_external_stream_all_accepts_only_all_external_stream_data() {
-    let response = PluginCallResponse::ExternalStream(ExternalStreamInfo {
-        span: Span::test_data(),
-        stdout: Some(RawStreamInfo {
-            is_binary: false,
-            known_size: None,
-        }),
-        stderr: Some(RawStreamInfo {
-            is_binary: false,
-            known_size: None,
-        }),
-        has_exit_code: true,
-        trim_end_newline: false,
-    });
+    let response = PipelineDataHeader::ExternalStream(
+        6,
+        ExternalStreamInfo {
+            span: Span::test_data(),
+            stdout: Some(RawStreamInfo {
+                is_binary: false,
+                known_size: None,
+            }),
+            stderr: Some(RawStreamInfo {
+                is_binary: false,
+                known_size: None,
+            }),
+            has_exit_code: true,
+            trim_end_newline: false,
+        },
+    );
 
     validate_stream_data_acceptance(
+        6,
         response,
         [
             false, true, // external stdout
@@ -392,7 +432,7 @@ fn make_pipeline_data_empty() {
 
     let pipe = test
         .plugin_interface(Some(Arc::new(BogusContext)))
-        .make_pipeline_data(PluginCallResponse::Empty)
+        .make_pipeline_data(PipelineDataHeader::Empty)
         .expect("can't make pipeline data");
 
     match pipe {
@@ -408,10 +448,10 @@ fn make_pipeline_data_value() {
     let test = TestCase::new();
 
     let value = Value::test_int(2);
-    let response = PluginCallResponse::Value(value.clone().into());
+    let header = PipelineDataHeader::Value(value.clone().into());
     let pipe = test
         .plugin_interface(Some(Arc::new(BogusContext)))
-        .make_pipeline_data(response)
+        .make_pipeline_data(header)
         .expect("can't make pipeline data");
 
     match pipe {
@@ -427,15 +467,15 @@ fn make_pipeline_data_custom_data() {
     let test = TestCase::new();
 
     let data = PluginData {
+        name: Some("Foo".into()),
         data: vec![32, 40, 80],
         span: Span::test_data(),
     };
-    let name = "Foo";
-    let response = PluginCallResponse::PluginData(name.into(), data.clone());
+    let header = PipelineDataHeader::PluginData(data.clone());
 
     let pipe = test
         .plugin_interface(Some(Arc::new(BogusContext)))
-        .make_pipeline_data(response)
+        .make_pipeline_data(header)
         .expect("failed to make pipeline data");
 
     match pipe {
@@ -447,7 +487,7 @@ fn make_pipeline_data_custom_data() {
             let read_downcast: &PluginCustomValue =
                 read_custom.as_any().downcast_ref().expect("wrong type");
 
-            assert_eq!(name, read_downcast.name);
+            assert_eq!(data.name.unwrap(), read_downcast.name);
             assert_eq!("/bogus", read_downcast.filename.display().to_string());
             assert_eq!(None, read_downcast.shell);
             assert_eq!(data.data, read_downcast.data);
@@ -465,23 +505,24 @@ fn make_pipeline_data_list_stream() {
     let values = [Value::test_int(4), Value::test_string("hello")];
 
     for value in &values {
-        test.add_output(PluginOutput::StreamData(StreamData::List(Some(
-            value.clone(),
-        ))));
+        test.add_output(PluginOutput::StreamData(
+            0,
+            StreamData::List(Some(value.clone())),
+        ));
     }
     // end
-    test.add_output(PluginOutput::StreamData(StreamData::List(None)));
+    test.add_output(PluginOutput::StreamData(0, StreamData::List(None)));
 
-    let call_input = PluginCallResponse::ListStream;
+    let header = PipelineDataHeader::ListStream(0);
 
     let interface = PluginInterface::from({
         let interface = test.plugin_interface_impl(Some(Arc::new(BogusContext)));
-        interface.read.lock().unwrap().1 = StreamBuffers::new_list();
+        def_streams!(interface, list(0));
         interface
     });
 
     let pipe = interface
-        .make_pipeline_data(call_input)
+        .make_pipeline_data(header)
         .expect("failed to make pipeline data");
 
     assert!(matches!(pipe, PipelineData::ListStream(..)));
@@ -508,31 +549,34 @@ fn make_pipeline_data_external_stream() {
     ];
 
     for data in stream_data {
-        test.add_output(PluginOutput::StreamData(data));
+        test.add_output(PluginOutput::StreamData(0, data));
     }
 
-    let call_input = PluginCallResponse::ExternalStream(ExternalStreamInfo {
-        span: Span::test_data(),
-        stdout: Some(RawStreamInfo {
-            is_binary: true,
-            known_size: Some(7),
-        }),
-        stderr: Some(RawStreamInfo {
-            is_binary: false,
-            known_size: None,
-        }),
-        has_exit_code: true,
-        trim_end_newline: false,
-    });
+    let header = PipelineDataHeader::ExternalStream(
+        0,
+        ExternalStreamInfo {
+            span: Span::test_data(),
+            stdout: Some(RawStreamInfo {
+                is_binary: true,
+                known_size: Some(7),
+            }),
+            stderr: Some(RawStreamInfo {
+                is_binary: false,
+                known_size: None,
+            }),
+            has_exit_code: true,
+            trim_end_newline: false,
+        },
+    );
 
     let interface = PluginInterface::from({
         let interface = test.plugin_interface_impl(Some(Arc::new(BogusContext)));
-        interface.read.lock().unwrap().1 = StreamBuffers::new_external(true, true, true);
+        def_streams!(interface, external(0));
         interface
     });
 
     let pipe = interface
-        .make_pipeline_data(call_input)
+        .make_pipeline_data(header)
         .expect("failed to make pipeline data");
 
     match pipe {
@@ -587,33 +631,38 @@ fn make_pipeline_data_external_stream_error() {
         StreamData::ExternalStdout(None),
     ];
 
+    let id = 42;
+
     for data in stream_data {
-        test.add_output(PluginOutput::StreamData(data));
+        test.add_output(PluginOutput::StreamData(id, data));
     }
 
     // Still enable the other streams, to ensure ignoring the other data works
-    let call_input = PluginCallResponse::ExternalStream(ExternalStreamInfo {
-        span: Span::test_data(),
-        stdout: Some(RawStreamInfo {
-            is_binary: false,
-            known_size: None,
-        }),
-        stderr: Some(RawStreamInfo {
-            is_binary: false,
-            known_size: None,
-        }),
-        has_exit_code: true,
-        trim_end_newline: false,
-    });
+    let header = PipelineDataHeader::ExternalStream(
+        id,
+        ExternalStreamInfo {
+            span: Span::test_data(),
+            stdout: Some(RawStreamInfo {
+                is_binary: false,
+                known_size: None,
+            }),
+            stderr: Some(RawStreamInfo {
+                is_binary: false,
+                known_size: None,
+            }),
+            has_exit_code: true,
+            trim_end_newline: false,
+        },
+    );
 
     let interface = PluginInterface::from({
         let interface = test.plugin_interface_impl(Some(Arc::new(BogusContext)));
-        interface.read.lock().unwrap().1 = StreamBuffers::new_external(true, true, true);
+        def_streams!(interface, external(id));
         interface
     });
 
     let pipe = interface
-        .make_pipeline_data(call_input)
+        .make_pipeline_data(header)
         .expect("failed to make pipeline data");
 
     match pipe {
@@ -648,6 +697,8 @@ fn round_trip_list_stream() {
     let test_plugin = TestCase::new();
     let plug_interface = test_plugin.plugin_interface(Some(Arc::new(BogusContext)));
 
+    let header = PipelineDataHeader::ListStream(0);
+
     let call_info = CallInfo {
         name: "roundtrip".into(),
         call: crate::EvaluatedCall {
@@ -655,7 +706,7 @@ fn round_trip_list_stream() {
             positional: vec![],
             named: vec![],
         },
-        input: CallInput::ListStream,
+        input: header.clone(),
         config: None,
     };
     let call = PluginCall::Run(call_info.clone());
@@ -664,7 +715,13 @@ fn round_trip_list_stream() {
 
     plug_interface.write_call(call).unwrap();
     plug_interface
-        .write_full_list_stream(ListStream::from_stream(values.clone().into_iter(), None))
+        .write_pipeline_data_stream(
+            &header,
+            PipelineData::ListStream(
+                ListStream::from_stream(values.clone().into_iter(), None),
+                None,
+            ),
+        )
         .unwrap();
 
     // Copy as input to engine side
@@ -713,14 +770,14 @@ fn round_trip_list_stream() {
         .read_call_response()
         .expect("failed to read response");
 
-    match response {
-        PluginCallResponse::ListStream => (),
+    let header = match response {
+        PluginCallResponse::PipelineData(header) => header,
         other => panic!("incorrect plugin call response: {other:?}"),
-    }
+    };
 
     // Read the values and check
     let pipe = plug_interface
-        .make_pipeline_data(response)
+        .make_pipeline_data(header)
         .expect("failed to make plugin output pipeline data");
     assert_eq!(output_values, pipe.into_iter().collect::<Vec<_>>());
 

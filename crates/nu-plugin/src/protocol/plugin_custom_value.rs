@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::plugin::{create_command, make_plugin_interface};
 
-use super::{PluginCall, PluginCallResponse, PluginData};
+use super::{PipelineDataHeader, PluginCall, PluginCallResponse, PluginData};
 
 /// An opaque container for a custom value that is handled fully by a plugin
 ///
@@ -59,6 +59,7 @@ impl CustomValue for PluginCustomValue {
         })?;
 
         let plugin_call = PluginCall::CollapseCustomValue(PluginData {
+            name: None,
             data: self.data.clone(),
             span,
         });
@@ -85,23 +86,25 @@ impl CustomValue for PluginCustomValue {
         drop(interface);
 
         let value = match response {
-            Ok(PluginCallResponse::Value(value)) => Ok(*value),
-            Ok(PluginCallResponse::PluginData(..)) => Err(ShellError::GenericError {
-                error: "Plugin misbehaving".into(),
-                msg: "Plugin returned custom data as a response to a collapse call".into(),
-                span: Some(span),
-                help: None,
-                inner: vec![],
-            }),
-            Ok(PluginCallResponse::Empty)
-            | Ok(PluginCallResponse::ListStream)
-            | Ok(PluginCallResponse::ExternalStream(..)) => Err(ShellError::GenericError {
-                error: "Plugin misbehaving".into(),
-                msg: "Plugin returned stream as a response to a collapse call".into(),
-                span: Some(span),
-                help: None,
-                inner: vec![],
-            }),
+            Ok(PluginCallResponse::PipelineData(data)) => match data {
+                PipelineDataHeader::Value(value) => Ok(value),
+                PipelineDataHeader::PluginData(..) => Err(ShellError::GenericError {
+                    error: "Plugin misbehaving".into(),
+                    msg: "Plugin returned custom data as a response to a collapse call".into(),
+                    span: Some(span),
+                    help: None,
+                    inner: vec![],
+                }),
+                PipelineDataHeader::Empty
+                | PipelineDataHeader::ListStream(..)
+                | PipelineDataHeader::ExternalStream(..) => Err(ShellError::GenericError {
+                    error: "Plugin misbehaving".into(),
+                    msg: "Plugin returned stream as a response to a collapse call".into(),
+                    span: Some(span),
+                    help: None,
+                    inner: vec![],
+                }),
+            },
             Ok(PluginCallResponse::Error(err)) => Err(err.into()),
             Ok(PluginCallResponse::Signature(..)) => Err(ShellError::GenericError {
                 error: "Plugin missing value".into(),

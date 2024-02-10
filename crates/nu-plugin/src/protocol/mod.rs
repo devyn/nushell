@@ -8,31 +8,37 @@ pub use plugin_custom_value::PluginCustomValue;
 pub use plugin_data::PluginData;
 use serde::{Deserialize, Serialize};
 
+/// A sequential identifier for a stream
+pub type StreamId = usize;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CallInfo {
     pub name: String,
     pub call: EvaluatedCall,
-    pub input: CallInput,
+    pub input: PipelineDataHeader,
     pub config: Option<Value>,
 }
 
-/// Pipeline input to a plugin call
+/// The initial (and perhaps only) part of any [nu_protocol::PipelineData] sent over the wire.
+///
+/// This may contain a single value, or may initiate a stream with a [StreamId].
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub enum CallInput {
+pub enum PipelineDataHeader {
     /// No input
     Empty,
     /// A single value
     Value(Value),
-    /// Deserialized to [PluginCustomValue]
-    Data(PluginData),
-    /// Initiate [nu_protocol::PipelineData::ListStream]
+    /// Represents a [nu_protocol::CustomValue] on the plugin side, which should be encapsulated in
+    /// [PluginCustomValue] on the engine side.
+    PluginData(PluginData),
+    /// Initiate [nu_protocol::PipelineData::ListStream] with the given [StreamId].
     ///
     /// Items are sent via [StreamData]
-    ListStream,
-    /// Initiate [nu_protocol::PipelineData::ExternalStream]
+    ListStream(StreamId),
+    /// Initiate [nu_protocol::PipelineData::ExternalStream] with the given [StreamId].
     ///
     /// Items are sent via [StreamData]
-    ExternalStream(ExternalStreamInfo),
+    ExternalStream(StreamId, ExternalStreamInfo),
 }
 
 /// Additional information about external streams
@@ -73,7 +79,7 @@ pub enum PluginCall {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PluginInput {
     Call(PluginCall),
-    StreamData(StreamData),
+    StreamData(StreamId, StreamData),
 }
 
 /// A single item of stream data for a stream.
@@ -183,11 +189,18 @@ impl From<ShellError> for LabeledError {
 pub enum PluginCallResponse {
     Error(LabeledError),
     Signature(Vec<PluginSignature>),
-    Empty,
-    Value(Box<Value>),
-    PluginData(String, PluginData),
-    ListStream,
-    ExternalStream(ExternalStreamInfo),
+    PipelineData(PipelineDataHeader),
+}
+
+impl PluginCallResponse {
+    /// Construct a plugin call response with a single value
+    pub fn value(value: Value) -> PluginCallResponse {
+        if value.is_nothing() {
+            PluginCallResponse::PipelineData(PipelineDataHeader::Empty)
+        } else {
+            PluginCallResponse::PipelineData(PipelineDataHeader::Value(value))
+        }
+    }
 }
 
 /// Information received from the plugin
@@ -197,5 +210,5 @@ pub enum PluginCallResponse {
 #[doc(hidden)]
 pub enum PluginOutput {
     CallResponse(PluginCallResponse),
-    StreamData(StreamData),
+    StreamData(StreamId, StreamData),
 }

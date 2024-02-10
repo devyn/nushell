@@ -1,8 +1,8 @@
 macro_rules! generate_tests {
     ($encoder:expr) => {
         use crate::protocol::{
-            CallInfo, CallInput, EvaluatedCall, LabeledError, PluginCall, PluginCallResponse,
-            PluginData, PluginInput, PluginOutput, StreamData,
+            CallInfo, EvaluatedCall, LabeledError, PipelineDataHeader, PluginCall,
+            PluginCallResponse, PluginData, PluginInput, PluginOutput, StreamData,
         };
         use nu_protocol::{PluginSignature, Span, Spanned, SyntaxShape, Value};
 
@@ -123,7 +123,7 @@ macro_rules! generate_tests {
             let plugin_call = PluginCall::Run(CallInfo {
                 name: name.clone(),
                 call: call.clone(),
-                input: CallInput::Value(input.clone()),
+                input: PipelineDataHeader::Value(input.clone()),
                 config: None,
             });
 
@@ -142,7 +142,7 @@ macro_rules! generate_tests {
             match returned {
                 PluginInput::Call(PluginCall::Run(call_info)) => {
                     assert_eq!(name, call_info.name);
-                    assert_eq!(CallInput::Value(input), call_info.input);
+                    assert_eq!(PipelineDataHeader::Value(input), call_info.input);
                     assert_eq!(call.head, call_info.call.head);
                     assert_eq!(call.positional.len(), call_info.call.positional.len());
 
@@ -175,6 +175,7 @@ macro_rules! generate_tests {
             let span = Span::new(0, 20);
 
             let collapse_custom_value = PluginCall::CollapseCustomValue(PluginData {
+                name: None,
                 data: data.clone(),
                 span,
             });
@@ -193,6 +194,7 @@ macro_rules! generate_tests {
 
             match returned {
                 PluginInput::Call(PluginCall::CollapseCustomValue(plugin_data)) => {
+                    assert!(plugin_data.name.is_none());
                     assert_eq!(data, plugin_data.data);
                     assert_eq!(span, plugin_data.span);
                 }
@@ -272,7 +274,7 @@ macro_rules! generate_tests {
         fn response_round_trip_value() {
             let value = Value::int(10, Span::new(2, 30));
 
-            let response = PluginCallResponse::Value(Box::new(value.clone()));
+            let response = PluginCallResponse::value(value.clone());
             let output = PluginOutput::CallResponse(response);
 
             let encoder = $encoder;
@@ -286,8 +288,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::Value(returned_value)) => {
-                    assert_eq!(&value, returned_value.as_ref())
+                PluginOutput::CallResponse(PluginCallResponse::PipelineData(
+                    PipelineDataHeader::Value(returned_value),
+                )) => {
+                    assert_eq!(value, returned_value)
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
@@ -295,18 +299,17 @@ macro_rules! generate_tests {
 
         #[test]
         fn response_round_trip_plugin_data() {
-            let name = "test".to_string();
+            let name = Some("test".to_string());
 
             let data = vec![1, 2, 3, 4, 5];
             let span = Span::new(2, 30);
 
-            let response = PluginCallResponse::PluginData(
-                name.clone(),
-                PluginData {
+            let response =
+                PluginCallResponse::PipelineData(PipelineDataHeader::PluginData(PluginData {
+                    name: name.clone(),
                     data: data.clone(),
                     span,
-                },
-            );
+                }));
             let output = PluginOutput::CallResponse(response);
 
             let encoder = $encoder;
@@ -320,11 +323,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::PluginData(
-                    returned_name,
-                    returned_plugin_data,
+                PluginOutput::CallResponse(PluginCallResponse::PipelineData(
+                    PipelineDataHeader::PluginData(returned_plugin_data),
                 )) => {
-                    assert_eq!(name, returned_name);
+                    assert_eq!(name, returned_plugin_data.name);
                     assert_eq!(data, returned_plugin_data.data);
                     assert_eq!(span, returned_plugin_data.span);
                 }
@@ -394,7 +396,7 @@ macro_rules! generate_tests {
             let item = Value::int(1, span);
 
             let stream_data = StreamData::List(Some(item.clone()));
-            let plugin_input = PluginInput::StreamData(stream_data);
+            let plugin_input = PluginInput::StreamData(0, stream_data);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -407,7 +409,8 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::StreamData(StreamData::List(Some(list_data))) => {
+                PluginInput::StreamData(id, StreamData::List(Some(list_data))) => {
+                    assert_eq!(0, id);
                     assert_eq!(item, list_data);
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
@@ -419,7 +422,7 @@ macro_rules! generate_tests {
             let data = b"Hello world";
 
             let stream_data = StreamData::ExternalStdout(Some(Ok(data.to_vec())));
-            let plugin_input = PluginInput::StreamData(stream_data);
+            let plugin_input = PluginInput::StreamData(1, stream_data);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -432,10 +435,13 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::StreamData(StreamData::ExternalStdout(Some(bytes))) => match bytes {
-                    Ok(bytes) => assert_eq!(data, &bytes[..]),
-                    Err(err) => panic!("decoded into error variant: {err:?}"),
-                },
+                PluginInput::StreamData(id, StreamData::ExternalStdout(Some(bytes))) => {
+                    assert_eq!(1, id);
+                    match bytes {
+                        Ok(bytes) => assert_eq!(data, &bytes[..]),
+                        Err(err) => panic!("decoded into error variant: {err:?}"),
+                    }
+                }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -445,7 +451,7 @@ macro_rules! generate_tests {
             let data = b"Hello world";
 
             let stream_data = StreamData::ExternalStderr(Some(Ok(data.to_vec())));
-            let plugin_input = PluginInput::StreamData(stream_data);
+            let plugin_input = PluginInput::StreamData(2, stream_data);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -458,10 +464,13 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::StreamData(StreamData::ExternalStderr(Some(bytes))) => match bytes {
-                    Ok(bytes) => assert_eq!(data, &bytes[..]),
-                    Err(err) => panic!("decoded into error variant: {err:?}"),
-                },
+                PluginInput::StreamData(id, StreamData::ExternalStderr(Some(bytes))) => {
+                    assert_eq!(2, id);
+                    match bytes {
+                        Ok(bytes) => assert_eq!(data, &bytes[..]),
+                        Err(err) => panic!("decoded into error variant: {err:?}"),
+                    }
+                }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -472,7 +481,7 @@ macro_rules! generate_tests {
             let exit_code = Value::int(1, span);
 
             let stream_data = StreamData::ExternalExitCode(Some(exit_code.clone()));
-            let plugin_input = PluginInput::StreamData(stream_data);
+            let plugin_input = PluginInput::StreamData(3, stream_data);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -485,7 +494,8 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::StreamData(StreamData::ExternalExitCode(Some(value))) => {
+                PluginInput::StreamData(id, StreamData::ExternalExitCode(Some(value))) => {
+                    assert_eq!(3, id);
                     assert_eq!(exit_code, value);
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
@@ -498,7 +508,7 @@ macro_rules! generate_tests {
             let item = Value::int(1, span);
 
             let stream_data = StreamData::List(Some(item.clone()));
-            let plugin_output = PluginOutput::StreamData(stream_data);
+            let plugin_output = PluginOutput::StreamData(4, stream_data);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -511,7 +521,8 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::StreamData(StreamData::List(Some(list_data))) => {
+                PluginOutput::StreamData(id, StreamData::List(Some(list_data))) => {
+                    assert_eq!(4, id);
                     assert_eq!(item, list_data);
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
@@ -523,7 +534,7 @@ macro_rules! generate_tests {
             let data = b"Hello world";
 
             let stream_data = StreamData::ExternalStdout(Some(Ok(data.to_vec())));
-            let plugin_output = PluginOutput::StreamData(stream_data);
+            let plugin_output = PluginOutput::StreamData(5, stream_data);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -536,10 +547,13 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::StreamData(StreamData::ExternalStdout(Some(bytes))) => match bytes {
-                    Ok(bytes) => assert_eq!(data, &bytes[..]),
-                    Err(err) => panic!("decoded into error variant: {err:?}"),
-                },
+                PluginOutput::StreamData(id, StreamData::ExternalStdout(Some(bytes))) => {
+                    assert_eq!(5, id);
+                    match bytes {
+                        Ok(bytes) => assert_eq!(data, &bytes[..]),
+                        Err(err) => panic!("decoded into error variant: {err:?}"),
+                    }
+                }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -549,7 +563,7 @@ macro_rules! generate_tests {
             let data = b"Hello world";
 
             let stream_data = StreamData::ExternalStderr(Some(Ok(data.to_vec())));
-            let plugin_output = PluginOutput::StreamData(stream_data);
+            let plugin_output = PluginOutput::StreamData(6, stream_data);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -562,10 +576,13 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::StreamData(StreamData::ExternalStderr(Some(bytes))) => match bytes {
-                    Ok(bytes) => assert_eq!(data, &bytes[..]),
-                    Err(err) => panic!("decoded into error variant: {err:?}"),
-                },
+                PluginOutput::StreamData(id, StreamData::ExternalStderr(Some(bytes))) => {
+                    assert_eq!(6, id);
+                    match bytes {
+                        Ok(bytes) => assert_eq!(data, &bytes[..]),
+                        Err(err) => panic!("decoded into error variant: {err:?}"),
+                    }
+                }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -576,7 +593,7 @@ macro_rules! generate_tests {
             let exit_code = Value::int(1, span);
 
             let stream_data = StreamData::ExternalExitCode(Some(exit_code.clone()));
-            let plugin_output = PluginOutput::StreamData(stream_data);
+            let plugin_output = PluginOutput::StreamData(7, stream_data);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -589,7 +606,8 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::StreamData(StreamData::ExternalExitCode(Some(value))) => {
+                PluginOutput::StreamData(id, StreamData::ExternalExitCode(Some(value))) => {
+                    assert_eq!(7, id);
                     assert_eq!(exit_code, value);
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),

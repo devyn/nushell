@@ -113,11 +113,14 @@ mod tests {
     fn json_has_no_other_newlines() {
         let mut out = vec![];
         // use something deeply nested, to try to trigger any pretty printing
-        let output = PluginOutput::StreamData(StreamData::List(Some(Value::test_list(vec![
-            Value::test_int(4),
-            // in case escaping failed
-            Value::test_string("newline\ncontaining\nstring"),
-        ]))));
+        let output = PluginOutput::StreamData(
+            0,
+            StreamData::List(Some(Value::test_list(vec![
+                Value::test_int(4),
+                // in case escaping failed
+                Value::test_string("newline\ncontaining\nstring"),
+            ]))),
+        );
         JsonSerializer {}
             .encode_output(&output, &mut out)
             .expect("serialization error");

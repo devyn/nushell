@@ -2,107 +2,42 @@
 
 use std::{
     io::{BufRead, Write},
-    path::{Path, PathBuf},
-    sync::{atomic::AtomicBool, Arc, Mutex},
+    sync::{atomic::AtomicUsize, Arc, Mutex},
 };
 
-use nu_protocol::{
-    ast::Call,
-    engine::{EngineState, Stack},
-    ListStream, PipelineData, RawStream, ShellError, Span, Value,
-};
+use nu_protocol::{PipelineData, ShellError, Value};
 
 use crate::{
-    plugin::PluginEncoder,
+    plugin::{context::PluginExecutionContext, PluginEncoder},
     protocol::{
-        ExternalStreamInfo, PluginCall, PluginCallResponse, PluginCustomValue, PluginInput,
-        PluginOutput, StreamData,
+        ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginCallResponse, PluginCustomValue,
+        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId,
     },
 };
 
 use super::{
+    buffers::StreamBuffers,
     make_external_stream, make_list_stream,
-    stream_data_io::{impl_stream_data_io, StreamBuffer, StreamBuffers, StreamDataIo},
-    write_full_external_stream, write_full_list_stream, PluginRead, PluginWrite,
+    stream_data_io::{impl_stream_data_io, StreamDataIo, StreamDataIoExt},
+    PluginRead, PluginWrite,
 };
 
 #[cfg(test)]
 mod tests;
 
-/// Object safe trait for abstracting operations required of the plugin context.
-pub(crate) trait PluginExecutionContext: Send + Sync {
-    /// The plugin's filename
-    fn filename(&self) -> &Path;
-    /// The shell used to execute the plugin
-    fn shell(&self) -> Option<&Path>;
-    /// The [Span] for the command execution (`call.head`)
-    fn command_span(&self) -> Span;
-    /// The name of the command being executed
-    fn command_name(&self) -> &str;
-    /// The interrupt signal, if present
-    fn ctrlc(&self) -> Option<&Arc<AtomicBool>>;
-}
-
-/// The execution context of a plugin.
-#[derive(Debug)]
-pub(crate) struct PluginExecutionNushellContext {
-    filename: PathBuf,
-    shell: Option<PathBuf>,
-    command_span: Span,
-    command_name: String,
-    ctrlc: Option<Arc<AtomicBool>>,
-    // If more operations are required of the context, fields can be added here.
-    //
-    // It may be required to insert the entire EngineState/Call/Stack in here to support
-    // future features and that's okay
-}
-
-impl PluginExecutionNushellContext {
-    pub fn new(
-        filename: impl Into<PathBuf>,
-        shell: Option<impl Into<PathBuf>>,
-        engine_state: &EngineState,
-        _stack: &Stack,
-        call: &Call,
-    ) -> PluginExecutionNushellContext {
-        PluginExecutionNushellContext {
-            filename: filename.into(),
-            shell: shell.map(Into::into),
-            command_span: call.head,
-            command_name: engine_state.get_decl(call.decl_id).name().to_owned(),
-            ctrlc: engine_state.ctrlc.clone(),
-        }
-    }
-}
-
-impl PluginExecutionContext for PluginExecutionNushellContext {
-    fn filename(&self) -> &Path {
-        &self.filename
-    }
-
-    fn shell(&self) -> Option<&Path> {
-        self.shell.as_deref()
-    }
-
-    fn command_span(&self) -> Span {
-        self.command_span
-    }
-
-    fn command_name(&self) -> &str {
-        &self.command_name
-    }
-
-    fn ctrlc(&self) -> Option<&Arc<AtomicBool>> {
-        self.ctrlc.as_ref()
-    }
-}
-
 pub(crate) struct PluginInterfaceImpl<R, W> {
     // Always lock read and then write mutex, if using both
     // Stream inputs that can't be handled immediately can be put on the buffer
-    read: Mutex<(R, StreamBuffers)>,
+    read: Mutex<ReadPart<R>>,
     write: Mutex<W>,
     context: Option<Arc<dyn PluginExecutionContext>>,
+    /// The next available stream id
+    next_stream_id: AtomicUsize,
+}
+
+struct ReadPart<R> {
+    reader: R,
+    stream_buffers: StreamBuffers,
 }
 
 impl<R, W> PluginInterfaceImpl<R, W> {
@@ -112,9 +47,13 @@ impl<R, W> PluginInterfaceImpl<R, W> {
         context: Option<Arc<dyn PluginExecutionContext>>,
     ) -> PluginInterfaceImpl<R, W> {
         PluginInterfaceImpl {
-            read: Mutex::new((reader, StreamBuffers::default())),
+            read: Mutex::new(ReadPart {
+                reader,
+                stream_buffers: StreamBuffers::default(),
+            }),
             write: Mutex::new(writer),
             context,
+            next_stream_id: AtomicUsize::new(0),
         }
     }
 }
@@ -123,7 +62,9 @@ impl<R, W> PluginInterfaceImpl<R, W> {
 impl_stream_data_io!(
     PluginInterfaceImpl,
     PluginOutput(read_output),
-    PluginInput(write_input)
+    PluginInput(write_input),
+    read other match {
+    }
 );
 
 /// The trait indirection is so that we can hide the types with a trait object inside
@@ -132,12 +73,31 @@ pub(crate) trait PluginInterfaceIo: StreamDataIo {
     fn context(&self) -> Option<&Arc<dyn PluginExecutionContext>>;
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError>;
     fn read_call_response(&self) -> Result<PluginCallResponse, ShellError>;
+
+    /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
+    ///
+    /// Error if [PluginExecutionContext] was not provided when creating the interface.
+    fn make_pipeline_data(
+        self: Arc<Self>,
+        header: PipelineDataHeader,
+    ) -> Result<PipelineData, ShellError>;
+
+    /// Create a valid header to send the given PipelineData.
+    ///
+    /// Returns the header, and the PipelineData to be sent with `write_pipeline_data_stream`
+    /// if necessary.
+    ///
+    /// Error if [PluginExecutionContext] was not provided when creating the interface.
+    fn make_pipeline_data_header(
+        &self,
+        data: PipelineData,
+    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError>;
 }
 
 impl<R, W> PluginInterfaceIo for PluginInterfaceImpl<R, W>
 where
-    R: PluginRead,
-    W: PluginWrite,
+    R: PluginRead + 'static,
+    W: PluginWrite + 'static,
 {
     fn context(&self) -> Option<&Arc<dyn PluginExecutionContext>> {
         self.context.as_ref()
@@ -159,59 +119,16 @@ where
 
         let mut read = self.read.lock().expect("read mutex poisoned");
         loop {
-            match read.0.read_output()? {
+            match read.reader.read_output()? {
                 Some(PluginOutput::CallResponse(response)) => {
                     // Check the call input type to set the stream buffers up
-                    match &response {
-                        PluginCallResponse::ListStream => {
-                            read.1 = StreamBuffers::new_list();
-                            log::trace!("Read plugin call response. Expecting list stream");
-                        }
-                        PluginCallResponse::ExternalStream(ExternalStreamInfo {
-                            stdout,
-                            stderr,
-                            has_exit_code,
-                            ..
-                        }) => {
-                            read.1 = StreamBuffers::new_external(
-                                stdout.is_some(),
-                                stderr.is_some(),
-                                *has_exit_code,
-                            );
-                            log::trace!("Read plugin call response. Expecting external stream");
-                        }
-                        _ => {
-                            read.1 = StreamBuffers::default(); // no buffers
-                            log::trace!("Read plugin call response. No stream expected");
-                        }
+                    if let PluginCallResponse::PipelineData(header) = &response {
+                        read.stream_buffers.init_stream(header)?;
                     }
                     return Ok(response);
                 }
-                // Skip over any remaining stream data for dropped streams
-                Some(PluginOutput::StreamData(StreamData::List(_))) if read.1.list.is_dropped() => {
-                    continue
-                }
-                Some(PluginOutput::StreamData(StreamData::ExternalStdout(_)))
-                    if read.1.external_stdout.is_dropped() =>
-                {
-                    continue
-                }
-                Some(PluginOutput::StreamData(StreamData::ExternalStderr(_)))
-                    if read.1.external_stderr.is_dropped() =>
-                {
-                    continue
-                }
-                Some(PluginOutput::StreamData(StreamData::ExternalExitCode(_)))
-                    if read.1.external_exit_code.is_dropped() =>
-                {
-                    continue
-                }
-                // Other stream data is an error
-                Some(PluginOutput::StreamData(_)) => {
-                    return Err(ShellError::PluginFailedToDecode {
-                        msg: "expected CallResponse, got unexpected StreamData".into(),
-                    })
-                }
+                // Skip over any remaining stream data
+                Some(PluginOutput::StreamData(id, data)) => read.stream_buffers.skip(id, data)?,
                 // End of input
                 None => {
                     return Err(ShellError::PluginFailedToDecode {
@@ -221,16 +138,121 @@ where
             }
         }
     }
+
+    fn make_pipeline_data(
+        self: Arc<Self>,
+        header: PipelineDataHeader,
+    ) -> Result<PipelineData, ShellError> {
+        let context = self.context().ok_or_else(|| ShellError::NushellFailed {
+            msg: "PluginExecutionContext must be provided to call make_pipeline_data".into(),
+        })?;
+
+        match header {
+            PipelineDataHeader::Empty => Ok(PipelineData::Empty),
+            PipelineDataHeader::Value(value) => Ok(PipelineData::Value(value, None)),
+            PipelineDataHeader::PluginData(plugin_data) => {
+                // Convert to PluginCustomData
+                let value = Value::custom_value(
+                    Box::new(PluginCustomValue {
+                        name: plugin_data
+                            .name
+                            .ok_or_else(|| ShellError::PluginFailedToDecode {
+                                msg: "String representation of PluginData not provided".into(),
+                            })?,
+                        data: plugin_data.data,
+                        filename: context.filename().to_owned(),
+                        shell: context.shell().map(|p| p.to_owned()),
+                        source: context.command_name().to_owned(),
+                    }),
+                    plugin_data.span,
+                );
+                Ok(PipelineData::Value(value, None))
+            }
+            PipelineDataHeader::ListStream(id) => {
+                let ctrlc = context.ctrlc().cloned();
+                Ok(make_list_stream(self, id, ctrlc))
+            }
+            PipelineDataHeader::ExternalStream(id, info) => {
+                let ctrlc = context.ctrlc().cloned();
+                Ok(make_external_stream(self, id, &info, ctrlc))
+            }
+        }
+    }
+
+    fn make_pipeline_data_header(
+        &self,
+        data: PipelineData,
+    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError> {
+        let context = self.context().ok_or_else(|| ShellError::NushellFailed {
+            msg: "PluginExecutionContext must be provided to call make_pipeline_data_header".into(),
+        })?;
+
+        match data {
+            PipelineData::Value(ref value @ Value::CustomValue { ref val, .. }, _) => {
+                match val.as_any().downcast_ref::<PluginCustomValue>() {
+                    Some(plugin_data) if plugin_data.filename == context.filename() => {
+                        Ok((
+                            PipelineDataHeader::PluginData(PluginData {
+                                name: None, // plugin doesn't need it.
+                                data: plugin_data.data.clone(),
+                                span: value.span(),
+                            }),
+                            None,
+                        ))
+                    }
+                    _ => {
+                        let custom_value_name = val.value_string();
+                        Err(ShellError::GenericError {
+                            error: format!(
+                                "Plugin {} can not handle the custom value {}",
+                                context.command_name(),
+                                custom_value_name
+                            ),
+                            msg: format!("custom value {custom_value_name}"),
+                            span: Some(value.span()),
+                            help: None,
+                            inner: vec![],
+                        })
+                    }
+                }
+            }
+            PipelineData::Value(Value::LazyRecord { ref val, .. }, _) => {
+                Ok((PipelineDataHeader::Value(val.collect()?), None))
+            }
+            PipelineData::Value(value, _) => Ok((PipelineDataHeader::Value(value), None)),
+            PipelineData::ListStream(_, _) => Ok((
+                PipelineDataHeader::ListStream(self.new_stream_id()?),
+                Some(data),
+            )),
+            PipelineData::ExternalStream {
+                span,
+                ref stdout,
+                ref stderr,
+                ref exit_code,
+                trim_end_newline,
+                ..
+            } => Ok((
+                PipelineDataHeader::ExternalStream(
+                    self.new_stream_id()?,
+                    ExternalStreamInfo {
+                        span,
+                        stdout: stdout.as_ref().map(RawStreamInfo::from),
+                        stderr: stderr.as_ref().map(RawStreamInfo::from),
+                        has_exit_code: exit_code.is_some(),
+                        trim_end_newline,
+                    },
+                ),
+                Some(data),
+            )),
+            PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
+        }
+    }
 }
 
 /// Implements communication and stream handling for a plugin instance.
 #[derive(Clone)]
 pub(crate) struct PluginInterface {
     io: Arc<dyn PluginInterfaceIo>,
-    // FIXME: This is only necessary because trait upcasting is not yet supported, so we have to
-    // generate this variant of the Arc while we know the actual type. It can be removed once
-    // https://github.com/rust-lang/rust/issues/65991 is closed and released.
-    io_stream: Arc<dyn StreamDataIo>,
 }
 
 impl<R, W> From<PluginInterfaceImpl<R, W>> for PluginInterface
@@ -239,10 +261,8 @@ where
     W: PluginWrite + 'static,
 {
     fn from(plugin_impl: PluginInterfaceImpl<R, W>) -> Self {
-        let arc = Arc::new(plugin_impl);
         PluginInterface {
-            io: arc.clone(),
-            io_stream: arc,
+            io: Arc::new(plugin_impl),
         }
     }
 }
@@ -263,81 +283,46 @@ impl PluginInterface {
         PluginInterfaceImpl::new((reader, encoder.clone()), (writer, encoder), context).into()
     }
 
-    /// Write a [PluginCall] to the plugin
+    /// Write a [PluginCall] to the plugin.
     pub(crate) fn write_call(&self, call: PluginCall) -> Result<(), ShellError> {
         self.io.write_call(call)
     }
 
-    /// Read a [PluginCallResponse] back from the plugin
+    /// Read a [PluginCallResponse] back from the plugin.
     pub(crate) fn read_call_response(&self) -> Result<PluginCallResponse, ShellError> {
         self.io.read_call_response()
     }
 
-    /// Create [PipelineData] appropriate for the given [PluginCallResponse].
+    /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
     ///
-    /// Only usable with response types that emulate [PipelineData].
-    ///
-    /// # Panics
-    ///
-    /// If [PluginExecutionContext] was not provided when creating the interface.
+    /// Error if [PluginExecutionContext] was not provided when creating the interface.
     pub(crate) fn make_pipeline_data(
         &self,
-        response: PluginCallResponse,
+        header: PipelineDataHeader,
     ) -> Result<PipelineData, ShellError> {
-        let context = self
-            .io
-            .context()
-            .expect("PluginExecutionContext must be provided to call make_pipeline_data");
-
-        match response {
-            PluginCallResponse::Error(err) => Err(err.into()),
-            PluginCallResponse::Signature(_) => Err(ShellError::GenericError {
-                error: "Plugin missing value".into(),
-                msg: "Received a signature from plugin instead of value or stream".into(),
-                span: Some(context.command_span()),
-                help: None,
-                inner: vec![],
-            }),
-            PluginCallResponse::Empty => Ok(PipelineData::Empty),
-            PluginCallResponse::Value(value) => Ok(PipelineData::Value(*value, None)),
-            PluginCallResponse::PluginData(name, plugin_data) => {
-                // Convert to PluginCustomData
-                let value = Value::custom_value(
-                    Box::new(PluginCustomValue {
-                        name,
-                        data: plugin_data.data,
-                        filename: context.filename().to_owned(),
-                        shell: context.shell().map(|p| p.to_owned()),
-                        source: context.command_name().to_owned(),
-                    }),
-                    plugin_data.span,
-                );
-                Ok(PipelineData::Value(value, None))
-            }
-            PluginCallResponse::ListStream => Ok(make_list_stream(
-                self.io_stream.clone(),
-                context.ctrlc().cloned(),
-            )),
-            PluginCallResponse::ExternalStream(info) => Ok(make_external_stream(
-                self.io_stream.clone(),
-                &info,
-                context.ctrlc().cloned(),
-            )),
-        }
+        self.io.clone().make_pipeline_data(header)
     }
 
-    /// Write the contents of a [ListStream] to `io`.
-    pub fn write_full_list_stream(&self, list_stream: ListStream) -> Result<(), ShellError> {
-        write_full_list_stream(&self.io_stream, list_stream)
-    }
-
-    /// Write the contents of a [PipelineData::ExternalStream].
-    pub fn write_full_external_stream(
+    /// Create a valid header to send the given PipelineData.
+    ///
+    /// Returns the header, and the PipelineData to be sent with `write_pipeline_data_stream`
+    /// if necessary.
+    ///
+    /// Error if [PluginExecutionContext] was not provided when creating the interface.
+    pub(crate) fn make_pipeline_data_header(
         &self,
-        stdout: Option<RawStream>,
-        stderr: Option<RawStream>,
-        exit_code: Option<ListStream>,
+        data: PipelineData,
+    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError> {
+        self.io.make_pipeline_data_header(data)
+    }
+
+    /// Write the contents of a [PipelineData]. This is a no-op for non-stream data.
+    #[track_caller]
+    pub(crate) fn write_pipeline_data_stream(
+        &self,
+        header: &PipelineDataHeader,
+        data: PipelineData,
     ) -> Result<(), ShellError> {
-        write_full_external_stream(&self.io_stream, stdout, stderr, exit_code)
+        self.io.write_pipeline_data_stream(header, data)
     }
 }

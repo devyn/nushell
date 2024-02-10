@@ -1,8 +1,6 @@
-use crate::EvaluatedCall;
-
-use super::interface::{make_call_input_from_pipeline_data, PluginExecutionNushellContext};
 use super::{create_command, make_plugin_interface};
-use crate::protocol::{CallInfo, PluginCall};
+use crate::plugin::context::PluginExecutionNushellContext;
+use crate::protocol::{CallInfo, EvaluatedCall, PluginCall, PluginCallResponse};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -97,8 +95,6 @@ impl Command for PluginDeclaration {
             }
         })?;
 
-        let call_input = make_call_input_from_pipeline_data(&input, &self.name, &self.filename)?;
-
         // Fetch the configuration for a plugin
         //
         // The `plugin` must match the registered name of a plugin.  For
@@ -136,13 +132,6 @@ impl Command for PluginDeclaration {
                 }
             });
 
-        let plugin_call = PluginCall::Run(CallInfo {
-            name: self.name.clone(),
-            call: EvaluatedCall::try_from_call(call, engine_state, stack)?,
-            input: call_input,
-            config,
-        });
-
         let context = Arc::new(PluginExecutionNushellContext::new(
             self.filename.clone(),
             self.shell.clone(),
@@ -154,23 +143,34 @@ impl Command for PluginDeclaration {
         let interface = make_plugin_interface(&mut child, Some(context))?;
         let interface_clone = interface.clone();
 
+        let (data_header, data) = interface.make_pipeline_data_header(input)?;
+
+        let mut data_header = Some(data_header);
+
+        let plugin_call = PluginCall::Run(CallInfo {
+            name: self.name.clone(),
+            call: EvaluatedCall::try_from_call(call, engine_state, stack)?,
+            input: (
+                // Only clone data_header if it's needed in order to send data
+                if data.is_some() {
+                    data_header.clone()
+                } else {
+                    data_header.take()
+                }
+            )
+            .unwrap(),
+            config,
+        });
+
         // Write the call and stream(s) on another thread. If we don't start reading immediately,
         // we could block the child from being able to read stdin because it's trying to write
         // something on stdout and its buffer is full.
         std::thread::spawn(move || {
             interface_clone.write_call(plugin_call)?;
-            match input {
-                PipelineData::Value(_, _) => Ok(()),
-                PipelineData::ListStream(list_stream, _) => {
-                    interface_clone.write_full_list_stream(list_stream)
-                }
-                PipelineData::ExternalStream {
-                    stdout,
-                    stderr,
-                    exit_code,
-                    ..
-                } => interface_clone.write_full_external_stream(stdout, stderr, exit_code),
-                PipelineData::Empty => Ok(()),
+            if let (Some(data_header), Some(data)) = (data_header, data) {
+                interface_clone.write_pipeline_data_stream(&data_header, data)
+            } else {
+                Ok(())
             }
         });
 
@@ -179,7 +179,17 @@ impl Command for PluginDeclaration {
 
         // Return the pipeline data from the response
         let response = interface.read_call_response()?;
-        interface.make_pipeline_data(response)
+        match response {
+            PluginCallResponse::Signature(_) => Err(ShellError::GenericError {
+                error: "Plugin missing value".into(),
+                msg: "Received a signature from plugin instead of value or stream".into(),
+                span: Some(call.head),
+                help: None,
+                inner: vec![],
+            }),
+            PluginCallResponse::Error(err) => Err(err.into()),
+            PluginCallResponse::PipelineData(header) => interface.make_pipeline_data(header),
+        }
     }
 
     fn is_plugin(&self) -> Option<(&Path, Option<&Path>)> {

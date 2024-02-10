@@ -5,11 +5,12 @@ use std::{
 
 use nu_protocol::ShellError;
 
+use crate::plugin::context::PluginExecutionContext;
 use crate::protocol::{PluginInput, PluginOutput};
 
 use super::{
-    engine::EngineInterfaceImpl, plugin::PluginInterfaceImpl, EngineInterface,
-    PluginExecutionContext, PluginInterface, PluginRead, PluginWrite,
+    engine::EngineInterfaceImpl, plugin::PluginInterfaceImpl, EngineInterface, PluginInterface,
+    PluginRead, PluginWrite,
 };
 
 /// Mock read/write helper for the engine and plugin interfaces.
