@@ -3,13 +3,16 @@ mod plugin_custom_value;
 mod plugin_data;
 
 pub use evaluated_call::EvaluatedCall;
-use nu_protocol::{PluginSignature, RawStream, ShellError, Span, Value};
+use nu_protocol::{PluginSignature, RawStream, ShellError, Span, Value, engine::Closure};
 pub use plugin_custom_value::PluginCustomValue;
 pub use plugin_data::PluginData;
 use serde::{Deserialize, Serialize};
 
 /// A sequential identifier for a stream
 pub type StreamId = usize;
+
+/// A sequential identifier for an [EngineCall]
+pub type EngineCallId = usize;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CallInfo {
@@ -80,6 +83,7 @@ pub enum PluginCall {
 pub enum PluginInput {
     Call(PluginCall),
     StreamData(StreamId, StreamData),
+    EngineCallResponse(EngineCallId, EngineCallResponse),
 }
 
 /// A single item of stream data for a stream.
@@ -211,4 +215,31 @@ impl PluginCallResponse {
 pub enum PluginOutput {
     CallResponse(PluginCallResponse),
     StreamData(StreamId, StreamData),
+    EngineCall(EngineCallId, EngineCall),
+}
+
+/// A remote call back to the engine during the plugin's execution.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum EngineCall {
+    EvalClosure {
+        /// The closure to call.
+        ///
+        /// This may come from a [Value::Closure] passed in as an argument to the plugin.
+        closure: Closure,
+        /// Positional arguments to add to the closure call
+        positional: Vec<Value>,
+        /// Input to the closure
+        input: PipelineDataHeader,
+        /// Whether to redirect stdout from external commands
+        redirect_stdout: bool,
+        /// Whether to redirect stderr from external commands
+        redirect_stderr: bool,
+    },
+}
+
+/// The response to an [EngineCall].
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum EngineCallResponse {
+    Error(LabeledError),
+    PipelineData(PipelineDataHeader),
 }

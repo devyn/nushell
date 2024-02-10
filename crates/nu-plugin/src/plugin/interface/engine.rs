@@ -33,6 +33,8 @@ pub(crate) struct EngineInterfaceImpl<R, W> {
     write: Mutex<W>,
     /// The next available stream id
     next_stream_id: AtomicUsize,
+    /// The next available engine call id
+    next_engine_call_id: AtomicUsize,
 }
 
 #[derive(Debug)]
@@ -50,6 +52,7 @@ impl<R, W> EngineInterfaceImpl<R, W> {
             }),
             write: Mutex::new(writer),
             next_stream_id: AtomicUsize::new(0),
+            next_engine_call_id: AtomicUsize::new(0),
         }
     }
 }
@@ -60,6 +63,7 @@ impl_stream_data_io!(
     PluginInput(read_input),
     PluginOutput(write_output),
     read other match {
+        PluginInput::EngineCallResponse(_id, _engine_call_response) => todo!(),
     }
 );
 
@@ -103,6 +107,12 @@ where
                 }
                 // Skip over any remaining stream data
                 Some(PluginInput::StreamData(id, data)) => read.stream_buffers.skip(id, data)?,
+                // Anything unexpected is an error
+                Some(PluginInput::EngineCallResponse(..)) => {
+                    return Err(ShellError::PluginFailedToDecode {
+                        msg: "unexpected EngineCallResponse, expected Call".into(),
+                    })
+                }
                 // End of input
                 None => return Ok(None),
             }

@@ -64,6 +64,7 @@ impl_stream_data_io!(
     PluginOutput(read_output),
     PluginInput(write_input),
     read other match {
+        PluginOutput::EngineCall(_id, _engine_call) => todo!(),
     }
 );
 
@@ -129,6 +130,8 @@ where
                 }
                 // Skip over any remaining stream data
                 Some(PluginOutput::StreamData(id, data)) => read.stream_buffers.skip(id, data)?,
+                // Handle an engine call
+                Some(PluginOutput::EngineCall(_id, _engine_call)) => todo!(),
                 // End of input
                 None => {
                     return Err(ShellError::PluginFailedToDecode {
