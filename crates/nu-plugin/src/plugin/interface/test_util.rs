@@ -169,8 +169,8 @@ impl TestCase {
     }
 
     /// Create an [EngineInterfaceImpl] using the test data.
-    pub(crate) fn engine_interface_impl(&self) -> EngineInterfaceImpl<TestIo, TestIo> {
-        EngineInterfaceImpl::new(self.r#in.clone(), self.out.clone())
+    pub(crate) fn engine_interface_impl(&self) -> Arc<EngineInterfaceImpl<TestIo, TestIo>> {
+        EngineInterfaceImpl::new(self.r#in.clone(), self.out.clone()).into()
     }
 
     /// Create an [EngineInterface] using the test data.
@@ -182,8 +182,8 @@ impl TestCase {
     pub(crate) fn plugin_interface_impl(
         &self,
         context: Option<Arc<dyn PluginExecutionContext>>,
-    ) -> PluginInterfaceImpl<TestIo, TestIo> {
-        PluginInterfaceImpl::new(self.r#in.clone(), self.out.clone(), context)
+    ) -> Arc<PluginInterfaceImpl<TestIo, TestIo>> {
+        PluginInterfaceImpl::new(self.r#in.clone(), self.out.clone(), context).into()
     }
 
     /// Create a [PluginInterface] using the test data.

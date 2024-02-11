@@ -150,7 +150,7 @@ fn read_call_response_list_stream() {
 
     let interface = test.plugin_interface_impl(None);
 
-    let read_id = match interface.read_call_response().unwrap() {
+    let read_id = match interface.clone().read_call_response().unwrap() {
         PluginCallResponse::PipelineData(PipelineDataHeader::ListStream(id)) => id,
         other => panic!("read unexpected response: {:?}", other),
     };
@@ -185,7 +185,7 @@ fn read_call_response_external_stream() {
 
     let interface = test.plugin_interface_impl(None);
 
-    match interface.read_call_response().unwrap() {
+    match interface.clone().read_call_response().unwrap() {
         PluginCallResponse::PipelineData(PipelineDataHeader::ExternalStream(read_id, _)) => {
             assert_eq!(0, read_id)
         }
@@ -236,9 +236,9 @@ fn validate_stream_data_acceptance(id: StreamId, header: PipelineDataHeader, acc
         PluginCallResponse::PipelineData(header),
     ));
 
-    let interface = Arc::new(test.plugin_interface_impl(None));
+    let interface = test.plugin_interface_impl(None);
 
-    interface.read_call_response().expect("call failed");
+    interface.clone().read_call_response().expect("call failed");
 
     let data_types = [
         StreamData::List(Some(Value::test_bool(true))),

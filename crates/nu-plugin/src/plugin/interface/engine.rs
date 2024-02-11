@@ -28,7 +28,6 @@ mod tests;
 #[derive(Debug)]
 pub(crate) struct EngineInterfaceImpl<R, W> {
     // Always lock read and then write mutex, if using both
-    // Stream inputs that can't be handled immediately can be put on the buffer
     read: Mutex<ReadPart<R>>,
     write: Mutex<W>,
     /// The next available stream id
@@ -40,6 +39,7 @@ pub(crate) struct EngineInterfaceImpl<R, W> {
 #[derive(Debug)]
 struct ReadPart<R> {
     reader: R,
+    /// Stores stream messages that can't be handled immediately
     stream_buffers: StreamBuffers,
 }
 
@@ -57,20 +57,32 @@ impl<R, W> EngineInterfaceImpl<R, W> {
     }
 }
 
+impl<R> ReadPart<R> where R: PluginRead {
+    fn handle_out_of_order(
+        &mut self,
+        _io: &Arc<EngineInterfaceImpl<R, impl PluginWrite>>,
+        msg: PluginInput
+    ) -> Result<(), ShellError> {
+        match msg {
+            PluginInput::Call(_) => Err(ShellError::PluginFailedToDecode {
+                msg: "unexpected Call in this context - possibly nested".into(),
+            }),
+            PluginInput::StreamData(id, data) => self.stream_buffers.skip(id, data),
+        }
+    }
+}
+
 // Implement the stream handling methods (see StreamDataIo).
 impl_stream_data_io!(
     EngineInterfaceImpl,
     PluginInput(read_input),
-    PluginOutput(write_output),
-    read other match {
-        PluginInput::EngineCallResponse(_id, _engine_call_response) => todo!(),
-    }
+    PluginOutput(write_output)
 );
 
 /// The trait indirection is so that we can hide the types with a trait object inside
 /// EngineInterface. As such, this trait must remain object safe.
 pub(crate) trait EngineInterfaceIo: StreamDataIo {
-    fn read_call(&self) -> Result<Option<PluginCall>, ShellError>;
+    fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError>;
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError>;
 
     /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
@@ -94,7 +106,7 @@ where
     R: PluginRead + 'static,
     W: PluginWrite + 'static,
 {
-    fn read_call(&self) -> Result<Option<PluginCall>, ShellError> {
+    fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError> {
         let mut read = self.read.lock().expect("read mutex poisoned");
         loop {
             match read.reader.read_input()? {
@@ -105,14 +117,8 @@ where
                     }
                     return Ok(Some(call));
                 }
-                // Skip over any remaining stream data
-                Some(PluginInput::StreamData(id, data)) => read.stream_buffers.skip(id, data)?,
-                // Anything unexpected is an error
-                Some(PluginInput::EngineCallResponse(..)) => {
-                    return Err(ShellError::PluginFailedToDecode {
-                        msg: "unexpected EngineCallResponse, expected Call".into(),
-                    })
-                }
+                // Handle some other message
+                Some(other) => read.handle_out_of_order(&self, other)?,
                 // End of input
                 None => return Ok(None),
             }
@@ -220,8 +226,15 @@ where
     W: PluginWrite + 'static,
 {
     fn from(engine_impl: EngineInterfaceImpl<R, W>) -> Self {
-        let arc = Arc::new(engine_impl);
-        EngineInterface { io: arc.clone() }
+        Arc::new(engine_impl).into()
+    }
+}
+
+impl<T> From<Arc<T>> for EngineInterface where T: EngineInterfaceIo + 'static {
+    fn from(value: Arc<T>) -> Self {
+        EngineInterface {
+            io: value
+        }
     }
 }
 
@@ -238,7 +251,7 @@ impl EngineInterface {
 
     /// Read a plugin call from the engine
     pub(crate) fn read_call(&self) -> Result<Option<PluginCall>, ShellError> {
-        self.io.read_call()
+        self.io.clone().read_call()
     }
 
     /// Create [PipelineData] appropriate for the given [PipelineDataHeader].

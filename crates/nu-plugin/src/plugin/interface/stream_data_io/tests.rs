@@ -46,7 +46,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, list(0));
-            let interface = std::sync::Arc::new(interface);
 
             match interface.clone().read_list(0).unwrap() {
                 Some(value) => assert_eq!(value, Value::test_bool(true)),
@@ -79,7 +78,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, list(7), list(9));
-            let interface = std::sync::Arc::new(interface);
 
             match interface.clone().read_list(9).unwrap() {
                 Some(value) => assert_eq!(value, Value::test_bool(true)),
@@ -130,7 +128,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, list(48), list(82));
-            let interface = std::sync::Arc::new(interface);
 
             let mut stream_82 = vec![];
             while let Some(value) = interface.clone().read_list(82).unwrap() {
@@ -177,7 +174,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, external(0));
-            let interface = std::sync::Arc::new(interface);
 
             match interface
                 .clone()
@@ -236,7 +232,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, external(0));
-            let interface = std::sync::Arc::new(interface);
 
             match interface
                 .clone()
@@ -295,7 +290,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, external(0));
-            let interface = std::sync::Arc::new(interface);
 
             interface.drop_external_stdout(0);
             interface
@@ -355,7 +349,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, external(0));
-            let interface = std::sync::Arc::new(interface);
 
             interface.drop_external_stderr(0);
             interface
@@ -407,7 +400,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, external(0));
-            let interface = std::sync::Arc::new(interface);
 
             interface.drop_external_exit_code(0);
             interface
@@ -451,7 +443,6 @@ macro_rules! gen_stream_data_tests {
 
             let interface = $gen_interface_impl;
             $crate::plugin::interface::stream_data_io::def_streams!(interface, external(0));
-            let interface = std::sync::Arc::new(interface);
 
             match interface
                 .read_external_exit_code(0)

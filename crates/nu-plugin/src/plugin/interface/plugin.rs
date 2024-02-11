@@ -58,14 +58,27 @@ impl<R, W> PluginInterfaceImpl<R, W> {
     }
 }
 
+impl<R> ReadPart<R> where R: PluginRead {
+    fn handle_out_of_order(
+        &mut self,
+        _io: &Arc<PluginInterfaceImpl<R, impl PluginWrite>>,
+        msg: PluginOutput
+    ) -> Result<(), ShellError> {
+        match msg {
+            PluginOutput::CallResponse(_) => Err(ShellError::PluginFailedToDecode {
+                msg: "unexpected CallResponse in this context".into()
+            }),
+            PluginOutput::StreamData(id, data) => self.stream_buffers.skip(id, data),
+            PluginOutput::EngineCall(_, _) => todo!(),
+        }
+    }
+}
+
 // Implement the stream handling methods (see StreamDataIo).
 impl_stream_data_io!(
     PluginInterfaceImpl,
     PluginOutput(read_output),
-    PluginInput(write_input),
-    read other match {
-        PluginOutput::EngineCall(_id, _engine_call) => todo!(),
-    }
+    PluginInput(write_input)
 );
 
 /// The trait indirection is so that we can hide the types with a trait object inside
@@ -73,7 +86,7 @@ impl_stream_data_io!(
 pub(crate) trait PluginInterfaceIo: StreamDataIo {
     fn context(&self) -> Option<&Arc<dyn PluginExecutionContext>>;
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError>;
-    fn read_call_response(&self) -> Result<PluginCallResponse, ShellError>;
+    fn read_call_response(self: Arc<Self>) -> Result<PluginCallResponse, ShellError>;
 
     /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
     ///
@@ -115,11 +128,11 @@ where
         Ok(())
     }
 
-    fn read_call_response(&self) -> Result<PluginCallResponse, ShellError> {
+    fn read_call_response(self: Arc<Self>) -> Result<PluginCallResponse, ShellError> {
         log::trace!("Reading plugin call response");
 
-        let mut read = self.read.lock().expect("read mutex poisoned");
         loop {
+            let mut read = self.read.lock().expect("read mutex poisoned");
             match read.reader.read_output()? {
                 Some(PluginOutput::CallResponse(response)) => {
                     // Check the call input type to set the stream buffers up
@@ -128,10 +141,8 @@ where
                     }
                     return Ok(response);
                 }
-                // Skip over any remaining stream data
-                Some(PluginOutput::StreamData(id, data)) => read.stream_buffers.skip(id, data)?,
-                // Handle an engine call
-                Some(PluginOutput::EngineCall(_id, _engine_call)) => todo!(),
+                // Handle some other message
+                Some(other) => read.handle_out_of_order(&self, other)?,
                 // End of input
                 None => {
                     return Err(ShellError::PluginFailedToDecode {
@@ -264,8 +275,14 @@ where
     W: PluginWrite + 'static,
 {
     fn from(plugin_impl: PluginInterfaceImpl<R, W>) -> Self {
+        Arc::new(plugin_impl).into()
+    }
+}
+
+impl<T> From<Arc<T>> for PluginInterface where T: PluginInterfaceIo + 'static {
+    fn from(value: Arc<T>) -> Self {
         PluginInterface {
-            io: Arc::new(plugin_impl),
+            io: value
         }
     }
 }
@@ -293,7 +310,7 @@ impl PluginInterface {
 
     /// Read a [PluginCallResponse] back from the plugin.
     pub(crate) fn read_call_response(&self) -> Result<PluginCallResponse, ShellError> {
-        self.io.read_call_response()
+        self.io.clone().read_call_response()
     }
 
     /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].

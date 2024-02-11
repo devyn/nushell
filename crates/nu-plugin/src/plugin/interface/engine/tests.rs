@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use nu_protocol::{CustomValue, ListStream, PipelineData, RawStream, ShellError, Span, Value};
 use serde::{Deserialize, Serialize};
 
@@ -98,11 +96,9 @@ fn read_call_ignore_dropped_stream_data() {
     test.add_input(PluginInput::StreamData(0, StreamData::List(None)));
     test.add_input(PluginInput::Call(PluginCall::Signature));
 
-    let interface = {
-        let interface = test.engine_interface_impl();
-        def_streams!(interface, list(0));
-        Arc::new(interface)
-    };
+    let interface = test.engine_interface_impl();
+    def_streams!(interface, list(0));
+
     interface
         .clone()
         .read
@@ -140,7 +136,7 @@ fn validate_stream_data_acceptance(id: StreamId, header: PipelineDataHeader, acc
     let call_info = test_call_with_input(header);
     test.add_input(PluginInput::Call(PluginCall::Run(call_info)));
 
-    let interface = Arc::new(test.engine_interface_impl());
+    let interface = test.engine_interface_impl();
 
     interface.clone().read_call().expect("call failed");
 

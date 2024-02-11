@@ -84,23 +84,18 @@ pub(crate) trait StreamDataIo: Send + Sync {
 /// Implement [StreamDataIo] for the given type. The type is expected to have a shape similar to
 /// `EngineInterfaceImpl` or `PluginInterfaceImpl`. The following struct fields must be defined:
 ///
-/// * `read: Mutex<struct>`, where the inner struct has at least the following fields:
-///   * `reader: R` where `R` implements [`PluginRead`](super::PluginRead)
-///   * `stream_buffers: StreamBuffers`
+/// * `read: Mutex<struct>`, where the inner struct has at least the following:
+///   * field `reader: R` where `R` implements [`PluginRead`](super::PluginRead)
+///   * field `stream_buffers: StreamBuffers`
+///   * method `handle_out_of_order(&mut self, io: &Arc<$type>, msg: $read_type)
+///       -> Result<(), ShellError>` - must store stream messages too using `skip()`
 /// * `write: Mutex<W>` where `W` implements [`PluginWrite`](super::PluginWrite)
 /// * `next_stream_id: AtomicUsize`
 macro_rules! impl_stream_data_io {
     (
         $type:ident,
         $read_type:ident ($read_method:ident),
-        $write_type:ident ($write_method:ident),
-        // patterns in case another message is read
-        read other match {
-            $(
-                $read_other_pat:pat => $read_other_expr:expr
-            ),*
-            $(,)?
-        }
+        $write_type:ident ($write_method:ident)
     ) => {
         impl<R, W> StreamDataIo for $type<R, W>
         where
@@ -135,12 +130,10 @@ macro_rules! impl_stream_data_io {
                                 }
                                 return Ok(value)
                             }
-                            Some($read_type::StreamData(data_id, other)) =>
-                                read.stream_buffers.skip(data_id, other)?,
-                            $(Some($read_other_pat) => $read_other_expr,)*
-                            _ => {
+                            Some(other) => read.handle_out_of_order(&self, other)?,
+                            None => {
                                 return Err(ShellError::PluginFailedToDecode {
-                                    msg: "Expected list stream data".into(),
+                                    msg: "unexpected end of input".into(),
                                 });
                             }
                         }
@@ -172,13 +165,11 @@ macro_rules! impl_stream_data_io {
                                 }
                                 return bytes.transpose()
                             }
-                            Some($read_type::StreamData(data_id, other)) =>
-                                read.stream_buffers.skip(data_id, other)?,
-                            $(Some($read_other_pat) => $read_other_expr,)*
-                            _ => {
+                            Some(other) => read.handle_out_of_order(&self, other)?,
+                            None => {
                                 return Err(ShellError::PluginFailedToDecode {
-                                    msg: "Expected external stream data".into(),
-                                })
+                                    msg: "unexpected end of input".into(),
+                                });
                             }
                         }
                     }
@@ -209,13 +200,11 @@ macro_rules! impl_stream_data_io {
                                 }
                                 return bytes.transpose()
                             }
-                            Some($read_type::StreamData(data_id, other)) =>
-                                read.stream_buffers.skip(data_id, other)?,
-                            $(Some($read_other_pat) => $read_other_expr,)*
-                            _ => {
+                            Some(other) => read.handle_out_of_order(&self, other)?,
+                            None => {
                                 return Err(ShellError::PluginFailedToDecode {
-                                    msg: "Expected external stream data".into(),
-                                })
+                                    msg: "unexpected end of input".into(),
+                                });
                             }
                         }
                     }
@@ -246,13 +235,11 @@ macro_rules! impl_stream_data_io {
                                 }
                                 return Ok(code)
                             }
-                            Some($read_type::StreamData(data_id, other)) =>
-                                read.stream_buffers.skip(data_id, other)?,
-                            $(Some($read_other_pat) => $read_other_expr,)*
-                            _ => {
+                            Some(other) => read.handle_out_of_order(&self, other)?,
+                            None => {
                                 return Err(ShellError::PluginFailedToDecode {
-                                    msg: "Expected external stream data".into(),
-                                })
+                                    msg: "unexpected end of input".into(),
+                                });
                             }
                         }
                     }
