@@ -3,10 +3,11 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
 };
 
+use nu_engine::eval_block_with_early_return;
 use nu_protocol::{
     ast::Call,
-    engine::{EngineState, Stack},
-    Span,
+    engine::{EngineState, Stack, Closure},
+    Span, Value, PipelineData, ShellError,
 };
 
 /// Object safe trait for abstracting operations required of the plugin context.
@@ -21,20 +22,24 @@ pub(crate) trait PluginExecutionContext: Send + Sync {
     fn command_name(&self) -> &str;
     /// The interrupt signal, if present
     fn ctrlc(&self) -> Option<&Arc<AtomicBool>>;
+    /// Evaluate a closure passed to the plugin
+    fn eval_closure(
+        &self,
+        closure: Closure,
+        positional: Vec<Value>,
+        input: PipelineData,
+        redirect_stdout: bool,
+        redirect_stderr: bool,
+    ) -> Result<PipelineData, ShellError>;
 }
 
 /// The execution context of a plugin.
-#[derive(Debug)]
 pub(crate) struct PluginExecutionNushellContext {
     filename: PathBuf,
     shell: Option<PathBuf>,
-    command_span: Span,
-    command_name: String,
-    ctrlc: Option<Arc<AtomicBool>>,
-    // If more operations are required of the context, fields can be added here.
-    //
-    // It may be required to insert the entire EngineState/Call/Stack in here to support
-    // future features and that's okay
+    engine_state: EngineState,
+    stack: Stack,
+    call: Call,
 }
 
 impl PluginExecutionNushellContext {
@@ -42,15 +47,15 @@ impl PluginExecutionNushellContext {
         filename: impl Into<PathBuf>,
         shell: Option<impl Into<PathBuf>>,
         engine_state: &EngineState,
-        _stack: &Stack,
+        stack: &Stack,
         call: &Call,
     ) -> PluginExecutionNushellContext {
         PluginExecutionNushellContext {
             filename: filename.into(),
             shell: shell.map(Into::into),
-            command_span: call.head,
-            command_name: engine_state.get_decl(call.decl_id).name().to_owned(),
-            ctrlc: engine_state.ctrlc.clone(),
+            engine_state: engine_state.clone(),
+            stack: stack.clone(),
+            call: call.clone(),
         }
     }
 }
@@ -65,14 +70,51 @@ impl PluginExecutionContext for PluginExecutionNushellContext {
     }
 
     fn command_span(&self) -> Span {
-        self.command_span
+        self.call.head
     }
 
     fn command_name(&self) -> &str {
-        &self.command_name
+        self.engine_state.get_decl(self.call.decl_id).name()
     }
 
     fn ctrlc(&self) -> Option<&Arc<AtomicBool>> {
-        self.ctrlc.as_ref()
+        self.engine_state.ctrlc.as_ref()
+    }
+
+    fn eval_closure(
+        &self,
+        closure: Closure,
+        positional: Vec<Value>,
+        input: PipelineData,
+        redirect_stdout: bool,
+        redirect_stderr: bool,
+    ) -> Result<PipelineData, ShellError> {
+        let block = self.engine_state.try_get_block(closure.block_id).ok_or_else(|| {
+            ShellError::GenericError {
+                error: "Plugin misbehaving".into(),
+                msg: format!("Tried to evaluate unknown block id: {}", closure.block_id),
+                span: Some(self.call.head),
+                help: None,
+                inner: vec![],
+            }
+        })?;
+
+        let mut stack = self.stack.captures_to_stack(closure.captures);
+
+        // Set up the positional arguments
+        for (idx, value) in positional.into_iter().enumerate() {
+            if let Some(arg) = block.signature.get_positional(idx) {
+                stack.add_var(arg.var_id.expect("closure arg missing var_id"), value);
+            }
+        }
+
+        eval_block_with_early_return(
+            &self.engine_state,
+            &mut stack,
+            block,
+            input,
+            redirect_stdout,
+            redirect_stderr,
+        )
     }
 }

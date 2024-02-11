@@ -11,7 +11,7 @@ use crate::{
     plugin::PluginEncoder,
     protocol::{
         CallInfo, ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginCallResponse,
-        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId,
+        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId, EngineCallId, EngineCallResponse, EngineCall,
     },
 };
 
@@ -41,6 +41,9 @@ struct ReadPart<R> {
     reader: R,
     /// Stores stream messages that can't be handled immediately
     stream_buffers: StreamBuffers,
+    /// Lists engine calls that are expecting a response. If a response is received out of order
+    /// it can be placed in here for the waiting thread to pick up later
+    pending_engine_calls: Vec<(EngineCallId, Option<EngineCallResponse>)>,
 }
 
 impl<R, W> EngineInterfaceImpl<R, W> {
@@ -49,6 +52,7 @@ impl<R, W> EngineInterfaceImpl<R, W> {
             read: Mutex::new(ReadPart {
                 reader,
                 stream_buffers: StreamBuffers::default(),
+                pending_engine_calls: vec![],
             }),
             write: Mutex::new(writer),
             next_stream_id: AtomicUsize::new(0),
@@ -68,6 +72,22 @@ impl<R> ReadPart<R> where R: PluginRead {
                 msg: "unexpected Call in this context - possibly nested".into(),
             }),
             PluginInput::StreamData(id, data) => self.stream_buffers.skip(id, data),
+            PluginInput::EngineCallResponse(id, response) => {
+                let (_, response_hole) = self.pending_engine_calls.iter_mut()
+                    .find(|(call_id, _)| id == *call_id)
+                    .ok_or_else(|| ShellError::PluginFailedToDecode {
+                        msg: format!("unexpected EngineCallResponse id={id}")
+                    })?;
+
+                if response_hole.is_none() {
+                    *response_hole = Some(response);
+                    Ok(())
+                } else {
+                    Err(ShellError::PluginFailedToDecode {
+                        msg: format!("received multiple responses for engine call id={id}")
+                    })
+                }
+            },
         }
     }
 }
@@ -84,6 +104,9 @@ impl_stream_data_io!(
 pub(crate) trait EngineInterfaceIo: StreamDataIo {
     fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError>;
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError>;
+
+    fn write_engine_call(&self, call: EngineCall) -> Result<(), ShellError>;
+    fn read_engine_call_response(self: Arc<Self>) -> Result<EngineCallResponse, ShellError>;
 
     /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
     fn make_pipeline_data(
@@ -130,6 +153,14 @@ where
 
         write.write_output(&PluginOutput::CallResponse(response))?;
         write.flush()
+    }
+
+    fn write_engine_call(&self, call: EngineCall) -> Result<(), ShellError> {
+        todo!()
+    }
+
+    fn read_engine_call_response(self: Arc<Self>) -> Result<EngineCallResponse, ShellError> {
+        todo!()
     }
 
     fn make_pipeline_data(
