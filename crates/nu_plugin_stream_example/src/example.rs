@@ -1,4 +1,4 @@
-use nu_plugin::{EvaluatedCall, LabeledError};
+use nu_plugin::{EvaluatedCall, LabeledError, EngineInterface};
 use nu_protocol::{ListStream, PipelineData, RawStream, Value};
 
 pub struct Example;
@@ -59,5 +59,20 @@ impl Example {
             metadata: None,
             trim_end_newline: false,
         })
+    }
+
+    pub fn for_each(
+        &self,
+        engine: &EngineInterface,
+        call: &EvaluatedCall,
+        input: PipelineData,
+    ) -> Result<PipelineData, LabeledError> {
+        let closure = call.req(0)?;
+        let config = engine.get_config()?;
+        for value in input {
+            let result = engine.eval_closure(&closure, vec![value.clone()], Some(value))?;
+            eprintln!("{}", result.into_string(", ", &config));
+        }
+        Ok(PipelineData::Empty)
     }
 }

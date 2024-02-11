@@ -343,6 +343,7 @@ pub trait StreamingPlugin {
         &mut self,
         name: &str,
         config: &Option<Value>,
+        engine: &EngineInterface,
         call: &EvaluatedCall,
         input: PipelineData,
     ) -> Result<PipelineData, LabeledError>;
@@ -359,6 +360,7 @@ impl<T: Plugin> StreamingPlugin for T {
         &mut self,
         name: &str,
         config: &Option<Value>,
+        _engine: &EngineInterface,
         call: &EvaluatedCall,
         input: PipelineData,
     ) -> Result<PipelineData, LabeledError> {
@@ -456,7 +458,7 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
                 config,
             }) => {
                 let input = try_or_report!(interface.make_pipeline_data(input));
-                match plugin.run(&name, &config, &call, input) {
+                match plugin.run(&name, &config, &interface, &call, input) {
                     Ok(output) => {
                         // Write the output stream back to nushell.
                         try_or_report!(interface.write_pipeline_data_response(output));

@@ -11,7 +11,7 @@ use crate::{
     plugin::{context::PluginExecutionContext, PluginEncoder},
     protocol::{
         ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginCallResponse, PluginCustomValue,
-        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId,
+        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId, EngineCallId, EngineCall, EngineCallResponse,
     },
 };
 
@@ -62,7 +62,7 @@ impl<R> ReadPart<R> where R: PluginRead + 'static {
     /// Handle an out of order message
     fn handle_out_of_order(
         &mut self,
-        _io: &Arc<PluginInterfaceImpl<R, impl PluginWrite + 'static>>,
+        io: &Arc<PluginInterfaceImpl<R, impl PluginWrite + 'static>>,
         msg: PluginOutput
     ) -> Result<(), ShellError> {
         match msg {
@@ -71,7 +71,10 @@ impl<R> ReadPart<R> where R: PluginRead + 'static {
             }),
             // Store any out of order stream data in the stream buffers
             PluginOutput::StreamData(id, data) => self.stream_buffers.skip(id, data),
-            PluginOutput::EngineCall(_, _) => todo!(),
+            // Execute an engine call during plugin execution
+            PluginOutput::EngineCall(id, engine_call) => {
+                io.clone().handle_engine_call(id, engine_call)
+            }
         }
     }
 }
@@ -89,6 +92,9 @@ pub(crate) trait PluginInterfaceIo: StreamDataIo {
     fn context(&self) -> Option<&Arc<dyn PluginExecutionContext>>;
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError>;
     fn read_call_response(self: Arc<Self>) -> Result<PluginCallResponse, ShellError>;
+
+    /// Write an [EngineCallResponse] to the engine call with the given `id`.
+    fn write_engine_call_response(&self, id: EngineCallId, response: EngineCallResponse) -> Result<(), ShellError>;
 
     /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
     ///
@@ -108,6 +114,10 @@ pub(crate) trait PluginInterfaceIo: StreamDataIo {
         &self,
         data: PipelineData,
     ) -> Result<(PipelineDataHeader, Option<(PipelineDataHeader, PipelineData)>), ShellError>;
+
+    /// Handle an [`EngineCall`] during execution.
+    fn handle_engine_call(self: Arc<Self>, id: EngineCallId, engine_call: EngineCall)
+        -> Result<(), ShellError>;
 }
 
 impl<R, W> PluginInterfaceIo for PluginInterfaceImpl<R, W>
@@ -153,6 +163,17 @@ where
                 }
             }
         }
+    }
+
+    fn write_engine_call_response(&self, id: EngineCallId, response: EngineCallResponse) -> Result<(), ShellError> {
+        let mut write = self.write.lock().expect("write mutex poisoned");
+        log::trace!("Writing engine call response for id={id}: {response:?}");
+
+        write.write_input(&PluginInput::EngineCallResponse(id, response))?;
+        write.flush()?;
+
+        log::trace!("Wrote engine call response for id={id}");
+        Ok(())
     }
 
     fn make_pipeline_data(
@@ -267,6 +288,42 @@ where
                 ))
             }
             PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
+        }
+    }
+
+    fn handle_engine_call(self: Arc<Self>, id: EngineCallId, engine_call: EngineCall)
+        -> Result<(), ShellError>
+    {
+        let context = self.context().ok_or_else(|| ShellError::NushellFailed {
+            msg: "PluginExecutionContext was not provided before making an engine call".into(),
+        })?;
+
+        log::trace!("Handling engine call id={id}: {engine_call:?}");
+
+        match engine_call {
+            EngineCall::GetConfig => {
+                let config = context.get_config().clone().into();
+                let response = EngineCallResponse::Config(config);
+                self.write_engine_call_response(id, response)
+            }
+            EngineCall::EvalClosure { closure, positional, input, redirect_stdout, redirect_stderr } => {
+                // Build the input PipelineData
+                let input = self.clone().make_pipeline_data(input)?;
+                // Evaluate the closure
+                match context.eval_closure(closure, positional, input, redirect_stdout, redirect_stderr) {
+                    Ok(output) => {
+                        let (header, rest) = self.make_pipeline_data_header(output)?;
+                        self.write_engine_call_response(id, EngineCallResponse::PipelineData(header))?;
+                        // Write the stream if necessary
+                        if let Some((header, data)) = rest {
+                            self.write_pipeline_data_stream(&header, data)
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    Err(err) => self.write_engine_call_response(id, EngineCallResponse::Error(err))
+                }
+            }
         }
     }
 }

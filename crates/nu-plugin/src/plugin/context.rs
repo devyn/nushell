@@ -7,7 +7,7 @@ use nu_engine::eval_block_with_early_return;
 use nu_protocol::{
     ast::Call,
     engine::{EngineState, Stack, Closure},
-    Span, Value, PipelineData, ShellError,
+    Span, Value, PipelineData, ShellError, Config, Spanned,
 };
 
 /// Object safe trait for abstracting operations required of the plugin context.
@@ -22,10 +22,12 @@ pub(crate) trait PluginExecutionContext: Send + Sync {
     fn command_name(&self) -> &str;
     /// The interrupt signal, if present
     fn ctrlc(&self) -> Option<&Arc<AtomicBool>>;
+    /// Get engine configuration
+    fn get_config(&self) -> &Config;
     /// Evaluate a closure passed to the plugin
     fn eval_closure(
         &self,
-        closure: Closure,
+        closure: Spanned<Closure>,
         positional: Vec<Value>,
         input: PipelineData,
         redirect_stdout: bool,
@@ -81,25 +83,29 @@ impl PluginExecutionContext for PluginExecutionNushellContext {
         self.engine_state.ctrlc.as_ref()
     }
 
+    fn get_config(&self) -> &Config {
+        self.engine_state.get_config()
+    }
+
     fn eval_closure(
         &self,
-        closure: Closure,
+        closure: Spanned<Closure>,
         positional: Vec<Value>,
         input: PipelineData,
         redirect_stdout: bool,
         redirect_stderr: bool,
     ) -> Result<PipelineData, ShellError> {
-        let block = self.engine_state.try_get_block(closure.block_id).ok_or_else(|| {
+        let block = self.engine_state.try_get_block(closure.item.block_id).ok_or_else(|| {
             ShellError::GenericError {
                 error: "Plugin misbehaving".into(),
-                msg: format!("Tried to evaluate unknown block id: {}", closure.block_id),
-                span: Some(self.call.head),
+                msg: format!("Tried to evaluate unknown block id: {}", closure.item.block_id),
+                span: Some(closure.span),
                 help: None,
                 inner: vec![],
             }
         })?;
 
-        let mut stack = self.stack.captures_to_stack(closure.captures);
+        let mut stack = self.stack.captures_to_stack(closure.item.captures);
 
         // Set up the positional arguments
         for (idx, value) in positional.into_iter().enumerate() {

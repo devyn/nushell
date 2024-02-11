@@ -50,6 +50,7 @@ mod serializers;
 
 pub use plugin::{
     get_signature, serve_plugin, Plugin, PluginDeclaration, PluginEncoder, StreamingPlugin,
+    EngineInterface,
 };
 pub use protocol::{EvaluatedCall, LabeledError};
 pub use serializers::{json::JsonSerializer, msgpack::MsgPackSerializer, EncodingType};

@@ -1,5 +1,5 @@
 use crate::Example;
-use nu_plugin::{EvaluatedCall, LabeledError, StreamingPlugin};
+use nu_plugin::{EvaluatedCall, LabeledError, StreamingPlugin, EngineInterface};
 use nu_protocol::{
     Category, PipelineData, PluginExample, PluginSignature, Span, SyntaxShape, Type, Value,
 };
@@ -57,6 +57,18 @@ impl StreamingPlugin for Example {
                     result: Some(Value::string("ab", span)),
                 }])
                 .category(Category::Experimental),
+            PluginSignature::build("stream_example for-each")
+                .usage("Example execution of a closure with a stream")
+                .extra_usage("Prints each value the closure returns to stderr")
+                .input_output_type(Type::ListStream, Type::Nothing)
+                .required("closure", SyntaxShape::Closure(Some(vec![SyntaxShape::Any])),
+                    "The closure to run for each input value")
+                .plugin_examples(vec![PluginExample {
+                    example: "ls | get name | stream_example for-each { |f| ^file $f }".into(),
+                    description: "example with an external command".into(),
+                    result: None,
+                }])
+                .category(Category::Experimental),
         ]
     }
 
@@ -64,6 +76,7 @@ impl StreamingPlugin for Example {
         &mut self,
         name: &str,
         _config: &Option<Value>,
+        engine: &EngineInterface,
         call: &EvaluatedCall,
         input: PipelineData,
     ) -> Result<PipelineData, LabeledError> {
@@ -76,6 +89,7 @@ impl StreamingPlugin for Example {
             "stream_example seq" => self.seq(call, input),
             "stream_example sum" => self.sum(call, input),
             "stream_example collect-external" => self.collect_external(call, input),
+            "stream_example for-each" => self.for_each(engine, call, input),
             _ => Err(LabeledError {
                 label: "Plugin call with wrong name signature".into(),
                 msg: "the signature used to call the plugin does not match any name in the plugin signature vector".into(),

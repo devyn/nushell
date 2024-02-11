@@ -120,3 +120,14 @@ fn collect_external_produces_raw_input() {
 
     assert_eq!(actual.out, "raw input");
 }
+
+#[test]
+fn for_each_prints_on_stderr() {
+    let actual = nu_with_plugins!(
+        cwd: "tests/fixtures/formats",
+        plugin: ("nu_plugin_stream_example"),
+        "[a b c] | stream_example for-each { $in }"
+    );
+
+    assert_eq!(actual.err, "a\nb\nc\n");
+}

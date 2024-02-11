@@ -16,7 +16,7 @@ use crate::protocol::{
 use super::PluginInterfaceIo;
 
 use nu_protocol::engine::Closure;
-use nu_protocol::{ListStream, PipelineData, ShellError, Span, Value};
+use nu_protocol::{ListStream, PipelineData, ShellError, Span, Value, Spanned};
 
 gen_stream_data_tests!(
     PluginOutput(add_output),
@@ -46,9 +46,13 @@ impl PluginExecutionContext for BogusContext {
         None
     }
 
+    fn get_config(&self) -> &nu_protocol::Config {
+        panic!("get_config not implemented")
+    }
+
     fn eval_closure(
         &self,
-        closure: Closure,
+        closure: Spanned<Closure>,
         positional: Vec<Value>,
         input: PipelineData,
         redirect_stdout: bool,
@@ -58,7 +62,7 @@ impl PluginExecutionContext for BogusContext {
 
         Ok(PipelineData::Value(Value::test_list(
             vec![
-                Value::test_closure(closure),
+                Value::closure(closure.item, closure.span),
                 Value::test_list(positional),
                 input.into_value(span),
                 Value::test_bool(redirect_stdout),
@@ -66,7 +70,6 @@ impl PluginExecutionContext for BogusContext {
             ]
         ), None))
     }
-
 }
 
 #[test]
