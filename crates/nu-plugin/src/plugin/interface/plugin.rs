@@ -58,16 +58,18 @@ impl<R, W> PluginInterfaceImpl<R, W> {
     }
 }
 
-impl<R> ReadPart<R> where R: PluginRead {
+impl<R> ReadPart<R> where R: PluginRead + 'static {
+    /// Handle an out of order message
     fn handle_out_of_order(
         &mut self,
-        _io: &Arc<PluginInterfaceImpl<R, impl PluginWrite>>,
+        _io: &Arc<PluginInterfaceImpl<R, impl PluginWrite + 'static>>,
         msg: PluginOutput
     ) -> Result<(), ShellError> {
         match msg {
             PluginOutput::CallResponse(_) => Err(ShellError::PluginFailedToDecode {
                 msg: "unexpected CallResponse in this context".into()
             }),
+            // Store any out of order stream data in the stream buffers
             PluginOutput::StreamData(id, data) => self.stream_buffers.skip(id, data),
             PluginOutput::EngineCall(_, _) => todo!(),
         }
@@ -96,16 +98,16 @@ pub(crate) trait PluginInterfaceIo: StreamDataIo {
         header: PipelineDataHeader,
     ) -> Result<PipelineData, ShellError>;
 
-    /// Create a valid header to send the given PipelineData.
+    /// Create a valid header to send the given [`PipelineData`].
     ///
-    /// Returns the header, and the PipelineData to be sent with `write_pipeline_data_stream`
+    /// Returns the header, and the arguments to be sent with `write_pipeline_data_stream`
     /// if necessary.
     ///
     /// Error if [PluginExecutionContext] was not provided when creating the interface.
     fn make_pipeline_data_header(
         &self,
         data: PipelineData,
-    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError>;
+    ) -> Result<(PipelineDataHeader, Option<(PipelineDataHeader, PipelineData)>), ShellError>;
 }
 
 impl<R, W> PluginInterfaceIo for PluginInterfaceImpl<R, W>
@@ -196,7 +198,7 @@ where
     fn make_pipeline_data_header(
         &self,
         data: PipelineData,
-    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError> {
+    ) -> Result<(PipelineDataHeader, Option<(PipelineDataHeader, PipelineData)>), ShellError> {
         let context = self.context().ok_or_else(|| ShellError::NushellFailed {
             msg: "PluginExecutionContext must be provided to call make_pipeline_data_header".into(),
         })?;
@@ -234,10 +236,13 @@ where
                 Ok((PipelineDataHeader::Value(val.collect()?), None))
             }
             PipelineData::Value(value, _) => Ok((PipelineDataHeader::Value(value), None)),
-            PipelineData::ListStream(_, _) => Ok((
-                PipelineDataHeader::ListStream(self.new_stream_id()?),
-                Some(data),
-            )),
+            PipelineData::ListStream(_, _) => {
+                let header = PipelineDataHeader::ListStream(self.new_stream_id()?);
+                Ok((
+                    header.clone(),
+                    Some((header, data)),
+                ))
+            }
             PipelineData::ExternalStream {
                 span,
                 ref stdout,
@@ -245,8 +250,8 @@ where
                 ref exit_code,
                 trim_end_newline,
                 ..
-            } => Ok((
-                PipelineDataHeader::ExternalStream(
+            } => {
+                let header = PipelineDataHeader::ExternalStream(
                     self.new_stream_id()?,
                     ExternalStreamInfo {
                         span,
@@ -255,9 +260,12 @@ where
                         has_exit_code: exit_code.is_some(),
                         trim_end_newline,
                     },
-                ),
-                Some(data),
-            )),
+                );
+                Ok((
+                    header.clone(),
+                    Some((header, data)),
+                ))
+            }
             PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
         }
     }
@@ -323,16 +331,16 @@ impl PluginInterface {
         self.io.clone().make_pipeline_data(header)
     }
 
-    /// Create a valid header to send the given PipelineData.
+    /// Create a valid header to send the given [`PipelineData`].
     ///
-    /// Returns the header, and the PipelineData to be sent with `write_pipeline_data_stream`
+    /// Returns the header, and the arguments to be sent with `write_pipeline_data_stream`
     /// if necessary.
     ///
     /// Error if [PluginExecutionContext] was not provided when creating the interface.
     pub(crate) fn make_pipeline_data_header(
         &self,
         data: PipelineData,
-    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError> {
+    ) -> Result<(PipelineDataHeader, Option<(PipelineDataHeader, PipelineData)>), ShellError> {
         self.io.make_pipeline_data_header(data)
     }
 

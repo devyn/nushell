@@ -12,6 +12,9 @@ pub(crate) use tests::{def_streams, gen_stream_data_tests};
 
 /// Methods for reading and writing [crate::protocol::StreamData] contents on an interface.
 ///
+/// The big idea here is that multiple streams can be multiplexed on a single input and output
+/// stream, so we can handle multiple [PipelineData] at once.
+///
 /// This trait must be object safe.
 pub(crate) trait StreamDataIo: Send + Sync {
     /// Get a new available [StreamId].
@@ -99,8 +102,8 @@ macro_rules! impl_stream_data_io {
     ) => {
         impl<R, W> StreamDataIo for $type<R, W>
         where
-            R: $crate::plugin::interface::PluginRead,
-            W: $crate::plugin::interface::PluginWrite,
+            R: $crate::plugin::interface::PluginRead + 'static,
+            W: $crate::plugin::interface::PluginWrite + 'static,
         {
             fn new_stream_id(&self) -> Result<StreamId, ShellError> {
                 $crate::plugin::interface::next_id_from(&self.next_stream_id)

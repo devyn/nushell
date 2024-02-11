@@ -19,7 +19,7 @@ use super::{
     buffers::StreamBuffers,
     make_external_stream, make_list_stream,
     stream_data_io::{impl_stream_data_io, StreamDataIo, StreamDataIoExt},
-    PluginRead, PluginWrite,
+    PluginRead, PluginWrite, next_id_from,
 };
 
 #[cfg(test)]
@@ -62,6 +62,7 @@ impl<R, W> EngineInterfaceImpl<R, W> {
 }
 
 impl<R> ReadPart<R> where R: PluginRead {
+    /// Handle an out of order message
     fn handle_out_of_order(
         &mut self,
         _io: &Arc<EngineInterfaceImpl<R, impl PluginWrite>>,
@@ -71,6 +72,7 @@ impl<R> ReadPart<R> where R: PluginRead {
             PluginInput::Call(_) => Err(ShellError::PluginFailedToDecode {
                 msg: "unexpected Call in this context - possibly nested".into(),
             }),
+            // Store any out of order stream data in the stream buffers
             PluginInput::StreamData(id, data) => self.stream_buffers.skip(id, data),
             PluginInput::EngineCallResponse(id, response) => {
                 let (_, response_hole) = self.pending_engine_calls.iter_mut()
@@ -114,14 +116,14 @@ pub(crate) trait EngineInterfaceIo: StreamDataIo {
         header: PipelineDataHeader,
     ) -> Result<PipelineData, ShellError>;
 
-    /// Create a valid header to send the given PipelineData.
+    /// Create a valid header to send the given [`PipelineData`].
     ///
-    /// Returns the header, and the PipelineData to be sent with `write_pipeline_data_stream`
+    /// Returns the header, and the arguments to be sent to `write_pipeline_data_stream`
     /// if necessary.
     fn make_pipeline_data_header(
         &self,
         data: PipelineData,
-    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError>;
+    ) -> Result<(PipelineDataHeader, Option<(PipelineDataHeader, PipelineData)>), ShellError>;
 }
 
 impl<R, W> EngineInterfaceIo for EngineInterfaceImpl<R, W>
@@ -130,8 +132,8 @@ where
     W: PluginWrite + 'static,
 {
     fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError> {
-        let mut read = self.read.lock().expect("read mutex poisoned");
         loop {
+            let mut read = self.read.lock().expect("read mutex poisoned");
             match read.reader.read_input()? {
                 Some(PluginInput::Call(call)) => {
                     // Check the call input type to set the stream buffers up
@@ -191,7 +193,7 @@ where
     fn make_pipeline_data_header(
         &self,
         data: PipelineData,
-    ) -> Result<(PipelineDataHeader, Option<PipelineData>), ShellError> {
+    ) -> Result<(PipelineDataHeader, Option<(PipelineDataHeader, PipelineData)>), ShellError> {
         match data {
             PipelineData::Value(value, _) => {
                 let span = value.span();
@@ -215,10 +217,13 @@ where
                     value => Ok((PipelineDataHeader::Value(value), None)),
                 }
             }
-            PipelineData::ListStream(..) => Ok((
-                PipelineDataHeader::ListStream(self.new_stream_id()?),
-                Some(data),
-            )),
+            PipelineData::ListStream(..) => {
+                let header = PipelineDataHeader::ListStream(self.new_stream_id()?);
+                Ok((
+                    header.clone(),
+                    Some((header, data)),
+                ))
+            }
             PipelineData::ExternalStream {
                 ref stdout,
                 ref stderr,
@@ -235,9 +240,10 @@ where
                     has_exit_code: exit_code.is_some(),
                     trim_end_newline,
                 };
+                let header = PipelineDataHeader::ExternalStream(self.new_stream_id()?, info);
                 Ok((
-                    PipelineDataHeader::ExternalStream(self.new_stream_id()?, info),
-                    Some(data),
+                    header.clone(),
+                    Some((header, data)),
                 ))
             }
             PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),

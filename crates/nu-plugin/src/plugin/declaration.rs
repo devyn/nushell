@@ -143,22 +143,12 @@ impl Command for PluginDeclaration {
         let interface = make_plugin_interface(&mut child, Some(context))?;
         let interface_clone = interface.clone();
 
-        let (data_header, data) = interface.make_pipeline_data_header(input)?;
-
-        let mut data_header = Some(data_header);
+        let (data_header, data_rest) = interface.make_pipeline_data_header(input)?;
 
         let plugin_call = PluginCall::Run(CallInfo {
             name: self.name.clone(),
             call: EvaluatedCall::try_from_call(call, engine_state, stack)?,
-            input: (
-                // Only clone data_header if it's needed in order to send data
-                if data.is_some() {
-                    data_header.clone()
-                } else {
-                    data_header.take()
-                }
-            )
-            .unwrap(),
+            input: data_header,
             config,
         });
 
@@ -167,8 +157,8 @@ impl Command for PluginDeclaration {
         // something on stdout and its buffer is full.
         std::thread::spawn(move || {
             interface_clone.write_call(plugin_call)?;
-            if let (Some(data_header), Some(data)) = (data_header, data) {
-                interface_clone.write_pipeline_data_stream(&data_header, data)
+            if let Some((header, data)) = data_rest {
+                interface_clone.write_pipeline_data_stream(&header, data)
             } else {
                 Ok(())
             }
