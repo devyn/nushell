@@ -2,7 +2,7 @@
 
 use std::{
     io::{BufRead, Write},
-    sync::{atomic::AtomicUsize, Arc, Mutex},
+    sync::{atomic::AtomicUsize, Arc, Mutex}, marker::PhantomData,
 };
 
 use nu_protocol::{CustomValue, PipelineData, ShellError, Value, Config, engine::Closure, Spanned};
@@ -11,14 +11,17 @@ use crate::{
     plugin::PluginEncoder,
     protocol::{
         CallInfo, ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginCallResponse,
-        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId, EngineCallId, EngineCallResponse, EngineCall,
+        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamId, StreamMessage,
+        EngineCallId, EngineCallResponse, EngineCall,
     },
 };
 
 use super::{
     buffers::StreamBuffers,
     make_external_stream, make_list_stream,
-    stream_data_io::{impl_stream_data_io, StreamDataIo, StreamDataIoExt},
+    stream_data_io::{
+        StreamDataIoBase, StreamDataRead, StreamDataWrite, StreamDataIo, StreamDataIoExt
+    },
     PluginRead, PluginWrite, next_id_from,
 };
 
@@ -28,8 +31,8 @@ mod tests;
 #[derive(Debug)]
 pub(crate) struct EngineInterfaceImpl<R, W> {
     // Always lock read and then write mutex, if using both
-    read: Mutex<ReadPart<R>>,
-    write: Mutex<W>,
+    read: Mutex<ReadPart<R, W>>,
+    write: Mutex<WritePart<W>>,
     /// The next available stream id
     next_stream_id: AtomicUsize,
     /// The next available engine call id
@@ -37,14 +40,19 @@ pub(crate) struct EngineInterfaceImpl<R, W> {
 }
 
 #[derive(Debug)]
-struct ReadPart<R> {
+pub(crate) struct ReadPart<R, W> {
     reader: R,
     /// Stores stream messages that can't be handled immediately
     stream_buffers: StreamBuffers,
     /// Lists engine calls that are expecting a response. If a response is received out of order
     /// it can be placed in here for the waiting thread to pick up later
     pending_engine_calls: Vec<(EngineCallId, Option<EngineCallResponse>)>,
+    /// Just to preserve the writer type
+    write_marker: PhantomData<W>,
 }
+
+#[derive(Debug)]
+pub(crate) struct WritePart<W>(W);
 
 impl<R, W> EngineInterfaceImpl<R, W> {
     pub(crate) fn new(reader: R, writer: W) -> EngineInterfaceImpl<R, W> {
@@ -53,27 +61,57 @@ impl<R, W> EngineInterfaceImpl<R, W> {
                 reader,
                 stream_buffers: StreamBuffers::default(),
                 pending_engine_calls: vec![],
+                write_marker: PhantomData,
             }),
-            write: Mutex::new(writer),
+            write: Mutex::new(WritePart(writer)),
             next_stream_id: AtomicUsize::new(0),
             next_engine_call_id: AtomicUsize::new(0),
         }
     }
 }
 
-impl<R> ReadPart<R> where R: PluginRead {
-    /// Handle an out of order message
-    fn handle_out_of_order(
+impl<R, W> StreamDataIoBase for EngineInterfaceImpl<R, W> where R: PluginRead, W: PluginWrite {
+    type ReadPart = ReadPart<R, W>;
+    type WritePart = WritePart<W>;
+
+    fn lock_read(&self) -> std::sync::MutexGuard<Self::ReadPart> {
+        self.read.lock().expect("read mutex poisoned")
+    }
+
+    fn lock_write(&self) -> std::sync::MutexGuard<Self::WritePart> {
+        self.write.lock().expect("write mutex poisoned")
+    }
+
+    fn new_stream_id(&self) -> Result<StreamId, ShellError> {
+        next_id_from(&self.next_stream_id)
+    }
+}
+
+impl<R, W> StreamDataRead for ReadPart<R, W> where R: PluginRead, W: PluginWrite {
+    type Message = PluginInput;
+    type Base = EngineInterfaceImpl<R, W>;
+
+    fn read(&mut self) -> Result<Option<Self::Message>, ShellError> {
+        self.reader.read_input()
+    }
+
+    fn stream_buffers(&mut self) -> &mut StreamBuffers {
+        &mut self.stream_buffers
+    }
+
+    // Default message handler
+    fn handle_message(
         &mut self,
-        _io: &Arc<EngineInterfaceImpl<R, impl PluginWrite>>,
+        _io: &Arc<Self::Base>,
         msg: PluginInput
     ) -> Result<(), ShellError> {
         match msg {
             PluginInput::Call(_) => Err(ShellError::PluginFailedToDecode {
                 msg: "unexpected Call in this context - possibly nested".into(),
             }),
-            // Store any out of order stream data in the stream buffers
-            PluginInput::StreamData(id, data) => self.stream_buffers.skip(id, data),
+            // Handle out of order stream messages
+            PluginInput::StreamData(id, data) =>
+                self.handle_out_of_order(StreamMessage::Data(id, data)),
             // Store engine call responses in pending_engine_calls. If the call response will
             // produce a stream, that also must be initialized now so we can store those stream
             // messages.
@@ -102,12 +140,17 @@ impl<R> ReadPart<R> where R: PluginRead {
     }
 }
 
-// Implement the stream handling methods (see StreamDataIo).
-impl_stream_data_io!(
-    EngineInterfaceImpl,
-    PluginInput(read_input),
-    PluginOutput(write_output)
-);
+impl<W> StreamDataWrite for WritePart<W> where W: PluginWrite {
+    type Message = PluginOutput;
+
+    fn write(&mut self, msg: Self::Message) -> Result<(), ShellError> {
+        self.0.write_output(&msg)
+    }
+
+    fn flush(&mut self) -> Result<(), ShellError> {
+        self.0.flush()
+    }
+}
 
 /// The trait indirection is so that we can hide the types with a trait object inside
 /// EngineInterface. As such, this trait must remain object safe.
@@ -148,8 +191,8 @@ where
 {
     fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError> {
         loop {
-            let mut read = self.read.lock().expect("read mutex poisoned");
-            match read.reader.read_input()? {
+            let mut read = self.lock_read();
+            match read.read()? {
                 Some(PluginInput::Call(call)) => {
                     // Check the call input type to set the stream buffers up
                     if let PluginCall::Run(CallInfo { ref input, .. }) = call {
@@ -158,7 +201,7 @@ where
                     return Ok(Some(call));
                 }
                 // Handle some other message
-                Some(other) => read.handle_out_of_order(&self, other)?,
+                Some(other) => read.handle_message(&self, other)?,
                 // End of input
                 None => return Ok(None),
             }
@@ -166,9 +209,9 @@ where
     }
 
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError> {
-        let mut write = self.write.lock().expect("write mutex poisoned");
+        let mut write = self.lock_write();
 
-        write.write_output(&PluginOutput::CallResponse(response))?;
+        write.write(PluginOutput::CallResponse(response))?;
         write.flush()
     }
 
@@ -177,14 +220,14 @@ where
         let id = next_id_from(&self.next_engine_call_id)?;
 
         // Register the pending engine call
-        let mut read = self.read.lock().expect("read mutex poisoned");
+        let mut read = self.lock_read();
         read.pending_engine_calls.push((id, None));
         drop(read);
 
         // Send the call
-        let mut write = self.write.lock().expect("write mutex poisoned");
+        let mut write = self.lock_write();
 
-        write.write_output(&PluginOutput::EngineCall(id, call))?;
+        write.write(PluginOutput::EngineCall(id, call))?;
         write.flush()?;
 
         Ok(id)
@@ -194,7 +237,7 @@ where
         -> Result<EngineCallResponse, ShellError>
     {
         loop {
-            let mut read = self.read.lock().expect("read mutex poisoned");
+            let mut read = self.lock_read();
 
             let pending_index = read.pending_engine_calls.iter()
                 .position(|(reg_id, _)| id == *reg_id)
@@ -208,7 +251,7 @@ where
             }
 
             // Otherwise read and hope that we get the response
-            match read.reader.read_input()? {
+            match read.read()? {
                 Some(PluginInput::EngineCallResponse(resp_id, response)) if id == resp_id => {
                     // Remove the pending call
                     read.pending_engine_calls.swap_remove(pending_index);
@@ -219,7 +262,7 @@ where
                     return Ok(response);
                 }
                 // Handle some other message
-                Some(other) => read.handle_out_of_order(&self, other)?,
+                Some(other) => read.handle_message(&self, other)?,
                 // End of input
                 None => return Err(ShellError::PluginFailedToDecode {
                     msg: "unexpected end of input".into()

@@ -2,7 +2,7 @@
 
 use std::{
     io::{BufRead, Write},
-    sync::{atomic::AtomicUsize, Arc, Mutex},
+    sync::{atomic::AtomicUsize, Arc, Mutex}, marker::PhantomData,
 };
 
 use nu_protocol::{PipelineData, ShellError, Value};
@@ -11,15 +11,18 @@ use crate::{
     plugin::{context::PluginExecutionContext, PluginEncoder},
     protocol::{
         ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginCallResponse, PluginCustomValue,
-        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamData, StreamId, EngineCallId, EngineCall, EngineCallResponse,
+        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamId, StreamMessage,
+        EngineCallId, EngineCall, EngineCallResponse,
     },
 };
 
 use super::{
     buffers::StreamBuffers,
     make_external_stream, make_list_stream,
-    stream_data_io::{impl_stream_data_io, StreamDataIo, StreamDataIoExt},
-    PluginRead, PluginWrite,
+    stream_data_io::{
+        StreamDataIoBase, StreamDataRead, StreamDataWrite, StreamDataIo, StreamDataIoExt
+    },
+    PluginRead, PluginWrite, next_id_from,
 };
 
 #[cfg(test)]
@@ -28,17 +31,22 @@ mod tests;
 pub(crate) struct PluginInterfaceImpl<R, W> {
     // Always lock read and then write mutex, if using both
     // Stream inputs that can't be handled immediately can be put on the buffer
-    read: Mutex<ReadPart<R>>,
-    write: Mutex<W>,
+    read: Mutex<ReadPart<R, W>>,
+    write: Mutex<WritePart<W>>,
     context: Option<Arc<dyn PluginExecutionContext>>,
     /// The next available stream id
     next_stream_id: AtomicUsize,
 }
 
-struct ReadPart<R> {
+pub(crate) struct ReadPart<R, W> {
     reader: R,
+    /// Stores stream messages that can't be handled immediately
     stream_buffers: StreamBuffers,
+    /// Keep the write type around
+    write_marker: PhantomData<W>,
 }
+
+pub(crate) struct WritePart<W>(W);
 
 impl<R, W> PluginInterfaceImpl<R, W> {
     pub(crate) fn new(
@@ -50,27 +58,65 @@ impl<R, W> PluginInterfaceImpl<R, W> {
             read: Mutex::new(ReadPart {
                 reader,
                 stream_buffers: StreamBuffers::default(),
+                write_marker: PhantomData,
             }),
-            write: Mutex::new(writer),
+            write: Mutex::new(WritePart(writer)),
             context,
             next_stream_id: AtomicUsize::new(0),
         }
     }
 }
 
-impl<R> ReadPart<R> where R: PluginRead + 'static {
-    /// Handle an out of order message
-    fn handle_out_of_order(
+impl<R, W> StreamDataIoBase for PluginInterfaceImpl<R, W>
+where
+    R: PluginRead + 'static,
+    W: PluginWrite + 'static,
+{
+    type ReadPart = ReadPart<R, W>;
+    type WritePart = WritePart<W>;
+
+    fn lock_read(&self) -> std::sync::MutexGuard<Self::ReadPart> {
+        self.read.lock().expect("read mutex poisoned")
+    }
+
+    fn lock_write(&self) -> std::sync::MutexGuard<Self::WritePart> {
+        self.write.lock().expect("write mutex poisoned")
+    }
+
+    fn new_stream_id(&self) -> Result<StreamId, ShellError> {
+        next_id_from(&self.next_stream_id)
+    }
+}
+
+impl<R, W> StreamDataRead for ReadPart<R, W>
+where
+    R: PluginRead + 'static,
+    W: PluginWrite + 'static,
+{
+    type Message = PluginOutput;
+    type Base = PluginInterfaceImpl<R, W>;
+
+    fn read(&mut self) -> Result<Option<Self::Message>, ShellError> {
+        self.reader.read_output()
+    }
+
+    fn stream_buffers(&mut self) -> &mut StreamBuffers {
+        &mut self.stream_buffers
+    }
+
+    // Default message handler
+    fn handle_message(
         &mut self,
-        io: &Arc<PluginInterfaceImpl<R, impl PluginWrite + 'static>>,
+        io: &Arc<Self::Base>,
         msg: PluginOutput
     ) -> Result<(), ShellError> {
         match msg {
             PluginOutput::CallResponse(_) => Err(ShellError::PluginFailedToDecode {
                 msg: "unexpected CallResponse in this context".into()
             }),
-            // Store any out of order stream data in the stream buffers
-            PluginOutput::StreamData(id, data) => self.stream_buffers.skip(id, data),
+            // Handle out of order stream messages
+            PluginOutput::StreamData(id, data) =>
+                self.handle_out_of_order(StreamMessage::Data(id, data)),
             // Execute an engine call during plugin execution
             PluginOutput::EngineCall(id, engine_call) => {
                 io.clone().handle_engine_call(id, engine_call)
@@ -79,12 +125,17 @@ impl<R> ReadPart<R> where R: PluginRead + 'static {
     }
 }
 
-// Implement the stream handling methods (see StreamDataIo).
-impl_stream_data_io!(
-    PluginInterfaceImpl,
-    PluginOutput(read_output),
-    PluginInput(write_input)
-);
+impl<W> StreamDataWrite for WritePart<W> where W: PluginWrite {
+    type Message = PluginInput;
+
+    fn write(&mut self, msg: Self::Message) -> Result<(), ShellError> {
+        self.0.write_input(&msg)
+    }
+
+    fn flush(&mut self) -> Result<(), ShellError> {
+        self.0.flush()
+    }
+}
 
 /// The trait indirection is so that we can hide the types with a trait object inside
 /// PluginInterface. As such, this trait must remain object safe.
@@ -130,10 +181,10 @@ where
     }
 
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError> {
-        let mut write = self.write.lock().expect("write mutex poisoned");
+        let mut write = self.lock_write();
         log::trace!("Writing plugin call: {call:?}");
 
-        write.write_input(&PluginInput::Call(call))?;
+        write.write(PluginInput::Call(call))?;
         write.flush()?;
 
         log::trace!("Wrote plugin call");
@@ -144,8 +195,8 @@ where
         log::trace!("Reading plugin call response");
 
         loop {
-            let mut read = self.read.lock().expect("read mutex poisoned");
-            match read.reader.read_output()? {
+            let mut read = self.lock_read();
+            match read.read()? {
                 Some(PluginOutput::CallResponse(response)) => {
                     // Check the call input type to set the stream buffers up
                     if let PluginCallResponse::PipelineData(header) = &response {
@@ -154,7 +205,7 @@ where
                     return Ok(response);
                 }
                 // Handle some other message
-                Some(other) => read.handle_out_of_order(&self, other)?,
+                Some(other) => read.handle_message(&self, other)?,
                 // End of input
                 None => {
                     return Err(ShellError::PluginFailedToDecode {
@@ -166,10 +217,10 @@ where
     }
 
     fn write_engine_call_response(&self, id: EngineCallId, response: EngineCallResponse) -> Result<(), ShellError> {
-        let mut write = self.write.lock().expect("write mutex poisoned");
+        let mut write = self.lock_write();
         log::trace!("Writing engine call response for id={id}: {response:?}");
 
-        write.write_input(&PluginInput::EngineCallResponse(id, response))?;
+        write.write(PluginInput::EngineCallResponse(id, response))?;
         write.flush()?;
 
         log::trace!("Wrote engine call response for id={id}");

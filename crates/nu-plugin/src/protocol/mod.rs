@@ -86,6 +86,25 @@ pub enum PluginInput {
     EngineCallResponse(EngineCallId, EngineCallResponse),
 }
 
+impl TryFrom<PluginInput> for StreamMessage {
+    type Error = PluginInput;
+
+    fn try_from(msg: PluginInput) -> Result<StreamMessage, PluginInput> {
+        match msg {
+            PluginInput::StreamData(id, data) => Ok(StreamMessage::Data(id, data)),
+            _ => Err(msg)
+        }
+    }
+}
+
+impl From<StreamMessage> for PluginInput {
+    fn from(msg: StreamMessage) -> PluginInput {
+        match msg {
+            StreamMessage::Data(id, data) => PluginInput::StreamData(id, data),
+        }
+    }
+}
+
 /// A single item of stream data for a stream.
 ///
 /// A `None` value ends the stream. An `Error` ends all streams, and the error should be propagated.
@@ -98,6 +117,16 @@ pub enum StreamData {
     ExternalStdout(Option<Result<Vec<u8>, ShellError>>),
     ExternalStderr(Option<Result<Vec<u8>, ShellError>>),
     ExternalExitCode(Option<Value>),
+}
+
+/// A stream control or data message.
+///
+/// This is generally converted from/to [`PluginInput`] or [`PluginOutput`], so that the related
+/// messages can be more generically handled
+#[derive(Debug, Clone)]
+pub(crate) enum StreamMessage {
+    /// Append data to the given [`StreamId`].
+    Data(StreamId, StreamData),
 }
 
 /// An error message with debugging information that can be passed to Nushell from the plugin
@@ -216,6 +245,25 @@ pub enum PluginOutput {
     CallResponse(PluginCallResponse),
     StreamData(StreamId, StreamData),
     EngineCall(EngineCallId, EngineCall),
+}
+
+impl TryFrom<PluginOutput> for StreamMessage {
+    type Error = PluginOutput;
+
+    fn try_from(msg: PluginOutput) -> Result<StreamMessage, PluginOutput> {
+        match msg {
+            PluginOutput::StreamData(id, data) => Ok(StreamMessage::Data(id, data)),
+            _ => Err(msg)
+        }
+    }
+}
+
+impl From<StreamMessage> for PluginOutput {
+    fn from(msg: StreamMessage) -> PluginOutput {
+        match msg {
+            StreamMessage::Data(id, data) => PluginOutput::StreamData(id, data),
+        }
+    }
 }
 
 /// A remote call back to the engine during the plugin's execution.
