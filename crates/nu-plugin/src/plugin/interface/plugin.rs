@@ -3,7 +3,7 @@
 use std::{
     io::{BufRead, Write},
     marker::PhantomData,
-    sync::{atomic::AtomicUsize, Arc, Mutex, MutexGuard},
+    sync::{atomic::AtomicUsize, Arc, Mutex, MutexGuard}, collections::VecDeque,
 };
 
 use nu_protocol::{PipelineData, ShellError, Value};
@@ -23,7 +23,7 @@ use super::{
     stream_data_io::{
         StreamDataIo, StreamDataIoBase, StreamDataIoExt, StreamDataRead, StreamDataWrite,
     },
-    PluginRead, PluginWrite,
+    PluginRead, PluginWrite, interrupt::StreamInterruptFlags,
 };
 
 #[cfg(test)]
@@ -41,13 +41,25 @@ pub(crate) struct PluginInterfaceImpl<R, W> {
 
 pub(crate) struct ReadPart<R, W> {
     reader: R,
+    /// Always return this read error if set, in order to propagate it from somewhere it won't be
+    error: Option<Box<ShellError>>,
+    /// Stores [PluginCallResponse]s that can't be handled immediately
+    responses: VecDeque<PluginCallResponse>,
     /// Stores stream messages that can't be handled immediately
     stream_buffers: StreamBuffers,
+    /// Stream interruption state
+    interrupt_flags: StreamInterruptFlags,
     /// Keep the write type around
     write_marker: PhantomData<W>,
 }
 
-pub(crate) struct WritePart<W>(W);
+pub(crate) struct WritePart<W> {
+    writer: W,
+    /// Set if a [`PluginCall`] has been sent, but a response not yet received.
+    ///
+    /// This prevents nested plugin calls.
+    waiting_for_call_response: bool,
+}
 
 impl<R, W> PluginInterfaceImpl<R, W> {
     pub(crate) fn new(
@@ -58,10 +70,16 @@ impl<R, W> PluginInterfaceImpl<R, W> {
         PluginInterfaceImpl {
             read: Mutex::new(ReadPart {
                 reader,
+                error: None,
+                responses: VecDeque::new(),
                 stream_buffers: StreamBuffers::default(),
+                interrupt_flags: StreamInterruptFlags::new(),
                 write_marker: PhantomData,
             }),
-            write: Mutex::new(WritePart(writer)),
+            write: Mutex::new(WritePart {
+                writer,
+                waiting_for_call_response: false,
+            }),
             context,
             next_stream_id: AtomicUsize::new(0),
         }
@@ -77,9 +95,16 @@ where
     type WritePart = WritePart<W>;
 
     fn lock_read(&self) -> Result<MutexGuard<ReadPart<R, W>>, ShellError> {
-        self.read.lock().map_err(|_| ShellError::NushellFailed {
+        let read = self.read.lock().map_err(|_| ShellError::NushellFailed {
             msg: "error in PluginInterface: read mutex poisoned due to panic".into(),
-        })
+        })?;
+
+        if let Some(ref err) = read.error {
+            // Propagate an error
+            Err((**err).clone())
+        } else {
+            Ok(read)
+        }
     }
 
     fn lock_write(&self) -> Result<MutexGuard<WritePart<W>>, ShellError> {
@@ -109,6 +134,10 @@ where
         &mut self.stream_buffers
     }
 
+    fn interrupt_flags(&mut self) -> &mut StreamInterruptFlags {
+        &mut self.interrupt_flags
+    }
+
     // Default message handler
     fn handle_message(
         &mut self,
@@ -116,9 +145,11 @@ where
         msg: PluginOutput,
     ) -> Result<(), ShellError> {
         match msg {
-            PluginOutput::CallResponse(_) => Err(ShellError::PluginFailedToDecode {
-                msg: "unexpected CallResponse in this context".into(),
-            }),
+            // Store an out of order call response
+            PluginOutput::CallResponse(response) => {
+                self.responses.push_back(response);
+                Ok(())
+            }
             // Handle out of order stream messages
             PluginOutput::Stream(stream_msg) => {
                 self.handle_out_of_order(stream_msg)
@@ -138,11 +169,11 @@ where
     type Message = PluginInput;
 
     fn write(&mut self, msg: Self::Message) -> Result<(), ShellError> {
-        self.0.write_input(&msg)
+        self.writer.write_input(&msg)
     }
 
     fn flush(&mut self) -> Result<(), ShellError> {
-        self.0.flush()
+        self.writer.flush()
     }
 }
 
@@ -150,7 +181,14 @@ where
 /// PluginInterface. As such, this trait must remain object safe.
 pub(crate) trait PluginInterfaceIo: StreamDataIo {
     fn context(&self) -> Option<&Arc<dyn PluginExecutionContext>>;
+
+    /// Propagate an error to future attempts to read from the interface.
+    fn set_read_failed(&self, err: ShellError);
+
+    /// Write a [PluginCall] to the plugin.
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError>;
+
+    /// Read the response to a [PluginCall].
     fn read_call_response(self: Arc<Self>) -> Result<PluginCallResponse, ShellError>;
 
     /// Write an [EngineCallResponse] to the engine call with the given `id`.
@@ -202,15 +240,28 @@ where
         self.context.as_ref()
     }
 
+    fn set_read_failed(&self, err: ShellError) {
+        // If we fail to unlock, it will cause an error somewhere anyway
+        if let Ok(mut guard) = self.read.lock() {
+            guard.error = Some(err.into());
+        }
+    }
+
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError> {
         let mut write = self.lock_write()?;
         log::trace!("Writing plugin call: {call:?}");
 
-        write.write(PluginInput::Call(call))?;
-        write.flush()?;
+        if !write.waiting_for_call_response {
+            write.write(PluginInput::Call(call))?;
+            write.flush()?;
 
-        log::trace!("Wrote plugin call");
-        Ok(())
+            log::trace!("Wrote plugin call");
+            Ok(())
+        } else {
+            Err(ShellError::NushellFailed {
+                msg: "Attempted to make another call to the plugin before it responded".into(),
+            })
+        }
     }
 
     fn read_call_response(self: Arc<Self>) -> Result<PluginCallResponse, ShellError> {
@@ -218,23 +269,35 @@ where
 
         loop {
             let mut read = self.lock_read()?;
-            match read.read()? {
-                Some(PluginOutput::CallResponse(response)) => {
-                    // Check the call input type to set the stream buffers up
-                    if let PluginCallResponse::PipelineData(header) = &response {
-                        read.stream_buffers.init_stream(header)?;
+            // Check if a call response was handled out of order
+            let response =
+                if let Some(response) = read.responses.pop_front() {
+                    response
+                } else {
+                    match read.read()? {
+                        Some(PluginOutput::CallResponse(response)) => response,
+                        // Handle some other message
+                        Some(other) => {
+                            read.handle_message(&self, other)?;
+                            continue;
+                        }
+                        // End of input
+                        None => {
+                            return Err(ShellError::PluginFailedToDecode {
+                                msg: "unexpected end of stream before receiving call response".into(),
+                            })
+                        }
                     }
-                    return Ok(response);
-                }
-                // Handle some other message
-                Some(other) => read.handle_message(&self, other)?,
-                // End of input
-                None => {
-                    return Err(ShellError::PluginFailedToDecode {
-                        msg: "unexpected end of stream before receiving call response".into(),
-                    })
-                }
+                };
+            // Check the call input type to set the stream buffers up
+            if let PluginCallResponse::PipelineData(header) = &response {
+                read.stream_buffers.init_stream(header)?;
             }
+            // Reset the flag so that another plugin call could be made later
+            drop(read);
+            self.lock_write()?.waiting_for_call_response = false;
+
+            return Ok(response);
         }
     }
 
@@ -474,6 +537,25 @@ impl PluginInterface {
         E: PluginEncoder + 'static,
     {
         PluginInterfaceImpl::new((reader, encoder.clone()), (writer, encoder), context).into()
+    }
+
+    /// Create a background reader to ensure that the stream is always being read from.
+    ///
+    /// This is necessary to ensure signals like interrupts are handled appropriately.
+    ///
+    /// If an error occurs while reading, all future read calls will return the same error.
+    pub(crate) fn start_background_reader(&self) -> std::thread::JoinHandle<()> {
+        // Automatically stop reading if the interface is dropped
+        let weak = Arc::downgrade(&self.io);
+        std::thread::spawn(move || {
+            while let Some(io) = weak.upgrade() {
+                match io.clone().read_any() {
+                    Ok(true) => (),
+                    Ok(false) => break, // end of input
+                    Err(err) => io.set_read_failed(err), // propagate error
+                }
+            }
+        })
     }
 
     /// Write a [PluginCall] to the plugin.

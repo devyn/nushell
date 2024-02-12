@@ -7,6 +7,8 @@ use crate::protocol::{
     StreamMessage, StreamData,
 };
 
+use super::{buffers::StreamBuffers, interrupt::{StreamInterruptFlags, InterruptHandle}};
+
 #[cfg(test)]
 mod tests;
 
@@ -21,6 +23,12 @@ pub(crate) use tests::{gen_stream_data_tests, StreamDataIoTestExt};
 /// This trait must be object safe. Rather than implementing this trait, implement
 /// [`StreamDataIoBase`] to have this trait automatically implemented.
 pub(crate) trait StreamDataIo: Send + Sync {
+    /// Read any value and handle it internally. This is used to ensure that the stream is always
+    /// being read from, even when there is no other reason to.
+    ///
+    /// Returns `Ok(true)` if a message was successfully read, or `Ok(false)` on end of input.
+    fn read_any(self: Arc<Self>) -> Result<bool, ShellError>;
+
     /// Read a value for a `ListStream`, returning `Ok(None)` at end of stream.
     ///
     /// Other streams will be transparently handled or stored for concurrent readers.
@@ -48,6 +56,9 @@ pub(crate) trait StreamDataIo: Send + Sync {
         id: StreamId,
         bytes: Option<Result<Vec<u8>, ShellError>>,
     ) -> Result<(), ShellError>;
+
+    /// Get a handle for finding out if a stream has been requested to be interrupted.
+    fn interrupt_handle(&self, id: StreamId) -> Result<InterruptHandle, ShellError>;
 }
 
 /// The base trait necessary to be implemented for [`StreamDataIo`] to work.
@@ -82,11 +93,20 @@ pub(crate) trait StreamDataRead {
     /// The [`StreamBuffers`] for storing out of order messages.
     fn stream_buffers(&mut self) -> &mut StreamBuffers;
 
-    /// Handle an out of order [`StreamMessage`]. The default implementation adds it to the
-    /// [`StreamBuffers`].
+    /// The [`StreamInterruptFlags`] for interrupting streams.
+    fn interrupt_flags(&mut self) -> &mut StreamInterruptFlags;
+
+    /// Handle an out of order [`StreamMessage`].
+    ///
+    /// The default implementation adds data to the [`StreamBuffers`], and interrupts via
+    /// [`StreamInterruptFlags`]
     fn handle_out_of_order(&mut self, msg: StreamMessage) -> Result<(), ShellError> {
         match msg {
             StreamMessage::Data(id, data) => self.stream_buffers().skip(id, data),
+            StreamMessage::Interrupt(id) => {
+                self.interrupt_flags().interrupt(id);
+                Ok(())
+            }
         }
     }
 
@@ -157,6 +177,9 @@ macro_rules! read_stream_data_for {
                     }
                 }
             }
+            // If we failed to get what we were looking for, yield to another thread
+            drop(read);
+            std::thread::yield_now();
         }
     }};
 }
@@ -184,6 +207,18 @@ where
         Error = <T::ReadPart as StreamDataRead>::Message,
     >,
 {
+    fn read_any(self: Arc<Self>) -> Result<bool, ShellError> {
+        let mut read = self.lock_read()?;
+        if let Some(msg) = read.read()? {
+            read.handle_message(&self, msg)?;
+            drop(read);
+            std::thread::yield_now();
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     fn read_list(self: Arc<Self>, id: StreamId) -> Result<Option<Value>, ShellError> {
         Ok(read_stream_data_for!(
             self,
@@ -199,14 +234,14 @@ where
     }
 
     fn drop_list(&self, id: StreamId) -> Result<(), ShellError> {
-        let mut read = self.lock_read()?;
-        read.stream_buffers().get(id)?.drop_list();
+        self.lock_read()?.stream_buffers().get(id)?.drop_list();
+        self.lock_write()?.write(StreamMessage::Interrupt(id).into())?;
         Ok(())
     }
 
     fn drop_raw(&self, id: StreamId) -> Result<(), ShellError> {
-        let mut read = self.lock_read()?;
-        read.stream_buffers().get(id)?.drop_raw();
+        self.lock_read()?.stream_buffers().get(id)?.drop_raw();
+        self.lock_write()?.write(StreamMessage::Interrupt(id).into())?;
         Ok(())
     }
 
@@ -221,9 +256,11 @@ where
     ) -> Result<(), ShellError> {
         write_stream_data_for!(self, id, Raw(bytes))
     }
-}
 
-use super::buffers::StreamBuffers;
+    fn interrupt_handle(&self, id: StreamId) -> Result<InterruptHandle, ShellError> {
+        Ok(self.lock_read()?.interrupt_flags().register(id))
+    }
+}
 
 /// Extension trait for additional methods that can be used on any [StreamDataIo]
 pub(crate) trait StreamDataIoExt: StreamDataIo {
@@ -269,15 +306,23 @@ fn write_full_list_stream(
     info: &ListStreamInfo,
     list_stream: ListStream,
 ) -> Result<(), ShellError> {
+    // Can be signalled by StreamMessage::Interrupt
+    let handle = io.interrupt_handle(info.id)?;
+
     // Consume the stream and write it via StreamDataIo.
     for value in list_stream {
-        io.write_list(
-            info.id,
-            Some(match value {
-                Value::LazyRecord { val, .. } => val.collect()?,
-                _ => value,
-            }),
-        )?;
+        if handle.is_interrupted() {
+            log::trace!("Stream {} interrupted", info.id);
+            break;
+        } else {
+            io.write_list(
+                info.id,
+                Some(match value {
+                    Value::LazyRecord { val, .. } => val.collect()?,
+                    _ => value,
+                }),
+            )?;
+        }
     }
     // End of stream
     io.write_list(info.id, None)
@@ -289,8 +334,16 @@ fn write_full_raw_stream(
     info: &RawStreamInfo,
     raw: RawStream,
 ) -> Result<(), ShellError> {
+    // Can be signalled by StreamMessage::Interrupt
+    let handle = io.interrupt_handle(info.id)?;
+
     for bytes in raw.stream {
-        io.write_raw(info.id, Some(bytes))?;
+        if handle.is_interrupted() {
+            log::trace!("Stream {} interrupted", info.id);
+            break;
+        } else {
+            io.write_raw(info.id, Some(bytes))?;
+        }
     }
     io.write_raw(info.id, None)
 }

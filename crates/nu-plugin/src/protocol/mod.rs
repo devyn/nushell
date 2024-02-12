@@ -127,6 +127,11 @@ pub enum StreamData {
 pub enum StreamMessage {
     /// Append data to the given [`StreamId`].
     Data(StreamId, StreamData),
+    /// Interrupt the given [`StreamId`].
+    ///
+    /// The stream should stop producing new messages and send `None` data to end it as soon as
+    /// possible.
+    Interrupt(StreamId),
 }
 
 /// An error message with debugging information that can be passed to Nushell from the plugin

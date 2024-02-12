@@ -141,7 +141,13 @@ impl Command for PluginDeclaration {
         ));
 
         let interface = make_plugin_interface(&mut child, Some(context))?;
-        let interface_clone = interface.clone();
+
+        // Spawn a thread just to wait for the child.
+        std::thread::spawn(move || child.wait());
+
+        // Ensure the stream is always being read from so that nothing is blocked and events are
+        // responded to properly.
+        interface.start_background_reader();
 
         let (data_header, data_rest) = interface.make_pipeline_data_header(input)?;
 
@@ -152,20 +158,10 @@ impl Command for PluginDeclaration {
             config,
         });
 
-        // Write the call and stream(s) on another thread. If we don't start reading immediately,
-        // we could block the child from being able to read stdin because it's trying to write
-        // something on stdout and its buffer is full.
-        std::thread::spawn(move || {
-            interface_clone.write_call(plugin_call)?;
-            if let Some((header, data)) = data_rest {
-                interface_clone.write_pipeline_data_stream(&header, data)
-            } else {
-                Ok(())
-            }
-        });
-
-        // Spawn a thread just to wait for the child.
-        std::thread::spawn(move || child.wait());
+        interface.write_call(plugin_call)?;
+        if let Some((header, data)) = data_rest {
+            interface.write_pipeline_data_stream(&header, data)?;
+        }
 
         // Return the pipeline data from the response
         let response = interface.read_call_response()?;

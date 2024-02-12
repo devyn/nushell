@@ -3,7 +3,7 @@
 use std::{
     io::{BufRead, Write},
     marker::PhantomData,
-    sync::{atomic::AtomicUsize, Arc, Mutex, MutexGuard},
+    sync::{atomic::AtomicUsize, Arc, Mutex, MutexGuard}, collections::VecDeque,
 };
 
 use nu_protocol::{engine::Closure, Config, CustomValue, PipelineData, ShellError, Spanned, Value};
@@ -23,7 +23,7 @@ use super::{
     stream_data_io::{
         StreamDataIo, StreamDataIoBase, StreamDataIoExt, StreamDataRead, StreamDataWrite,
     },
-    PluginRead, PluginWrite,
+    PluginRead, PluginWrite, interrupt::StreamInterruptFlags,
 };
 
 #[cfg(test)]
@@ -43,8 +43,14 @@ pub(crate) struct EngineInterfaceImpl<R, W> {
 #[derive(Debug)]
 pub(crate) struct ReadPart<R, W> {
     reader: R,
+    /// Always return this read error if set, in order to propagate it from somewhere it won't be
+    error: Option<Box<ShellError>>,
+    /// Stores [PluginCall]s that can't be handled immediately
+    calls: VecDeque<PluginCall>,
     /// Stores stream messages that can't be handled immediately
     stream_buffers: StreamBuffers,
+    /// Stream interruption state
+    interrupt_flags: StreamInterruptFlags,
     /// Lists engine calls that are expecting a response. If a response is received out of order
     /// it can be placed in here for the waiting thread to pick up later
     pending_engine_calls: Vec<(EngineCallId, Option<EngineCallResponse>)>,
@@ -60,7 +66,10 @@ impl<R, W> EngineInterfaceImpl<R, W> {
         EngineInterfaceImpl {
             read: Mutex::new(ReadPart {
                 reader,
+                error: None,
+                calls: VecDeque::new(),
                 stream_buffers: StreamBuffers::default(),
+                interrupt_flags: StreamInterruptFlags::new(),
                 pending_engine_calls: vec![],
                 write_marker: PhantomData,
             }),
@@ -80,9 +89,16 @@ where
     type WritePart = WritePart<W>;
 
     fn lock_read(&self) -> Result<MutexGuard<ReadPart<R, W>>, ShellError> {
-        self.read.lock().map_err(|_| ShellError::NushellFailed {
+        let read = self.read.lock().map_err(|_| ShellError::NushellFailed {
             msg: "error in EngineInterface: read mutex poisoned due to panic".into(),
-        })
+        })?;
+
+        if let Some(ref err) = read.error {
+            // Propagate an error
+            Err((**err).clone())
+        } else {
+            Ok(read)
+        }
     }
 
     fn lock_write(&self) -> Result<MutexGuard<WritePart<W>>, ShellError> {
@@ -108,6 +124,10 @@ where
         self.reader.read_input()
     }
 
+    fn interrupt_flags(&mut self) -> &mut StreamInterruptFlags {
+        &mut self.interrupt_flags
+    }
+
     fn stream_buffers(&mut self) -> &mut StreamBuffers {
         &mut self.stream_buffers
     }
@@ -119,9 +139,11 @@ where
         msg: PluginInput,
     ) -> Result<(), ShellError> {
         match msg {
-            PluginInput::Call(_) => Err(ShellError::PluginFailedToDecode {
-                msg: "unexpected Call in this context - possibly nested".into(),
-            }),
+            // Store an out of order call
+            PluginInput::Call(call) => {
+                self.calls.push_back(call);
+                Ok(())
+            }
             // Handle out of order stream messages
             PluginInput::Stream(stream_msg) => {
                 self.handle_out_of_order(stream_msg)
@@ -174,7 +196,13 @@ where
 /// The trait indirection is so that we can hide the types with a trait object inside
 /// EngineInterface. As such, this trait must remain object safe.
 pub(crate) trait EngineInterfaceIo: StreamDataIo {
+    /// Propagate an error to future attempts to read from the interface.
+    fn set_read_failed(&self, err: ShellError);
+
+    /// Read a [PluginCall] from the engine.
     fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError>;
+
+    /// Write a response to a [PluginCall].
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError>;
 
     /// Write an [EngineCall] and return the [EngineCallId] it was registered with.
@@ -216,22 +244,37 @@ where
     R: PluginRead + 'static,
     W: PluginWrite + 'static,
 {
+    fn set_read_failed(&self, err: ShellError) {
+        // If we fail to unlock, it will cause an error somewhere anyway
+        if let Ok(mut guard) = self.read.lock() {
+            guard.error = Some(err.into());
+        }
+    }
+
     fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError> {
         loop {
             let mut read = self.lock_read()?;
-            match read.read()? {
-                Some(PluginInput::Call(call)) => {
-                    // Check the call input type to set the stream buffers up
-                    if let PluginCall::Run(CallInfo { ref input, .. }) = call {
-                        read.stream_buffers.init_stream(input)?;
+            // Check if a call was handled out of order
+            let call =
+                if let Some(call) = read.calls.pop_front() {
+                    call
+                } else {
+                    match read.read()? {
+                        Some(PluginInput::Call(call)) => call,
+                        // Handle some other message
+                        Some(other) => {
+                            read.handle_message(&self, other)?;
+                            continue;
+                        }
+                        // End of input
+                        None => return Ok(None),
                     }
-                    return Ok(Some(call));
-                }
-                // Handle some other message
-                Some(other) => read.handle_message(&self, other)?,
-                // End of input
-                None => return Ok(None),
+                };
+            // Check the call input type to set the stream buffers up
+            if let PluginCall::Run(CallInfo { ref input, .. }) = call {
+                read.stream_buffers.init_stream(input)?;
             }
+            return Ok(Some(call));
         }
     }
 
@@ -445,6 +488,25 @@ impl EngineInterface {
         E: PluginEncoder + 'static,
     {
         EngineInterfaceImpl::new((reader, encoder.clone()), (writer, encoder)).into()
+    }
+
+    /// Create a background reader to ensure that the stream is always being read from.
+    ///
+    /// This is necessary to ensure signals like interrupts are handled appropriately.
+    ///
+    /// If an error occurs while reading, all future read calls will return the same error.
+    pub(crate) fn start_background_reader(&self) -> std::thread::JoinHandle<()> {
+        // Automatically stop reading if the interface is dropped
+        let weak = Arc::downgrade(&self.io);
+        std::thread::spawn(move || {
+            while let Some(io) = weak.upgrade() {
+                match io.clone().read_any() {
+                    Ok(true) => (),
+                    Ok(false) => break, // end of input
+                    Err(err) => io.set_read_failed(err), // propagate error
+                }
+            }
+        })
     }
 
     /// Read a plugin call from the engine
