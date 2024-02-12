@@ -9,9 +9,9 @@ use crate::plugin::interface::stream_data_io::{
 use crate::plugin::interface::test_util::TestCase;
 use crate::protocol::{
     CallInfo, EvaluatedCall, ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginCall,
-    PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamId,
+    PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamId, StreamMessage, StreamData,
+    PluginCallResponse,
 };
-use crate::{PluginCallResponse, StreamData};
 
 use super::EngineInterface;
 
@@ -84,7 +84,7 @@ fn read_call_collapse_custom_value() {
 #[test]
 fn read_call_unexpected_stream_data() {
     let test = TestCase::new();
-    test.add_input(PluginInput::StreamData(0, StreamData::List(None)));
+    test.add_input(StreamMessage::Data(0, StreamData::List(None)));
     test.add_input(PluginInput::Call(PluginCall::Signature));
 
     test.engine_interface()
@@ -95,7 +95,7 @@ fn read_call_unexpected_stream_data() {
 #[test]
 fn read_call_ignore_dropped_stream_data() {
     let test = TestCase::new();
-    test.add_input(PluginInput::StreamData(0, StreamData::List(None)));
+    test.add_input(StreamMessage::Data(0, StreamData::List(None)));
     test.add_input(PluginInput::Call(PluginCall::Signature));
 
     let interface = test.engine_interface_impl();
@@ -144,7 +144,7 @@ fn validate_stream_data_acceptance(header: PipelineDataHeader, ids: &[(StreamId,
 
     for (id, expect_type) in ids.iter().cloned() {
         test.clear_input();
-        test.add_input(PluginInput::StreamData(
+        test.add_input(StreamMessage::Data(
             id,
             StreamData::List(Some(Value::test_bool(true))),
         ));
@@ -161,7 +161,7 @@ fn validate_stream_data_acceptance(header: PipelineDataHeader, ids: &[(StreamId,
         }
 
         test.clear_input();
-        test.add_input(PluginInput::StreamData(
+        test.add_input(StreamMessage::Data(
             id,
             StreamData::Raw(Some(Ok(vec![]))),
         ));
@@ -470,13 +470,13 @@ fn make_pipeline_data_list_stream() {
     let values = [Value::test_int(4), Value::test_string("hello")];
 
     for value in &values {
-        test.add_input(PluginInput::StreamData(
+        test.add_input(StreamMessage::Data(
             0,
             StreamData::List(Some(value.clone())),
         ));
     }
     // end
-    test.add_input(PluginInput::StreamData(0, StreamData::List(None)));
+    test.add_input(StreamMessage::Data(0, StreamData::List(None)));
 
     let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 0 });
 
@@ -514,7 +514,7 @@ fn make_pipeline_data_external_stream() {
     ];
 
     for (id, data) in stream_data {
-        test.add_input(PluginInput::StreamData(id, data));
+        test.add_input(StreamMessage::Data(id, data));
     }
 
     let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
@@ -599,7 +599,7 @@ fn make_pipeline_data_external_stream_error() {
     ];
 
     for (id, data) in stream_data {
-        test.add_input(PluginInput::StreamData(id, data));
+        test.add_input(StreamMessage::Data(id, data));
     }
 
     // Still enable the other streams, to ensure ignoring the other data works
@@ -727,12 +727,12 @@ fn write_pipeline_data_response_list_stream() {
     // Followed by each stream value...
     for (expected_value, output) in values.into_iter().zip(test.written_outputs()) {
         match output {
-            PluginOutput::StreamData(stream_id, StreamData::List(Some(read_value)))
+            PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::List(Some(read_value))))
                 if id == stream_id =>
             {
                 assert_eq!(expected_value, read_value)
             }
-            PluginOutput::StreamData(stream_id, StreamData::List(None)) if id == stream_id => {
+            PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::List(None))) if id == stream_id => {
                 panic!("unexpected early end of stream")
             }
             other => panic!("unexpected other output: {other:?}"),
@@ -741,7 +741,7 @@ fn write_pipeline_data_response_list_stream() {
 
     // Followed by List(None) to end the stream
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::List(None))) if id == stream_id => (),
+        Some(PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::List(None)))) if id == stream_id => (),
         Some(other) => panic!("expected list end, unexpected output: {other:?}"),
         None => panic!("missing list stream end signal"),
     }
@@ -810,7 +810,7 @@ fn write_pipeline_data_response_external_stream_stdout_only() {
     // Then, just check the outputs. They should be in exactly the same order with nothing extra
     for expected_chunk in stdout_chunks {
         match test.next_written_output() {
-            Some(PluginOutput::StreamData(stream_id, StreamData::Raw(option)))
+            Some(PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::Raw(option))))
                 if id == stream_id =>
             {
                 let read_chunk = option
@@ -826,7 +826,7 @@ fn write_pipeline_data_response_external_stream_stdout_only() {
 
     // And there should be an end of stream signal (`Ok(None)`)
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::Raw(option))) if id == stream_id => {
+        Some(PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::Raw(option)))) if id == stream_id => {
             match option {
                 Some(Ok(data)) => panic!("unexpected extra data on stdout stream: {data:?}"),
                 Some(Err(err)) => panic!("unexpected error at end of stdout stream: {err}"),
@@ -894,7 +894,7 @@ fn write_pipeline_data_response_external_stream_stdout_err() {
 
     // Check error
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::Raw(Some(result))))
+        Some(PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::Raw(Some(result)))))
             if id == stream_id =>
         {
             match result {
@@ -917,7 +917,7 @@ fn write_pipeline_data_response_external_stream_stdout_err() {
 
     // Check end of stream
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::Raw(None))) if id == stream_id => (),
+        Some(PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::Raw(None)))) if id == stream_id => (),
         Some(other) => panic!("unexpected output: {other:?}"),
         None => panic!("didn't write the exit code end of stream signal"),
     }
@@ -960,7 +960,7 @@ fn write_pipeline_data_response_external_stream_exit_code_only() {
 
     // Check exit code value
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::List(Some(value))))
+        Some(PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::List(Some(value)))))
             if id == stream_id =>
         {
             assert_eq!(Value::test_int(0), value);
@@ -971,7 +971,7 @@ fn write_pipeline_data_response_external_stream_exit_code_only() {
 
     // Check end of stream
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::List(None))) if id == stream_id => (),
+        Some(PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::List(None)))) if id == stream_id => (),
         Some(other) => panic!("unexpected output: {other:?}"),
         None => panic!("didn't write the exit code end of stream signal"),
     }
@@ -1078,14 +1078,14 @@ fn write_pipeline_data_response_external_stream_full() {
 
     for output in test.written_outputs() {
         match output {
-            PluginOutput::StreamData(stream_id, StreamData::List(value)) => {
+            PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::List(value))) => {
                 if stream_id == exit {
                     assert_eq!(exit_code_iter.next(), value);
                 } else {
                     panic!("received unexpected list data on stream {stream_id}: {value:?}");
                 }
             }
-            PluginOutput::StreamData(stream_id, StreamData::Raw(option)) => {
+            PluginOutput::Stream(StreamMessage::Data(stream_id, StreamData::Raw(option))) => {
                 if stream_id == out {
                     let received = option
                         .transpose()

@@ -2,12 +2,9 @@ use std::sync::{Arc, MutexGuard};
 
 use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Value};
 
-use crate::{
-    protocol::{
-        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, RawStreamInfo, StreamId,
-        StreamMessage,
-    },
-    StreamData,
+use crate::protocol::{
+    ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, RawStreamInfo, StreamId,
+    StreamMessage, StreamData,
 };
 
 #[cfg(test)]

@@ -41,11 +41,11 @@ macro_rules! gen_stream_data_tests {
             use $crate::plugin::interface::stream_data_io::*;
 
             let $test = TestCase::new();
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 0,
                 StreamData::List(Some(Value::test_bool(true))),
             ));
-            $test.$add_read($read_type::StreamData(0, StreamData::List(None)));
+            $test.$add_read(StreamMessage::Data(0, StreamData::List(None)));
 
             let interface = $gen_interface_impl;
             interface.def_list(0);
@@ -70,16 +70,16 @@ macro_rules! gen_stream_data_tests {
             use $crate::plugin::interface::stream_data_io::*;
 
             let $test = TestCase::new();
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 9,
                 StreamData::List(Some(Value::test_bool(true))),
             ));
-            $test.$add_read($read_type::StreamData(9, StreamData::List(None)));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(9, StreamData::List(None)));
+            $test.$add_read(StreamMessage::Data(
                 7,
                 StreamData::List(Some(Value::test_int(10))),
             ));
-            $test.$add_read($read_type::StreamData(7, StreamData::List(None)));
+            $test.$add_read(StreamMessage::Data(7, StreamData::List(None)));
 
             let interface = $gen_interface_impl;
             interface.def_list(7);
@@ -115,24 +115,24 @@ macro_rules! gen_stream_data_tests {
             use $crate::plugin::interface::stream_data_io::*;
 
             let $test = TestCase::new();
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 82,
                 StreamData::List(Some(Value::test_int(82))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 48,
                 StreamData::List(Some(Value::test_int(48))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 82,
                 StreamData::List(Some(Value::test_int(89))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 48,
                 StreamData::List(Some(Value::test_int(10))),
             ));
-            $test.$add_read($read_type::StreamData(48, StreamData::List(None)));
-            $test.$add_read($read_type::StreamData(82, StreamData::List(None)));
+            $test.$add_read(StreamMessage::Data(48, StreamData::List(None)));
+            $test.$add_read(StreamMessage::Data(82, StreamData::List(None)));
 
             let interface = $gen_interface_impl;
             interface.def_list(48);
@@ -166,19 +166,19 @@ macro_rules! gen_stream_data_tests {
             use $crate::plugin::interface::stream_data_io::*;
 
             let $test = TestCase::new();
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 0,
                 StreamData::Raw(Some(Ok(vec![67]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 1,
                 StreamData::Raw(Some(Ok(vec![68]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 2,
                 StreamData::List(Some(Value::test_int(1))),
             ));
-            $test.$add_read($read_type::StreamData(2, StreamData::List(None)));
+            $test.$add_read(StreamMessage::Data(2, StreamData::List(None)));
 
             let interface = $gen_interface_impl;
             interface.def_external(0, 1, 2);
@@ -219,15 +219,15 @@ macro_rules! gen_stream_data_tests {
             use $crate::plugin::interface::stream_data_io::*;
 
             let $test = TestCase::new();
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 1,
                 StreamData::Raw(Some(Ok(vec![43]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 2,
                 StreamData::List(Some(Value::test_int(42))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 0,
                 StreamData::Raw(Some(Ok(vec![70]))),
             ));
@@ -256,27 +256,27 @@ macro_rules! gen_stream_data_tests {
             use $crate::plugin::interface::stream_data_io::*;
 
             let $test = TestCase::new();
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 0,
                 StreamData::Raw(Some(Ok(vec![1]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 0,
                 StreamData::Raw(Some(Ok(vec![2]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 0,
                 StreamData::Raw(Some(Ok(vec![3]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 1,
                 StreamData::Raw(Some(Ok(vec![42]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 0,
                 StreamData::Raw(Some(Ok(vec![4]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 1,
                 StreamData::Raw(Some(Ok(vec![43]))),
             ));
@@ -311,19 +311,19 @@ macro_rules! gen_stream_data_tests {
             use $crate::plugin::interface::stream_data_io::*;
 
             let $test = TestCase::new();
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 1,
                 StreamData::Raw(Some(Ok(vec![2]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 2,
                 StreamData::List(Some(Value::test_int(1))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 1,
                 StreamData::Raw(Some(Ok(vec![3]))),
             ));
-            $test.$add_read($read_type::StreamData(
+            $test.$add_read(StreamMessage::Data(
                 0,
                 StreamData::Raw(Some(Ok(vec![42]))),
             ));
@@ -407,7 +407,7 @@ macro_rules! gen_stream_data_tests {
             }
             for item in data.iter() {
                 match $test.$get_write() {
-                    Some($write_type::StreamData(0, StreamData::List(read_item))) => {
+                    Some($write_type::Stream(StreamMessage::Data(0, StreamData::List(read_item)))) => {
                         assert_eq!(item, &read_item)
                     }
                     Some(other) => panic!("got other data: {other:?}"),
@@ -436,7 +436,7 @@ macro_rules! gen_stream_data_tests {
             }
             for item in data.iter() {
                 match $test.$get_write() {
-                    Some($write_type::StreamData(0, StreamData::Raw(read_item))) => {
+                    Some($write_type::Stream(StreamMessage::Data(0, StreamData::Raw(read_item)))) => {
                         match (item, &read_item) {
                             (Some(Ok(a)), Some(Ok(b))) => assert_eq!(a, b),
                             (Some(Err(a)), Some(Err(b))) => {

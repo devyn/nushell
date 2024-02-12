@@ -92,7 +92,7 @@ pub enum PluginCall {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PluginInput {
     Call(PluginCall),
-    StreamData(StreamId, StreamData),
+    Stream(StreamMessage),
     EngineCallResponse(EngineCallId, EngineCallResponse),
 }
 
@@ -101,38 +101,30 @@ impl TryFrom<PluginInput> for StreamMessage {
 
     fn try_from(msg: PluginInput) -> Result<StreamMessage, PluginInput> {
         match msg {
-            PluginInput::StreamData(id, data) => Ok(StreamMessage::Data(id, data)),
+            PluginInput::Stream(stream_msg) => Ok(stream_msg),
             _ => Err(msg),
         }
     }
 }
 
 impl From<StreamMessage> for PluginInput {
-    fn from(msg: StreamMessage) -> PluginInput {
-        match msg {
-            StreamMessage::Data(id, data) => PluginInput::StreamData(id, data),
-        }
+    fn from(stream_msg: StreamMessage) -> PluginInput {
+        PluginInput::Stream(stream_msg)
     }
 }
 
 /// A single item of stream data for a stream.
 ///
 /// A `None` value ends the stream.
-///
-/// Note: exported for internal use, not public.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[doc(hidden)]
 pub enum StreamData {
     List(Option<Value>),
     Raw(Option<Result<Vec<u8>, ShellError>>),
 }
 
 /// A stream control or data message.
-///
-/// This is generally converted from/to [`PluginInput`] or [`PluginOutput`], so that the related
-/// messages can be more generically handled
-#[derive(Debug, Clone)]
-pub(crate) enum StreamMessage {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum StreamMessage {
     /// Append data to the given [`StreamId`].
     Data(StreamId, StreamData),
 }
@@ -251,7 +243,7 @@ impl PluginCallResponse {
 #[doc(hidden)]
 pub enum PluginOutput {
     CallResponse(PluginCallResponse),
-    StreamData(StreamId, StreamData),
+    Stream(StreamMessage),
     EngineCall(EngineCallId, EngineCall),
 }
 
@@ -260,17 +252,15 @@ impl TryFrom<PluginOutput> for StreamMessage {
 
     fn try_from(msg: PluginOutput) -> Result<StreamMessage, PluginOutput> {
         match msg {
-            PluginOutput::StreamData(id, data) => Ok(StreamMessage::Data(id, data)),
+            PluginOutput::Stream(stream_msg) => Ok(stream_msg),
             _ => Err(msg),
         }
     }
 }
 
 impl From<StreamMessage> for PluginOutput {
-    fn from(msg: StreamMessage) -> PluginOutput {
-        match msg {
-            StreamMessage::Data(id, data) => PluginOutput::StreamData(id, data),
-        }
+    fn from(stream_msg: StreamMessage) -> PluginOutput {
+        PluginOutput::Stream(stream_msg)
     }
 }
 

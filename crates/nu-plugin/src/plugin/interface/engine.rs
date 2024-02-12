@@ -13,7 +13,7 @@ use crate::{
     protocol::{
         CallInfo, EngineCall, EngineCallId, EngineCallResponse, ExternalStreamInfo, ListStreamInfo,
         PipelineDataHeader, PluginCall, PluginCallResponse, PluginData, PluginInput, PluginOutput,
-        RawStreamInfo, StreamId, StreamMessage,
+        RawStreamInfo, StreamId,
     },
 };
 
@@ -123,8 +123,8 @@ where
                 msg: "unexpected Call in this context - possibly nested".into(),
             }),
             // Handle out of order stream messages
-            PluginInput::StreamData(id, data) => {
-                self.handle_out_of_order(StreamMessage::Data(id, data))
+            PluginInput::Stream(stream_msg) => {
+                self.handle_out_of_order(stream_msg)
             }
             // Store engine call responses in pending_engine_calls. If the call response will
             // produce a stream, that also must be initialized now so we can store those stream

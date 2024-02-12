@@ -102,13 +102,13 @@ impl TestCase {
     }
 
     /// Add input that will be read by the interface.
-    pub(crate) fn add_input(&self, input: PluginInput) {
-        self.r#in.lock().unwrap().inputs.push_back(input);
+    pub(crate) fn add_input(&self, input: impl Into<PluginInput>) {
+        self.r#in.lock().unwrap().inputs.push_back(input.into());
     }
 
     /// Add output that will be read by the interface.
-    pub(crate) fn add_output(&self, output: PluginOutput) {
-        self.r#in.lock().unwrap().outputs.push_back(output);
+    pub(crate) fn add_output(&self, output: impl Into<PluginOutput>) {
+        self.r#in.lock().unwrap().outputs.push_back(output.into());
     }
 
     /// Add multiple inputs that will be read by the interface.

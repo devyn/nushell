@@ -11,7 +11,7 @@ use crate::plugin::interface::{
 use crate::protocol::{
     CallInfo, ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginCall,
     PluginCallResponse, PluginCustomValue, PluginData, PluginInput, PluginOutput, RawStreamInfo,
-    StreamData, StreamId,
+    StreamData, StreamId, StreamMessage,
 };
 
 use super::PluginInterfaceIo;
@@ -253,7 +253,7 @@ fn read_call_response_external_stream() {
 #[test]
 fn read_call_response_unexpected_stream_data() {
     let test = TestCase::new();
-    test.add_output(PluginOutput::StreamData(0, StreamData::List(None)));
+    test.add_output(StreamMessage::Data(0, StreamData::List(None)));
     test.add_output(PluginOutput::CallResponse(
         PluginCallResponse::PipelineData(PipelineDataHeader::Empty),
     ));
@@ -282,7 +282,7 @@ fn validate_stream_data_acceptance(header: PipelineDataHeader, ids: &[(StreamId,
 
     for (id, expect_type) in ids.iter().cloned() {
         test.clear_output();
-        test.add_output(PluginOutput::StreamData(
+        test.add_output(StreamMessage::Data(
             id,
             StreamData::List(Some(Value::test_bool(true))),
         ));
@@ -299,7 +299,7 @@ fn validate_stream_data_acceptance(header: PipelineDataHeader, ids: &[(StreamId,
         }
 
         test.clear_output();
-        test.add_output(PluginOutput::StreamData(
+        test.add_output(StreamMessage::Data(
             id,
             StreamData::Raw(Some(Ok(vec![]))),
         ));
@@ -560,13 +560,13 @@ fn make_pipeline_data_list_stream() {
     let values = [Value::test_int(4), Value::test_string("hello")];
 
     for value in &values {
-        test.add_output(PluginOutput::StreamData(
+        test.add_output(StreamMessage::Data(
             0,
             StreamData::List(Some(value.clone())),
         ));
     }
     // end
-    test.add_output(PluginOutput::StreamData(0, StreamData::List(None)));
+    test.add_output(StreamMessage::Data(0, StreamData::List(None)));
 
     let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 0 });
 
@@ -604,7 +604,7 @@ fn make_pipeline_data_external_stream() {
     ];
 
     for (id, data) in stream_data {
-        test.add_output(PluginOutput::StreamData(id, data));
+        test.add_output(StreamMessage::Data(id, data));
     }
 
     let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
@@ -689,7 +689,7 @@ fn make_pipeline_data_external_stream_error() {
     ];
 
     for (id, data) in stream_data {
-        test.add_output(PluginOutput::StreamData(id, data));
+        test.add_output(StreamMessage::Data(id, data));
     }
 
     // Still enable the other streams, to ensure ignoring the other data works

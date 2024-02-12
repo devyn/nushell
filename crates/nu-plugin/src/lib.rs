@@ -57,4 +57,4 @@ pub use serializers::{json::JsonSerializer, msgpack::MsgPackSerializer, Encoding
 
 // Used by external benchmarks.
 #[doc(hidden)]
-pub use protocol::{PluginCallResponse, PluginOutput, StreamData};
+pub use protocol::{PluginCallResponse, PluginOutput};

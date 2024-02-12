@@ -13,7 +13,7 @@ use crate::{
     protocol::{
         EngineCall, EngineCallId, EngineCallResponse, ExternalStreamInfo, ListStreamInfo,
         PipelineDataHeader, PluginCall, PluginCallResponse, PluginCustomValue, PluginData,
-        PluginInput, PluginOutput, RawStreamInfo, StreamId, StreamMessage,
+        PluginInput, PluginOutput, RawStreamInfo, StreamId,
     },
 };
 
@@ -120,8 +120,8 @@ where
                 msg: "unexpected CallResponse in this context".into(),
             }),
             // Handle out of order stream messages
-            PluginOutput::StreamData(id, data) => {
-                self.handle_out_of_order(StreamMessage::Data(id, data))
+            PluginOutput::Stream(stream_msg) => {
+                self.handle_out_of_order(stream_msg)
             }
             // Execute an engine call during plugin execution
             PluginOutput::EngineCall(id, engine_call) => {

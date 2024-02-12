@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use nu_protocol::{ShellError, Span, Value};
 
-use crate::{
-    protocol::{ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginData, RawStreamInfo},
-    StreamData,
-};
+use crate::protocol::{ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginData, RawStreamInfo, StreamData};
 
 use super::{StreamBuffer, StreamBuffers, TypedStreamBuffer};
 

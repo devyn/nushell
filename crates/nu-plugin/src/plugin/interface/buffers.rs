@@ -2,10 +2,7 @@ use std::collections::VecDeque;
 
 use nu_protocol::{ShellError, Value};
 
-use crate::{
-    protocol::{PipelineDataHeader, StreamId},
-    StreamData,
-};
+use crate::protocol::{PipelineDataHeader, StreamId, StreamData};
 
 #[cfg(test)]
 mod tests;
