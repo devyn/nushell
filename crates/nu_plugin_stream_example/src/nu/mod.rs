@@ -1,5 +1,5 @@
 use crate::Example;
-use nu_plugin::{EvaluatedCall, LabeledError, StreamingPlugin, EngineInterface};
+use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, StreamingPlugin};
 use nu_protocol::{
     Category, PipelineData, PluginExample, PluginSignature, Span, SyntaxShape, Type, Value,
 };
@@ -61,8 +61,11 @@ impl StreamingPlugin for Example {
                 .usage("Example execution of a closure with a stream")
                 .extra_usage("Prints each value the closure returns to stderr")
                 .input_output_type(Type::ListStream, Type::Nothing)
-                .required("closure", SyntaxShape::Closure(Some(vec![SyntaxShape::Any])),
-                    "The closure to run for each input value")
+                .required(
+                    "closure",
+                    SyntaxShape::Closure(Some(vec![SyntaxShape::Any])),
+                    "The closure to run for each input value",
+                )
                 .plugin_examples(vec![PluginExample {
                     example: "ls | get name | stream_example for-each { |f| ^file $f }".into(),
                     description: "example with an external command".into(),

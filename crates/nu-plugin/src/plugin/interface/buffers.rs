@@ -360,12 +360,10 @@ impl<T> StreamBuffer<T> {
     /// of stream, or an error if this buffer is either `NotPresent`, or `Dropped`.
     pub fn pop_front(&mut self) -> Result<Option<Option<T>>, ShellError> {
         match self {
-            StreamBuffer::Present { queue, ended } => {
-                Ok(queue
-                    .pop_front()
-                    .map(Some)
-                    .or_else(|| if *ended { Some(None) } else { None }))
-            }
+            StreamBuffer::Present { queue, ended } => Ok(queue
+                .pop_front()
+                .map(Some)
+                .or_else(|| if *ended { Some(None) } else { None })),
 
             StreamBuffer::NotPresent => Err(ShellError::PluginFailedToDecode {
                 msg: "Tried to read from a stream that is not present".into(),

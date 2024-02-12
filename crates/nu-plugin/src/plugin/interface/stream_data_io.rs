@@ -2,7 +2,10 @@ use std::sync::{Arc, MutexGuard};
 
 use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Value};
 
-use crate::{protocol::{PipelineDataHeader, StreamId, StreamMessage}, StreamData};
+use crate::{
+    protocol::{PipelineDataHeader, StreamId, StreamMessage},
+    StreamData,
+};
 
 #[cfg(test)]
 mod tests;
@@ -87,7 +90,7 @@ pub(crate) trait StreamDataIo: Send + Sync {
 /// An implementor is generally divided into a read part and a write part, both behind separate
 /// locks
 pub(crate) trait StreamDataIoBase: Send + Sync {
-    type ReadPart: StreamDataRead<Base=Self>;
+    type ReadPart: StreamDataRead<Base = Self>;
     type WritePart: StreamDataWrite;
 
     /// Get exclusive access to the read part. May panic if the mutex is poisoned.
@@ -154,7 +157,7 @@ macro_rules! read_stream_data_for {
         $data_type:ident,
         pop ($pop_method:ident),
         end ($end_method:ident) $(,)?
-    ) => ({
+    ) => {{
         // Loop on the outside of the lock to allow other streams to make progress
         loop {
             let mut read = $self.lock_read();
@@ -181,7 +184,7 @@ macro_rules! read_stream_data_for {
                         }
                         Ok(other) => read.handle_out_of_order(other)?,
                         Err(other) => read.handle_message(&$self, other)?,
-                    }
+                    },
                     None => {
                         return Err(ShellError::PluginFailedToDecode {
                             msg: "unexpected end of input".into(),
@@ -190,12 +193,12 @@ macro_rules! read_stream_data_for {
                 }
             }
         }
-    })
+    }};
 }
 
 /// Helper for implementing the write methods
 macro_rules! write_stream_data_for {
-    ($self:expr, $id:expr, $data_type:ident ($value:expr)) => ({
+    ($self:expr, $id:expr, $data_type:ident ($value:expr)) => {{
         let mut write = $self.lock_write();
         let is_final = $value.is_none();
         write.write(StreamMessage::Data($id, StreamData::$data_type($value)).into())?;
@@ -204,7 +207,7 @@ macro_rules! write_stream_data_for {
             write.flush()?;
         }
         Ok(())
-    })
+    }};
 }
 
 impl<T> StreamDataIo for T
@@ -213,11 +216,17 @@ where
     // It must be possible to convert the input message to StreamMessage
     StreamMessage: TryFrom<
         <T::ReadPart as StreamDataRead>::Message,
-        Error=<T::ReadPart as StreamDataRead>::Message
+        Error = <T::ReadPart as StreamDataRead>::Message,
     >,
 {
     fn read_list(self: Arc<Self>, id: StreamId) -> Result<Option<Value>, ShellError> {
-        Ok(read_stream_data_for!(self, id, List, pop (pop_list), end (end_list)))
+        Ok(read_stream_data_for!(
+            self,
+            id,
+            List,
+            pop(pop_list),
+            end(end_list)
+        ))
     }
 
     fn read_external_stdout(self: Arc<Self>, id: StreamId) -> Result<Option<Vec<u8>>, ShellError> {
@@ -225,9 +234,10 @@ where
             self,
             id,
             ExternalStdout,
-            pop (pop_external_stdout),
-            end (end_external_stdout),
-        ).transpose()
+            pop(pop_external_stdout),
+            end(end_external_stdout),
+        )
+        .transpose()
     }
 
     fn read_external_stderr(self: Arc<Self>, id: StreamId) -> Result<Option<Vec<u8>>, ShellError> {
@@ -235,9 +245,10 @@ where
             self,
             id,
             ExternalStderr,
-            pop (pop_external_stderr),
-            end (end_external_stderr)
-        ).transpose()
+            pop(pop_external_stderr),
+            end(end_external_stderr)
+        )
+        .transpose()
     }
 
     fn read_external_exit_code(self: Arc<Self>, id: StreamId) -> Result<Option<Value>, ShellError> {
@@ -245,8 +256,8 @@ where
             self,
             id,
             ExternalExitCode,
-            pop (pop_external_exit_code),
-            end (end_external_exit_code)
+            pop(pop_external_exit_code),
+            end(end_external_exit_code)
         ))
     }
 

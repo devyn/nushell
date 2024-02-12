@@ -2,27 +2,28 @@
 
 use std::{
     io::{BufRead, Write},
-    sync::{atomic::AtomicUsize, Arc, Mutex}, marker::PhantomData,
+    marker::PhantomData,
+    sync::{atomic::AtomicUsize, Arc, Mutex},
 };
 
-use nu_protocol::{CustomValue, PipelineData, ShellError, Value, Config, engine::Closure, Spanned};
+use nu_protocol::{engine::Closure, Config, CustomValue, PipelineData, ShellError, Spanned, Value};
 
 use crate::{
     plugin::PluginEncoder,
     protocol::{
-        CallInfo, ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginCallResponse,
-        PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamId, StreamMessage,
-        EngineCallId, EngineCallResponse, EngineCall,
+        CallInfo, EngineCall, EngineCallId, EngineCallResponse, ExternalStreamInfo,
+        PipelineDataHeader, PluginCall, PluginCallResponse, PluginData, PluginInput, PluginOutput,
+        RawStreamInfo, StreamId, StreamMessage,
     },
 };
 
 use super::{
     buffers::StreamBuffers,
-    make_external_stream, make_list_stream,
+    make_external_stream, make_list_stream, next_id_from,
     stream_data_io::{
-        StreamDataIoBase, StreamDataRead, StreamDataWrite, StreamDataIo, StreamDataIoExt
+        StreamDataIo, StreamDataIoBase, StreamDataIoExt, StreamDataRead, StreamDataWrite,
     },
-    PluginRead, PluginWrite, next_id_from,
+    PluginRead, PluginWrite,
 };
 
 #[cfg(test)]
@@ -70,7 +71,11 @@ impl<R, W> EngineInterfaceImpl<R, W> {
     }
 }
 
-impl<R, W> StreamDataIoBase for EngineInterfaceImpl<R, W> where R: PluginRead, W: PluginWrite {
+impl<R, W> StreamDataIoBase for EngineInterfaceImpl<R, W>
+where
+    R: PluginRead,
+    W: PluginWrite,
+{
     type ReadPart = ReadPart<R, W>;
     type WritePart = WritePart<W>;
 
@@ -87,7 +92,11 @@ impl<R, W> StreamDataIoBase for EngineInterfaceImpl<R, W> where R: PluginRead, W
     }
 }
 
-impl<R, W> StreamDataRead for ReadPart<R, W> where R: PluginRead, W: PluginWrite {
+impl<R, W> StreamDataRead for ReadPart<R, W>
+where
+    R: PluginRead,
+    W: PluginWrite,
+{
     type Message = PluginInput;
     type Base = EngineInterfaceImpl<R, W>;
 
@@ -103,24 +112,27 @@ impl<R, W> StreamDataRead for ReadPart<R, W> where R: PluginRead, W: PluginWrite
     fn handle_message(
         &mut self,
         _io: &Arc<Self::Base>,
-        msg: PluginInput
+        msg: PluginInput,
     ) -> Result<(), ShellError> {
         match msg {
             PluginInput::Call(_) => Err(ShellError::PluginFailedToDecode {
                 msg: "unexpected Call in this context - possibly nested".into(),
             }),
             // Handle out of order stream messages
-            PluginInput::StreamData(id, data) =>
-                self.handle_out_of_order(StreamMessage::Data(id, data)),
+            PluginInput::StreamData(id, data) => {
+                self.handle_out_of_order(StreamMessage::Data(id, data))
+            }
             // Store engine call responses in pending_engine_calls. If the call response will
             // produce a stream, that also must be initialized now so we can store those stream
             // messages.
             PluginInput::EngineCallResponse(id, response) => {
                 // Find the matching engine call response hole, or error if it wasn't registered
-                let (_, response_hole) = self.pending_engine_calls.iter_mut()
+                let (_, response_hole) = self
+                    .pending_engine_calls
+                    .iter_mut()
                     .find(|(call_id, _)| id == *call_id)
                     .ok_or_else(|| ShellError::PluginFailedToDecode {
-                        msg: format!("unexpected EngineCallResponse id={id}")
+                        msg: format!("unexpected EngineCallResponse id={id}"),
                     })?;
 
                 if response_hole.is_none() {
@@ -132,15 +144,18 @@ impl<R, W> StreamDataRead for ReadPart<R, W> where R: PluginRead, W: PluginWrite
                     Ok(())
                 } else {
                     Err(ShellError::PluginFailedToDecode {
-                        msg: format!("received multiple responses for engine call id={id}")
+                        msg: format!("received multiple responses for engine call id={id}"),
                     })
                 }
-            },
+            }
         }
     }
 }
 
-impl<W> StreamDataWrite for WritePart<W> where W: PluginWrite {
+impl<W> StreamDataWrite for WritePart<W>
+where
+    W: PluginWrite,
+{
     type Message = PluginOutput;
 
     fn write(&mut self, msg: Self::Message) -> Result<(), ShellError> {
@@ -165,8 +180,10 @@ pub(crate) trait EngineInterfaceIo: StreamDataIo {
     ///
     /// Panics if the `id` was not one previously returned by `write_engine_call` or if it was
     /// already read before.
-    fn read_engine_call_response(self: Arc<Self>, id: EngineCallId)
-        -> Result<EngineCallResponse, ShellError>;
+    fn read_engine_call_response(
+        self: Arc<Self>,
+        id: EngineCallId,
+    ) -> Result<EngineCallResponse, ShellError>;
 
     /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
     fn make_pipeline_data(
@@ -181,7 +198,13 @@ pub(crate) trait EngineInterfaceIo: StreamDataIo {
     fn make_pipeline_data_header(
         &self,
         data: PipelineData,
-    ) -> Result<(PipelineDataHeader, Option<(PipelineDataHeader, PipelineData)>), ShellError>;
+    ) -> Result<
+        (
+            PipelineDataHeader,
+            Option<(PipelineDataHeader, PipelineData)>,
+        ),
+        ShellError,
+    >;
 }
 
 impl<R, W> EngineInterfaceIo for EngineInterfaceImpl<R, W>
@@ -233,13 +256,16 @@ where
         Ok(id)
     }
 
-    fn read_engine_call_response(self: Arc<Self>, id: EngineCallId)
-        -> Result<EngineCallResponse, ShellError>
-    {
+    fn read_engine_call_response(
+        self: Arc<Self>,
+        id: EngineCallId,
+    ) -> Result<EngineCallResponse, ShellError> {
         loop {
             let mut read = self.lock_read();
 
-            let pending_index = read.pending_engine_calls.iter()
+            let pending_index = read
+                .pending_engine_calls
+                .iter()
                 .position(|(reg_id, _)| id == *reg_id)
                 .expect("engine call not found in pending_engine_calls");
 
@@ -247,7 +273,11 @@ where
             if read.pending_engine_calls[pending_index].1.is_some() {
                 // It's already been received. The other thread will have already set up the stream
                 // so we just need to return it.
-                return Ok(read.pending_engine_calls.swap_remove(pending_index).1.unwrap());
+                return Ok(read
+                    .pending_engine_calls
+                    .swap_remove(pending_index)
+                    .1
+                    .unwrap());
             }
 
             // Otherwise read and hope that we get the response
@@ -264,9 +294,11 @@ where
                 // Handle some other message
                 Some(other) => read.handle_message(&self, other)?,
                 // End of input
-                None => return Err(ShellError::PluginFailedToDecode {
-                    msg: "unexpected end of input".into()
-                })
+                None => {
+                    return Err(ShellError::PluginFailedToDecode {
+                        msg: "unexpected end of input".into(),
+                    })
+                }
             }
         }
     }
@@ -299,7 +331,13 @@ where
     fn make_pipeline_data_header(
         &self,
         data: PipelineData,
-    ) -> Result<(PipelineDataHeader, Option<(PipelineDataHeader, PipelineData)>), ShellError> {
+    ) -> Result<
+        (
+            PipelineDataHeader,
+            Option<(PipelineDataHeader, PipelineData)>,
+        ),
+        ShellError,
+    > {
         match data {
             PipelineData::Value(value, _) => {
                 let span = value.span();
@@ -325,10 +363,7 @@ where
             }
             PipelineData::ListStream(..) => {
                 let header = PipelineDataHeader::ListStream(self.new_stream_id()?);
-                Ok((
-                    header.clone(),
-                    Some((header, data)),
-                ))
+                Ok((header.clone(), Some((header, data))))
             }
             PipelineData::ExternalStream {
                 ref stdout,
@@ -347,10 +382,7 @@ where
                     trim_end_newline,
                 };
                 let header = PipelineDataHeader::ExternalStream(self.new_stream_id()?, info);
-                Ok((
-                    header.clone(),
-                    Some((header, data)),
-                ))
+                Ok((header.clone(), Some((header, data))))
             }
             PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
         }
@@ -373,11 +405,12 @@ where
     }
 }
 
-impl<T> From<Arc<T>> for EngineInterface where T: EngineInterfaceIo + 'static {
+impl<T> From<Arc<T>> for EngineInterface
+where
+    T: EngineInterfaceIo + 'static,
+{
     fn from(value: Arc<T>) -> Self {
-        EngineInterface {
-            io: value
-        }
+        EngineInterface { io: value }
     }
 }
 
@@ -421,7 +454,8 @@ impl EngineInterface {
     ) -> Result<(), ShellError> {
         let (header, rest) = self.io.make_pipeline_data_header(data)?;
 
-        self.io.write_call_response(PluginCallResponse::PipelineData(header))?;
+        self.io
+            .write_call_response(PluginCallResponse::PipelineData(header))?;
 
         if let Some((header, data)) = rest {
             self.io.write_pipeline_data_stream(&header, data)
@@ -450,8 +484,8 @@ impl EngineInterface {
             EngineCallResponse::Config(config) => Ok(config),
             EngineCallResponse::Error(err) => Err(err),
             _ => Err(ShellError::PluginFailedToDecode {
-                msg: "received unexpected response for EngineCall::GetConfig".into()
-            })
+                msg: "received unexpected response for EngineCall::GetConfig".into(),
+            }),
         }
     }
 
@@ -581,17 +615,11 @@ impl EngineInterface {
         input: Option<Value>,
     ) -> Result<Value, ShellError> {
         let input = input.map_or_else(|| PipelineData::Empty, |v| PipelineData::Value(v, None));
-        let output = self.eval_closure_with_stream(
-            closure,
-            positional,
-            input,
-            true,
-            false
-        )?;
+        let output = self.eval_closure_with_stream(closure, positional, input, true, false)?;
         // Unwrap an error value
         match output.into_value(closure.span) {
             Value::Error { error, .. } => Err(*error),
-            value => Ok(value)
+            value => Ok(value),
         }
     }
 }

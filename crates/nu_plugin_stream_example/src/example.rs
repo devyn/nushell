@@ -1,4 +1,4 @@
-use nu_plugin::{EvaluatedCall, LabeledError, EngineInterface};
+use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError};
 use nu_protocol::{ListStream, PipelineData, RawStream, Value};
 
 pub struct Example;

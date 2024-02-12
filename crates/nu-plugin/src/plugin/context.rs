@@ -6,8 +6,8 @@ use std::{
 use nu_engine::eval_block_with_early_return;
 use nu_protocol::{
     ast::Call,
-    engine::{EngineState, Stack, Closure},
-    Span, Value, PipelineData, ShellError, Config, Spanned,
+    engine::{Closure, EngineState, Stack},
+    Config, PipelineData, ShellError, Span, Spanned, Value,
 };
 
 /// Object safe trait for abstracting operations required of the plugin context.
@@ -95,15 +95,19 @@ impl PluginExecutionContext for PluginExecutionNushellContext {
         redirect_stdout: bool,
         redirect_stderr: bool,
     ) -> Result<PipelineData, ShellError> {
-        let block = self.engine_state.try_get_block(closure.item.block_id).ok_or_else(|| {
-            ShellError::GenericError {
+        let block = self
+            .engine_state
+            .try_get_block(closure.item.block_id)
+            .ok_or_else(|| ShellError::GenericError {
                 error: "Plugin misbehaving".into(),
-                msg: format!("Tried to evaluate unknown block id: {}", closure.item.block_id),
+                msg: format!(
+                    "Tried to evaluate unknown block id: {}",
+                    closure.item.block_id
+                ),
                 span: Some(closure.span),
                 help: None,
                 inner: vec![],
-            }
-        })?;
+            })?;
 
         let mut stack = self.stack.captures_to_stack(closure.item.captures);
 

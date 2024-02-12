@@ -3,7 +3,9 @@ mod plugin_custom_value;
 mod plugin_data;
 
 pub use evaluated_call::EvaluatedCall;
-use nu_protocol::{PluginSignature, RawStream, ShellError, Span, Value, engine::Closure, Config, Spanned};
+use nu_protocol::{
+    engine::Closure, Config, PluginSignature, RawStream, ShellError, Span, Spanned, Value,
+};
 pub use plugin_custom_value::PluginCustomValue;
 pub use plugin_data::PluginData;
 use serde::{Deserialize, Serialize};
@@ -92,7 +94,7 @@ impl TryFrom<PluginInput> for StreamMessage {
     fn try_from(msg: PluginInput) -> Result<StreamMessage, PluginInput> {
         match msg {
             PluginInput::StreamData(id, data) => Ok(StreamMessage::Data(id, data)),
-            _ => Err(msg)
+            _ => Err(msg),
         }
     }
 }
@@ -253,7 +255,7 @@ impl TryFrom<PluginOutput> for StreamMessage {
     fn try_from(msg: PluginOutput) -> Result<StreamMessage, PluginOutput> {
         match msg {
             PluginOutput::StreamData(id, data) => Ok(StreamMessage::Data(id, data)),
-            _ => Err(msg)
+            _ => Err(msg),
         }
     }
 }
