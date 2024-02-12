@@ -114,7 +114,15 @@ impl PluginExecutionContext for PluginExecutionNushellContext {
         // Set up the positional arguments
         for (idx, value) in positional.into_iter().enumerate() {
             if let Some(arg) = block.signature.get_positional(idx) {
-                stack.add_var(arg.var_id.expect("closure arg missing var_id"), value);
+                if let Some(var_id) = arg.var_id {
+                    stack.add_var(var_id, value);
+                } else {
+                    return Err(ShellError::NushellFailedSpanned {
+                        msg: "Error while evaluating closure from plugin".into(),
+                        label: "closure argument missing var_id".into(),
+                        span: closure.span,
+                    });
+                }
             }
         }
 

@@ -7,6 +7,7 @@ pub(crate) trait StreamDataIoTestExt: StreamDataIoBase {
     /// Define a list stream
     fn def_list(&self, id: StreamId) {
         self.lock_read()
+            .unwrap()
             .stream_buffers()
             .insert(id, TypedStreamBuffer::new_list())
             .unwrap();
@@ -14,6 +15,7 @@ pub(crate) trait StreamDataIoTestExt: StreamDataIoBase {
     /// Define a raw stream
     fn def_raw(&self, id: StreamId) {
         self.lock_read()
+            .unwrap()
             .stream_buffers()
             .insert(id, TypedStreamBuffer::new_raw())
             .unwrap();
@@ -282,7 +284,7 @@ macro_rules! gen_stream_data_tests {
             let interface = $gen_interface_impl;
             interface.def_external(0, 1, 2);
 
-            interface.drop_raw(0);
+            interface.drop_raw(0).expect("drop failed");
             interface
                 .clone()
                 .read_raw(0)
@@ -329,7 +331,7 @@ macro_rules! gen_stream_data_tests {
             let interface = $gen_interface_impl;
             interface.def_external(0, 1, 2);
 
-            interface.drop_list(2);
+            interface.drop_list(2).expect("drop failed");
             interface
                 .clone()
                 .read_list(2)

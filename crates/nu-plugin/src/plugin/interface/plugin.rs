@@ -3,7 +3,7 @@
 use std::{
     io::{BufRead, Write},
     marker::PhantomData,
-    sync::{atomic::AtomicUsize, Arc, Mutex},
+    sync::{atomic::AtomicUsize, Arc, Mutex, MutexGuard},
 };
 
 use nu_protocol::{PipelineData, ShellError, Value};
@@ -76,12 +76,16 @@ where
     type ReadPart = ReadPart<R, W>;
     type WritePart = WritePart<W>;
 
-    fn lock_read(&self) -> std::sync::MutexGuard<Self::ReadPart> {
-        self.read.lock().expect("read mutex poisoned")
+    fn lock_read(&self) -> Result<MutexGuard<ReadPart<R, W>>, ShellError> {
+        self.read.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "error in PluginInterface: read mutex poisoned due to panic".into(),
+        })
     }
 
-    fn lock_write(&self) -> std::sync::MutexGuard<Self::WritePart> {
-        self.write.lock().expect("write mutex poisoned")
+    fn lock_write(&self) -> Result<MutexGuard<WritePart<W>>, ShellError> {
+        self.write.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "error in PluginInterface: write mutex poisoned due to panic".into(),
+        })
     }
 
     fn new_stream_id(&self) -> Result<StreamId, ShellError> {
@@ -199,7 +203,7 @@ where
     }
 
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError> {
-        let mut write = self.lock_write();
+        let mut write = self.lock_write()?;
         log::trace!("Writing plugin call: {call:?}");
 
         write.write(PluginInput::Call(call))?;
@@ -213,7 +217,7 @@ where
         log::trace!("Reading plugin call response");
 
         loop {
-            let mut read = self.lock_read();
+            let mut read = self.lock_read()?;
             match read.read()? {
                 Some(PluginOutput::CallResponse(response)) => {
                     // Check the call input type to set the stream buffers up
@@ -239,7 +243,7 @@ where
         id: EngineCallId,
         response: EngineCallResponse,
     ) -> Result<(), ShellError> {
-        let mut write = self.lock_write();
+        let mut write = self.lock_write()?;
         log::trace!("Writing engine call response for id={id}: {response:?}");
 
         write.write(PluginInput::EngineCallResponse(id, response))?;

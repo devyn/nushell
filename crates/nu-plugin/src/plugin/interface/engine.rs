@@ -3,7 +3,7 @@
 use std::{
     io::{BufRead, Write},
     marker::PhantomData,
-    sync::{atomic::AtomicUsize, Arc, Mutex},
+    sync::{atomic::AtomicUsize, Arc, Mutex, MutexGuard},
 };
 
 use nu_protocol::{engine::Closure, Config, CustomValue, PipelineData, ShellError, Spanned, Value};
@@ -79,12 +79,16 @@ where
     type ReadPart = ReadPart<R, W>;
     type WritePart = WritePart<W>;
 
-    fn lock_read(&self) -> std::sync::MutexGuard<Self::ReadPart> {
-        self.read.lock().expect("read mutex poisoned")
+    fn lock_read(&self) -> Result<MutexGuard<ReadPart<R, W>>, ShellError> {
+        self.read.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "error in EngineInterface: read mutex poisoned due to panic".into(),
+        })
     }
 
-    fn lock_write(&self) -> std::sync::MutexGuard<Self::WritePart> {
-        self.write.lock().expect("write mutex poisoned")
+    fn lock_write(&self) -> Result<MutexGuard<WritePart<W>>, ShellError> {
+        self.write.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "error in EngineInterface: write mutex poisoned due to panic".into(),
+        })
     }
 
     fn new_stream_id(&self) -> Result<StreamId, ShellError> {
@@ -214,7 +218,7 @@ where
 {
     fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError> {
         loop {
-            let mut read = self.lock_read();
+            let mut read = self.lock_read()?;
             match read.read()? {
                 Some(PluginInput::Call(call)) => {
                     // Check the call input type to set the stream buffers up
@@ -232,7 +236,7 @@ where
     }
 
     fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError> {
-        let mut write = self.lock_write();
+        let mut write = self.lock_write()?;
 
         write.write(PluginOutput::CallResponse(response))?;
         write.flush()
@@ -243,12 +247,12 @@ where
         let id = next_id_from(&self.next_engine_call_id)?;
 
         // Register the pending engine call
-        let mut read = self.lock_read();
+        let mut read = self.lock_read()?;
         read.pending_engine_calls.push((id, None));
         drop(read);
 
         // Send the call
-        let mut write = self.lock_write();
+        let mut write = self.lock_write()?;
 
         write.write(PluginOutput::EngineCall(id, call))?;
         write.flush()?;
@@ -261,13 +265,15 @@ where
         id: EngineCallId,
     ) -> Result<EngineCallResponse, ShellError> {
         loop {
-            let mut read = self.lock_read();
+            let mut read = self.lock_read()?;
 
             let pending_index = read
                 .pending_engine_calls
                 .iter()
                 .position(|(reg_id, _)| id == *reg_id)
-                .expect("engine call not found in pending_engine_calls");
+                .ok_or_else(|| ShellError::NushellFailed {
+                    msg: "engine call not found in pending_engine_calls".into(),
+                })?;
 
             // Check if another thread already read our response
             if read.pending_engine_calls[pending_index].1.is_some() {

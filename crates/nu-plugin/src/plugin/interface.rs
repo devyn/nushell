@@ -109,7 +109,9 @@ impl Iterator for PluginListStream {
 impl Drop for PluginListStream {
     fn drop(&mut self) {
         // Signal that we don't need the stream anymore.
-        self.io.drop_list(self.id);
+        if let Err(err) = self.io.drop_list(self.id) {
+            log::warn!("Error while dropping PluginListStream: {err}");
+        }
     }
 }
 
@@ -158,7 +160,9 @@ impl Iterator for PluginRawStream {
 impl Drop for PluginRawStream {
     fn drop(&mut self) {
         // Signal that we don't need the stream anymore.
-        self.io.drop_raw(self.id);
+        if let Err(err) = self.io.drop_raw(self.id) {
+            log::warn!("Error while dropping PluginRawStream: {err}");
+        }
     }
 }
 

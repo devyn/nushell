@@ -36,11 +36,11 @@ pub(crate) trait StreamDataIo: Send + Sync {
 
     /// Signal that no more values are desired from a `ListStream` and further messages should
     /// be ignored.
-    fn drop_list(&self, id: StreamId);
+    fn drop_list(&self, id: StreamId) -> Result<(), ShellError>;
 
     /// Signal that no more bytes are desired from a `RawStream` and further messages should be
     /// ignored.
-    fn drop_raw(&self, id: StreamId);
+    fn drop_raw(&self, id: StreamId) -> Result<(), ShellError>;
 
     /// Write a value for a `ListStream`, or `None` to signal end of stream.
     fn write_list(&self, id: StreamId, value: Option<Value>) -> Result<(), ShellError>;
@@ -61,11 +61,11 @@ pub(crate) trait StreamDataIoBase: Send + Sync {
     type ReadPart: StreamDataRead<Base = Self>;
     type WritePart: StreamDataWrite;
 
-    /// Get exclusive access to the read part. May panic if the mutex is poisoned.
-    fn lock_read(&self) -> MutexGuard<Self::ReadPart>;
+    /// Get exclusive access to the read part. Error if the mutex is poisoned.
+    fn lock_read(&self) -> Result<MutexGuard<Self::ReadPart>, ShellError>;
 
-    /// Get exclusive access to the write part. May panic if the mutex is poisoned.
-    fn lock_write(&self) -> MutexGuard<Self::WritePart>;
+    /// Get exclusive access to the write part. Error if the mutex is poisoned.
+    fn lock_write(&self) -> Result<MutexGuard<Self::WritePart>, ShellError>;
 
     /// Get a new, locally unique [`StreamId`].
     fn new_stream_id(&self) -> Result<StreamId, ShellError>;
@@ -128,7 +128,7 @@ macro_rules! read_stream_data_for {
     ) => {{
         // Loop on the outside of the lock to allow other streams to make progress
         loop {
-            let mut read = $self.lock_read();
+            let mut read = $self.lock_read()?;
             // Read from the buffer first
             if let Some(value) = read.stream_buffers().get($id)?.$pop_method()? {
                 if value.is_none() {
@@ -167,7 +167,7 @@ macro_rules! read_stream_data_for {
 /// Helper for implementing the write methods
 macro_rules! write_stream_data_for {
     ($self:expr, $id:expr, $data_type:ident ($value:expr)) => {{
-        let mut write = $self.lock_write();
+        let mut write = $self.lock_write()?;
         let is_final = $value.is_none();
         write.write(StreamMessage::Data($id, StreamData::$data_type($value)).into())?;
         // Try to flush final value
@@ -201,18 +201,16 @@ where
         read_stream_data_for!(self, id, Raw, pop(pop_raw), end(end_raw),).transpose()
     }
 
-    fn drop_list(&self, id: StreamId) {
-        let mut read = self.lock_read();
-        if let Ok(stream) = read.stream_buffers().get(id) {
-            stream.drop_list();
-        }
+    fn drop_list(&self, id: StreamId) -> Result<(), ShellError> {
+        let mut read = self.lock_read()?;
+        read.stream_buffers().get(id)?.drop_list();
+        Ok(())
     }
 
-    fn drop_raw(&self, id: StreamId) {
-        let mut read = self.lock_read();
-        if let Ok(stream) = read.stream_buffers().get(id) {
-            stream.drop_raw();
-        }
+    fn drop_raw(&self, id: StreamId) -> Result<(), ShellError> {
+        let mut read = self.lock_read()?;
+        read.stream_buffers().get(id)?.drop_raw();
+        Ok(())
     }
 
     fn write_list(&self, id: StreamId, value: Option<Value>) -> Result<(), ShellError> {
@@ -326,7 +324,9 @@ fn write_full_external_stream(
         .into_iter()
         .flatten()
         {
-            thread.join().expect("stream consumer thread panicked")?;
+            thread.join().map_err(|_| ShellError::NushellFailed {
+                msg: "panic occurred in external stream consumer thread".into(),
+            })??;
         }
         Ok(())
     })
