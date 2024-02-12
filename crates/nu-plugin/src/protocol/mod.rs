@@ -36,14 +36,20 @@ pub enum PipelineDataHeader {
     /// Represents a [nu_protocol::CustomValue] on the plugin side, which should be encapsulated in
     /// [PluginCustomValue] on the engine side.
     PluginData(PluginData),
-    /// Initiate [nu_protocol::PipelineData::ListStream] with the given [StreamId].
+    /// Initiate [nu_protocol::PipelineData::ListStream].
     ///
     /// Items are sent via [StreamData]
-    ListStream(StreamId),
-    /// Initiate [nu_protocol::PipelineData::ExternalStream] with the given [StreamId].
+    ListStream(ListStreamInfo),
+    /// Initiate [nu_protocol::PipelineData::ExternalStream].
     ///
     /// Items are sent via [StreamData]
-    ExternalStream(StreamId, ExternalStreamInfo),
+    ExternalStream(ExternalStreamInfo),
+}
+
+/// Additional information about list (value) streams
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct ListStreamInfo {
+    pub id: StreamId,
 }
 
 /// Additional information about external streams
@@ -52,20 +58,22 @@ pub struct ExternalStreamInfo {
     pub span: Span,
     pub stdout: Option<RawStreamInfo>,
     pub stderr: Option<RawStreamInfo>,
-    pub has_exit_code: bool,
+    pub exit_code: Option<ListStreamInfo>,
     pub trim_end_newline: bool,
 }
 
-/// Additional information about raw streams
+/// Additional information about raw (byte) streams
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct RawStreamInfo {
+    pub id: StreamId,
     pub is_binary: bool,
     pub known_size: Option<u64>,
 }
 
-impl From<&RawStream> for RawStreamInfo {
-    fn from(stream: &RawStream) -> Self {
+impl RawStreamInfo {
+    pub(crate) fn new(id: StreamId, stream: &RawStream) -> Self {
         RawStreamInfo {
+            id,
             is_binary: stream.is_binary,
             known_size: stream.known_size,
         }
@@ -109,16 +117,14 @@ impl From<StreamMessage> for PluginInput {
 
 /// A single item of stream data for a stream.
 ///
-/// A `None` value ends the stream. An `Error` ends all streams, and the error should be propagated.
+/// A `None` value ends the stream.
 ///
 /// Note: exported for internal use, not public.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[doc(hidden)]
 pub enum StreamData {
     List(Option<Value>),
-    ExternalStdout(Option<Result<Vec<u8>, ShellError>>),
-    ExternalStderr(Option<Result<Vec<u8>, ShellError>>),
-    ExternalExitCode(Option<Value>),
+    Raw(Option<Result<Vec<u8>, ShellError>>),
 }
 
 /// A stream control or data message.

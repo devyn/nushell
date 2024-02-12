@@ -3,7 +3,10 @@ use std::sync::{Arc, MutexGuard};
 use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Value};
 
 use crate::{
-    protocol::{PipelineDataHeader, StreamId, StreamMessage},
+    protocol::{
+        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, RawStreamInfo, StreamId,
+        StreamMessage,
+    },
     StreamData,
 };
 
@@ -11,7 +14,7 @@ use crate::{
 mod tests;
 
 #[cfg(test)]
-pub(crate) use tests::{def_streams, gen_stream_data_tests};
+pub(crate) use tests::{gen_stream_data_tests, StreamDataIoTestExt};
 
 /// Methods for reading and writing [crate::protocol::StreamData] contents on an interface.
 ///
@@ -26,63 +29,28 @@ pub(crate) trait StreamDataIo: Send + Sync {
     /// Other streams will be transparently handled or stored for concurrent readers.
     fn read_list(self: Arc<Self>, id: StreamId) -> Result<Option<Value>, ShellError>;
 
-    /// Read some bytes for an `ExternalStream`'s `stdout` stream, returning `Ok(None)` at end
-    /// of stream.
+    /// Read some bytes for a `RawStream`, returning `Ok(None)` at end of stream.
     ///
     /// Other streams will be transparently handled or stored for concurrent readers.
-    fn read_external_stdout(self: Arc<Self>, id: StreamId) -> Result<Option<Vec<u8>>, ShellError>;
-
-    /// Read some bytes for an `ExternalStream`'s `stderr` stream, returning `Ok(None)` at end
-    /// of stream.
-    ///
-    /// Other streams will be transparently handled or stored for concurrent readers.
-    fn read_external_stderr(self: Arc<Self>, id: StreamId) -> Result<Option<Vec<u8>>, ShellError>;
-
-    /// Read a value for an `ExternalStream`'s `exit_code` stream, returning `Ok(None)` at end
-    /// of stream.
-    ///
-    /// Other streams will be transparently handled or stored for concurrent readers.
-    fn read_external_exit_code(self: Arc<Self>, id: StreamId) -> Result<Option<Value>, ShellError>;
+    fn read_raw(self: Arc<Self>, id: StreamId) -> Result<Option<Vec<u8>>, ShellError>;
 
     /// Signal that no more values are desired from a `ListStream` and further messages should
     /// be ignored.
     fn drop_list(&self, id: StreamId);
 
-    /// Signal that no more bytes are desired from an `ExternalStream`'s `stdout` and further
-    /// messages should be ignored.
-    fn drop_external_stdout(&self, id: StreamId);
-
-    /// Signal that no more bytes are desired from an `ExternalStream`'s `stderr` and further
-    /// messages should be ignored.
-    fn drop_external_stderr(&self, id: StreamId);
-
-    /// Signal that no more values are desired from an `ExternalStream`'s `exit_code` and further
-    /// messages should be ignored.
-    fn drop_external_exit_code(&self, id: StreamId);
+    /// Signal that no more bytes are desired from a `RawStream` and further messages should be
+    /// ignored.
+    fn drop_raw(&self, id: StreamId);
 
     /// Write a value for a `ListStream`, or `None` to signal end of stream.
     fn write_list(&self, id: StreamId, value: Option<Value>) -> Result<(), ShellError>;
 
-    /// Write some bytes for an `ExternalStream`'s `stdout` stream, or `None` to signal end of
-    /// stream.
-    fn write_external_stdout(
+    /// Write some bytes for a `RawStream`, or `None` to signal end of stream.
+    fn write_raw(
         &self,
         id: StreamId,
         bytes: Option<Result<Vec<u8>, ShellError>>,
     ) -> Result<(), ShellError>;
-
-    /// Write some bytes for an `ExternalStream`'s `stderr` stream, or `None` to signal end of
-    /// stream.
-    fn write_external_stderr(
-        &self,
-        id: StreamId,
-        bytes: Option<Result<Vec<u8>, ShellError>>,
-    ) -> Result<(), ShellError>;
-
-    /// Write a value for an `ExternalStream`'s `exit_code` stream, or `None` to signal end of
-    /// stream.
-    fn write_external_exit_code(&self, id: StreamId, code: Option<Value>)
-        -> Result<(), ShellError>;
 }
 
 /// The base trait necessary to be implemented for [`StreamDataIo`] to work.
@@ -229,36 +197,8 @@ where
         ))
     }
 
-    fn read_external_stdout(self: Arc<Self>, id: StreamId) -> Result<Option<Vec<u8>>, ShellError> {
-        read_stream_data_for!(
-            self,
-            id,
-            ExternalStdout,
-            pop(pop_external_stdout),
-            end(end_external_stdout),
-        )
-        .transpose()
-    }
-
-    fn read_external_stderr(self: Arc<Self>, id: StreamId) -> Result<Option<Vec<u8>>, ShellError> {
-        read_stream_data_for!(
-            self,
-            id,
-            ExternalStderr,
-            pop(pop_external_stderr),
-            end(end_external_stderr)
-        )
-        .transpose()
-    }
-
-    fn read_external_exit_code(self: Arc<Self>, id: StreamId) -> Result<Option<Value>, ShellError> {
-        Ok(read_stream_data_for!(
-            self,
-            id,
-            ExternalExitCode,
-            pop(pop_external_exit_code),
-            end(end_external_exit_code)
-        ))
+    fn read_raw(self: Arc<Self>, id: StreamId) -> Result<Option<Vec<u8>>, ShellError> {
+        read_stream_data_for!(self, id, Raw, pop(pop_raw), end(end_raw),).transpose()
     }
 
     fn drop_list(&self, id: StreamId) {
@@ -268,24 +208,10 @@ where
         }
     }
 
-    fn drop_external_stdout(&self, id: StreamId) {
+    fn drop_raw(&self, id: StreamId) {
         let mut read = self.lock_read();
         if let Ok(stream) = read.stream_buffers().get(id) {
-            stream.drop_external_stdout();
-        }
-    }
-
-    fn drop_external_stderr(&self, id: StreamId) {
-        let mut read = self.lock_read();
-        if let Ok(stream) = read.stream_buffers().get(id) {
-            stream.drop_external_stderr();
-        }
-    }
-
-    fn drop_external_exit_code(&self, id: StreamId) {
-        let mut read = self.lock_read();
-        if let Ok(stream) = read.stream_buffers().get(id) {
-            stream.drop_external_exit_code();
+            stream.drop_raw();
         }
     }
 
@@ -293,28 +219,12 @@ where
         write_stream_data_for!(self, id, List(value))
     }
 
-    fn write_external_stdout(
+    fn write_raw(
         &self,
         id: StreamId,
         bytes: Option<Result<Vec<u8>, ShellError>>,
     ) -> Result<(), ShellError> {
-        write_stream_data_for!(self, id, ExternalStdout(bytes))
-    }
-
-    fn write_external_stderr(
-        &self,
-        id: StreamId,
-        bytes: Option<Result<Vec<u8>, ShellError>>,
-    ) -> Result<(), ShellError> {
-        write_stream_data_for!(self, id, ExternalStderr(bytes))
-    }
-
-    fn write_external_exit_code(
-        &self,
-        id: StreamId,
-        code: Option<Value>,
-    ) -> Result<(), ShellError> {
-        write_stream_data_for!(self, id, ExternalExitCode(code))
+        write_stream_data_for!(self, id, Raw(bytes))
     }
 }
 
@@ -333,18 +243,18 @@ pub(crate) trait StreamDataIoExt: StreamDataIo {
             (PipelineDataHeader::Empty, PipelineData::Empty) => Ok(()),
             (PipelineDataHeader::Value(_), PipelineData::Value(_, _)) => Ok(()),
             (PipelineDataHeader::PluginData(_), PipelineData::Value(_, _)) => Ok(()),
-            (PipelineDataHeader::ListStream(id), PipelineData::ListStream(stream, _)) => {
-                write_full_list_stream(self, *id, stream)
+            (PipelineDataHeader::ListStream(info), PipelineData::ListStream(stream, _)) => {
+                write_full_list_stream(self, info, stream)
             }
             (
-                PipelineDataHeader::ExternalStream(id, _),
+                PipelineDataHeader::ExternalStream(info),
                 PipelineData::ExternalStream {
                     stdout,
                     stderr,
                     exit_code,
                     ..
                 },
-            ) => write_full_external_stream(self, *id, stdout, stderr, exit_code),
+            ) => write_full_external_stream(self, &info, stdout, stderr, exit_code),
             _ => Err(ShellError::NushellFailedHelp {
                 msg: format!(
                     "Attempted to send PipelineData that doesn't match the header: {:?}",
@@ -361,13 +271,13 @@ impl<T: StreamDataIo + ?Sized> StreamDataIoExt for T {}
 /// Write the contents of a [ListStream] to `io`.
 fn write_full_list_stream(
     io: &(impl StreamDataIo + ?Sized),
-    id: StreamId,
+    info: &ListStreamInfo,
     list_stream: ListStream,
 ) -> Result<(), ShellError> {
     // Consume the stream and write it via StreamDataIo.
     for value in list_stream {
         io.write_list(
-            id,
+            info.id,
             Some(match value {
                 Value::LazyRecord { val, .. } => val.collect()?,
                 _ => value,
@@ -375,13 +285,25 @@ fn write_full_list_stream(
         )?;
     }
     // End of stream
-    io.write_list(id, None)
+    io.write_list(info.id, None)
+}
+
+/// Write a full [RawStream] to `io`.
+fn write_full_raw_stream(
+    io: &(impl StreamDataIo + ?Sized),
+    info: &RawStreamInfo,
+    raw: RawStream,
+) -> Result<(), ShellError> {
+    for bytes in raw.stream {
+        io.write_raw(info.id, Some(bytes))?;
+    }
+    io.write_raw(info.id, None)
 }
 
 /// Write the contents of a [PipelineData::ExternalStream] to `io`.
 fn write_full_external_stream(
     io: &(impl StreamDataIo + ?Sized),
-    id: StreamId,
+    info: &ExternalStreamInfo,
     stdout: Option<RawStream>,
     stderr: Option<RawStream>,
     exit_code: Option<ListStream>,
@@ -389,30 +311,17 @@ fn write_full_external_stream(
     // Consume all streams simultaneously by launching three threads
     std::thread::scope(|scope| {
         for thread in [
-            stdout.map(|stdout| {
-                scope.spawn(|| {
-                    for bytes in stdout.stream {
-                        io.write_external_stdout(id, Some(bytes))?;
-                    }
-                    io.write_external_stdout(id, None)
-                })
-            }),
-            stderr.map(|stderr| {
-                scope.spawn(|| {
-                    for bytes in stderr.stream {
-                        io.write_external_stderr(id, Some(bytes))?;
-                    }
-                    io.write_external_stderr(id, None)
-                })
-            }),
-            exit_code.map(|exit_code| {
-                scope.spawn(|| {
-                    for value in exit_code {
-                        io.write_external_exit_code(id, Some(value))?;
-                    }
-                    io.write_external_exit_code(id, None)
-                })
-            }),
+            stdout
+                .zip(info.stdout.as_ref())
+                .map(|(stdout, info)| scope.spawn(|| write_full_raw_stream(io, info, stdout))),
+            stderr
+                .zip(info.stderr.as_ref())
+                .map(|(stderr, info)| scope.spawn(|| write_full_raw_stream(io, info, stderr))),
+            exit_code
+                .zip(info.exit_code.as_ref())
+                .map(|(exit_code, info)| {
+                    scope.spawn(|| write_full_list_stream(io, info, exit_code))
+                }),
         ]
         .into_iter()
         .flatten()

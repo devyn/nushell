@@ -1,13 +1,15 @@
 use nu_protocol::{CustomValue, ListStream, PipelineData, RawStream, ShellError, Span, Value};
 use serde::{Deserialize, Serialize};
 
-use crate::plugin::interface::buffers::PerStreamBuffers;
+use crate::plugin::interface::buffers::TypedStreamBuffer;
 use crate::plugin::interface::engine::EngineInterfaceIo;
-use crate::plugin::interface::stream_data_io::{def_streams, gen_stream_data_tests, StreamDataIo};
+use crate::plugin::interface::stream_data_io::{
+    gen_stream_data_tests, StreamDataIo, StreamDataIoTestExt,
+};
 use crate::plugin::interface::test_util::TestCase;
 use crate::protocol::{
-    CallInfo, EvaluatedCall, ExternalStreamInfo, PipelineDataHeader, PluginCall, PluginData,
-    PluginInput, PluginOutput, RawStreamInfo, StreamId,
+    CallInfo, EvaluatedCall, ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginCall,
+    PluginData, PluginInput, PluginOutput, RawStreamInfo, StreamId,
 };
 use crate::{PluginCallResponse, StreamData};
 
@@ -97,7 +99,7 @@ fn read_call_ignore_dropped_stream_data() {
     test.add_input(PluginInput::Call(PluginCall::Signature));
 
     let interface = test.engine_interface_impl();
-    def_streams!(interface, list(0));
+    interface.def_list(0);
 
     interface
         .clone()
@@ -124,14 +126,14 @@ fn test_call_with_input(input: PipelineDataHeader) -> CallInfo {
     }
 }
 
-fn dbg<T>(val: T) -> String
-where
-    T: std::fmt::Debug,
-{
-    format!("{:?}", val)
+#[derive(Clone, Copy)]
+enum ExpectType {
+    None,
+    List,
+    Raw,
 }
 
-fn validate_stream_data_acceptance(id: StreamId, header: PipelineDataHeader, accepts: [bool; 4]) {
+fn validate_stream_data_acceptance(header: PipelineDataHeader, ids: &[(StreamId, ExpectType)]) {
     let test = TestCase::new();
     let call_info = test_call_with_input(header);
     test.add_input(PluginInput::Call(PluginCall::Run(call_info)));
@@ -140,161 +142,176 @@ fn validate_stream_data_acceptance(id: StreamId, header: PipelineDataHeader, acc
 
     interface.clone().read_call().expect("call failed");
 
-    let data_types = [
-        StreamData::List(Some(Value::test_bool(true))),
-        StreamData::ExternalStdout(Some(Ok(vec![]))),
-        StreamData::ExternalStderr(Some(Ok(vec![]))),
-        StreamData::ExternalExitCode(Some(Value::test_int(1))),
-    ];
-
-    for (data, accept) in data_types.iter().zip(accepts) {
+    for (id, expect_type) in ids.iter().cloned() {
         test.clear_input();
-        test.add_input(PluginInput::StreamData(id, data.clone()));
-        let result = match data {
-            StreamData::List(_) => interface.clone().read_list(id).map(dbg),
-            StreamData::ExternalStdout(_) => interface.clone().read_external_stdout(id).map(dbg),
-            StreamData::ExternalStderr(_) => interface.clone().read_external_stderr(id).map(dbg),
-            StreamData::ExternalExitCode(_) => {
-                interface.clone().read_external_exit_code(id).map(dbg)
-            }
-        };
-        match result {
-            Ok(success) if !accept => {
-                panic!("{data:?} was successfully consumed, but shouldn't have been: {success}")
-            }
-            Err(err) if accept => {
-                panic!("{data:?} was rejected, but should have been accepted: {err}")
-            }
-            _ => (),
+        test.add_input(PluginInput::StreamData(
+            id,
+            StreamData::List(Some(Value::test_bool(true))),
+        ));
+        let result = interface.clone().read_list(id);
+
+        if matches!(expect_type, ExpectType::List) {
+            assert!(
+                result.is_ok(),
+                "stream {id} should accept list: {}",
+                result.unwrap_err()
+            );
+        } else {
+            assert!(result.is_err(), "stream {id} should not accept list");
+        }
+
+        test.clear_input();
+        test.add_input(PluginInput::StreamData(
+            id,
+            StreamData::Raw(Some(Ok(vec![]))),
+        ));
+        let result = interface.clone().read_raw(id);
+
+        if matches!(expect_type, ExpectType::Raw) {
+            assert!(
+                result.is_ok(),
+                "stream {id} should accept raw: {}",
+                result.unwrap_err()
+            );
+        } else {
+            assert!(result.is_err(), "stream {id} should not accept raw");
         }
     }
 }
 
 #[test]
-fn read_call_run_with_empty_input_doesnt_accept_stream_data() {
-    validate_stream_data_acceptance(0, PipelineDataHeader::Empty, [false; 4])
-}
-
-#[test]
-fn read_call_run_with_value_input_doesnt_accept_stream_data() {
-    validate_stream_data_acceptance(1, PipelineDataHeader::Value(Value::test_int(4)), [false; 4])
+fn read_call_run_with_empty_accepts_nothing() {
+    validate_stream_data_acceptance(PipelineDataHeader::Empty, &[(0, ExpectType::None)])
 }
 
 #[test]
 fn read_call_run_with_list_stream_input_accepts_only_list_stream_data() {
     validate_stream_data_acceptance(
-        2,
-        PipelineDataHeader::ListStream(2),
-        [
-            true, // list stream
-            false, false, false,
+        PipelineDataHeader::ListStream(ListStreamInfo { id: 2 }),
+        &[(2, ExpectType::List)],
+    )
+}
+
+#[test]
+fn read_call_run_with_external_stream_stdout_input_accepts_only_raw_data() {
+    let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+        span: Span::test_data(),
+        stdout: Some(RawStreamInfo {
+            id: 3,
+            is_binary: false,
+            known_size: None,
+        }),
+        stderr: None,
+        exit_code: None,
+        trim_end_newline: false,
+    });
+
+    validate_stream_data_acceptance(
+        header,
+        &[
+            (3, ExpectType::Raw),
+            (4, ExpectType::None),
+            (5, ExpectType::None),
         ],
     )
 }
 
 #[test]
-fn read_call_run_with_external_stream_stdout_input_accepts_only_external_stream_stdout_data() {
-    let header = PipelineDataHeader::ExternalStream(
-        3,
-        ExternalStreamInfo {
-            span: Span::test_data(),
-            stdout: Some(RawStreamInfo {
-                is_binary: false,
-                known_size: None,
-            }),
-            stderr: None,
-            has_exit_code: false,
-            trim_end_newline: false,
-        },
-    );
+fn read_call_run_with_external_stream_stderr_input_accepts_only_raw_data() {
+    let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+        span: Span::test_data(),
+        stdout: None,
+        stderr: Some(RawStreamInfo {
+            id: 4,
+            is_binary: false,
+            known_size: None,
+        }),
+        exit_code: None,
+        trim_end_newline: false,
+    });
 
     validate_stream_data_acceptance(
-        3,
         header,
-        [
-            false, true, // external stdout
-            false, false,
+        &[
+            (3, ExpectType::None),
+            (4, ExpectType::Raw),
+            (5, ExpectType::None),
         ],
     )
 }
 
 #[test]
-fn read_call_run_with_external_stream_stderr_input_accepts_only_external_stream_stderr_data() {
-    let header = PipelineDataHeader::ExternalStream(
-        4,
-        ExternalStreamInfo {
-            span: Span::test_data(),
-            stdout: None,
-            stderr: Some(RawStreamInfo {
-                is_binary: false,
-                known_size: None,
-            }),
-            has_exit_code: false,
-            trim_end_newline: false,
-        },
-    );
+fn read_call_run_with_external_stream_exit_code_input_accepts_only_list_data() {
+    let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+        span: Span::test_data(),
+        stdout: None,
+        stderr: None,
+        exit_code: Some(ListStreamInfo { id: 5 }),
+        trim_end_newline: false,
+    });
 
     validate_stream_data_acceptance(
-        4,
         header,
-        [
-            false, false, true, // external stderr
-            false,
-        ],
-    )
-}
-
-#[test]
-fn read_call_run_with_external_stream_exit_code_input_accepts_only_external_stream_exit_code_data()
-{
-    let header = PipelineDataHeader::ExternalStream(
-        5,
-        ExternalStreamInfo {
-            span: Span::test_data(),
-            stdout: None,
-            stderr: None,
-            has_exit_code: true,
-            trim_end_newline: false,
-        },
-    );
-
-    validate_stream_data_acceptance(
-        5,
-        header,
-        [
-            false, false, false, true, // external exit code
+        &[
+            (3, ExpectType::None),
+            (4, ExpectType::None),
+            (5, ExpectType::List),
         ],
     )
 }
 
 #[test]
 fn read_call_run_with_external_stream_all_input_accepts_only_all_external_stream_data() {
-    let header = PipelineDataHeader::ExternalStream(
-        6,
-        ExternalStreamInfo {
-            span: Span::test_data(),
-            stdout: Some(RawStreamInfo {
-                is_binary: false,
-                known_size: None,
-            }),
-            stderr: Some(RawStreamInfo {
-                is_binary: false,
-                known_size: None,
-            }),
-            has_exit_code: true,
-            trim_end_newline: false,
-        },
-    );
+    let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+        span: Span::test_data(),
+        stdout: Some(RawStreamInfo {
+            id: 3,
+            is_binary: false,
+            known_size: None,
+        }),
+        stderr: Some(RawStreamInfo {
+            id: 4,
+            is_binary: false,
+            known_size: None,
+        }),
+        exit_code: Some(ListStreamInfo { id: 5 }),
+        trim_end_newline: false,
+    });
 
     validate_stream_data_acceptance(
-        6,
         header,
-        [
-            false, true, // external stdout
-            true, // external stderr
-            true, // external exit code
+        &[
+            (3, ExpectType::Raw),
+            (4, ExpectType::Raw),
+            (5, ExpectType::List),
         ],
     )
+}
+
+#[test]
+fn read_call_run_with_overlapping_external_stream_ids_causes_error() {
+    let test = TestCase::new();
+    let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+        span: Span::test_data(),
+        stdout: Some(RawStreamInfo {
+            id: 7,
+            is_binary: false,
+            known_size: None,
+        }),
+        stderr: Some(RawStreamInfo {
+            id: 7,
+            is_binary: false,
+            known_size: None,
+        }),
+        exit_code: Some(ListStreamInfo { id: 8 }),
+        trim_end_newline: false,
+    });
+    let call_info = test_call_with_input(header);
+    test.add_input(PluginInput::Call(PluginCall::Run(call_info)));
+
+    let interface = test.engine_interface_impl();
+
+    interface.clone().read_call().expect_err("call succeded");
 }
 
 #[test]
@@ -461,11 +478,11 @@ fn make_pipeline_data_list_stream() {
     // end
     test.add_input(PluginInput::StreamData(0, StreamData::List(None)));
 
-    let header = PipelineDataHeader::ListStream(0);
+    let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 0 });
 
     let interface = EngineInterface::from({
         let interface = test.engine_interface_impl();
-        def_streams!(interface, list(0));
+        interface.def_list(0);
         interface
     });
 
@@ -486,40 +503,39 @@ fn make_pipeline_data_external_stream() {
 
     // Test many simultaneous streams out of order
     let stream_data = [
-        StreamData::ExternalStdout(Some(Ok(b"foo".to_vec()))),
-        StreamData::ExternalStderr(Some(Ok(b"bar".to_vec()))),
-        StreamData::ExternalExitCode(Some(Value::test_int(1))),
-        StreamData::ExternalStderr(Some(Ok(b"barr".to_vec()))),
-        StreamData::ExternalStderr(None),
-        StreamData::ExternalStdout(Some(Ok(b"fooo".to_vec()))),
-        StreamData::ExternalStdout(None),
-        StreamData::ExternalExitCode(None),
+        (0, StreamData::Raw(Some(Ok(b"foo".to_vec())))),
+        (1, StreamData::Raw(Some(Ok(b"bar".to_vec())))),
+        (2, StreamData::List(Some(Value::test_int(1)))),
+        (1, StreamData::Raw(Some(Ok(b"barr".to_vec())))),
+        (1, StreamData::Raw(None)),
+        (0, StreamData::Raw(Some(Ok(b"fooo".to_vec())))),
+        (0, StreamData::Raw(None)),
+        (2, StreamData::List(None)),
     ];
 
-    for data in stream_data {
-        test.add_input(PluginInput::StreamData(0, data));
+    for (id, data) in stream_data {
+        test.add_input(PluginInput::StreamData(id, data));
     }
 
-    let header = PipelineDataHeader::ExternalStream(
-        0,
-        ExternalStreamInfo {
-            span: Span::test_data(),
-            stdout: Some(RawStreamInfo {
-                is_binary: true,
-                known_size: Some(7),
-            }),
-            stderr: Some(RawStreamInfo {
-                is_binary: false,
-                known_size: None,
-            }),
-            has_exit_code: true,
-            trim_end_newline: false,
-        },
-    );
+    let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+        span: Span::test_data(),
+        stdout: Some(RawStreamInfo {
+            id: 0,
+            is_binary: true,
+            known_size: Some(7),
+        }),
+        stderr: Some(RawStreamInfo {
+            id: 1,
+            is_binary: false,
+            known_size: None,
+        }),
+        exit_code: Some(ListStreamInfo { id: 2 }),
+        trim_end_newline: false,
+    });
 
     let interface = EngineInterface::from({
         let interface = test.engine_interface_impl();
-        def_streams!(interface, external(0));
+        interface.def_external(0, 1, 2);
         interface
     });
 
@@ -572,38 +588,40 @@ fn make_pipeline_data_external_stream_error() {
     // Just test stdout, but with an error
     let spec_msg = "failure";
     let stream_data = [
-        StreamData::ExternalExitCode(Some(Value::int(1, Span::test_data()))),
-        StreamData::ExternalStdout(Some(Err(ShellError::NushellFailed {
-            msg: spec_msg.into(),
-        }))),
-        StreamData::ExternalStdout(None),
+        (2, StreamData::List(Some(Value::int(1, Span::test_data())))),
+        (
+            0,
+            StreamData::Raw(Some(Err(ShellError::NushellFailed {
+                msg: spec_msg.into(),
+            }))),
+        ),
+        (0, StreamData::Raw(None)),
     ];
 
-    for data in stream_data {
-        test.add_input(PluginInput::StreamData(0, data));
+    for (id, data) in stream_data {
+        test.add_input(PluginInput::StreamData(id, data));
     }
 
     // Still enable the other streams, to ensure ignoring the other data works
-    let header = PipelineDataHeader::ExternalStream(
-        0,
-        ExternalStreamInfo {
-            span: Span::test_data(),
-            stdout: Some(RawStreamInfo {
-                is_binary: false,
-                known_size: None,
-            }),
-            stderr: Some(RawStreamInfo {
-                is_binary: false,
-                known_size: None,
-            }),
-            has_exit_code: true,
-            trim_end_newline: false,
-        },
-    );
+    let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+        span: Span::test_data(),
+        stdout: Some(RawStreamInfo {
+            id: 0,
+            is_binary: false,
+            known_size: None,
+        }),
+        stderr: Some(RawStreamInfo {
+            id: 1,
+            is_binary: false,
+            known_size: None,
+        }),
+        exit_code: Some(ListStreamInfo { id: 2 }),
+        trim_end_newline: false,
+    });
 
     let interface = EngineInterface::from({
         let interface = test.engine_interface_impl();
-        def_streams!(interface, external(0));
+        interface.def_external(0, 1, 2);
         interface
     });
 
@@ -700,7 +718,7 @@ fn write_pipeline_data_response_list_stream() {
     // Response starts by signaling a ListStream return value:
     let id = match test.next_written_output() {
         Some(PluginOutput::CallResponse(PluginCallResponse::PipelineData(
-            PipelineDataHeader::ListStream(id),
+            PipelineDataHeader::ListStream(ListStreamInfo { id }),
         ))) => id,
         Some(other) => panic!("unexpected response: {other:?}"),
         None => panic!("response not written"),
@@ -762,23 +780,28 @@ fn write_pipeline_data_response_external_stream_stdout_only() {
     // First, there should be a header telling us metadata about the external stream
     let id = match test.next_written_output() {
         Some(PluginOutput::CallResponse(PluginCallResponse::PipelineData(
-            PipelineDataHeader::ExternalStream(id, info),
+            PipelineDataHeader::ExternalStream(info),
         ))) => {
             assert_eq!(span, info.span, "info.span");
+            assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
+            assert!(
+                info.exit_code.is_none(),
+                "info.exit_code: {:?}",
+                info.exit_code
+            );
+            assert!(!info.trim_end_newline, "info.trim_end_newline=true");
             match info.stdout {
                 Some(RawStreamInfo {
+                    id,
                     is_binary,
                     known_size,
                 }) => {
                     let _ = is_binary; // undefined, could be anything
                     assert_eq!(None, known_size);
+                    id
                 }
                 None => panic!("stdout missing"),
             }
-            assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
-            assert!(!info.has_exit_code, "info.has_exit_code=true");
-            assert!(!info.trim_end_newline, "info.trim_end_newline=true");
-            id
         }
         Some(other) => panic!("unexpected response written: {other:?}"),
         None => panic!("no response written"),
@@ -787,7 +810,7 @@ fn write_pipeline_data_response_external_stream_stdout_only() {
     // Then, just check the outputs. They should be in exactly the same order with nothing extra
     for expected_chunk in stdout_chunks {
         match test.next_written_output() {
-            Some(PluginOutput::StreamData(stream_id, StreamData::ExternalStdout(option)))
+            Some(PluginOutput::StreamData(stream_id, StreamData::Raw(option)))
                 if id == stream_id =>
             {
                 let read_chunk = option
@@ -803,9 +826,7 @@ fn write_pipeline_data_response_external_stream_stdout_only() {
 
     // And there should be an end of stream signal (`Ok(None)`)
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::ExternalStdout(option)))
-            if id == stream_id =>
-        {
+        Some(PluginOutput::StreamData(stream_id, StreamData::Raw(option))) if id == stream_id => {
             match option {
                 Some(Ok(data)) => panic!("unexpected extra data on stdout stream: {data:?}"),
                 Some(Err(err)) => panic!("unexpected error at end of stdout stream: {err}"),
@@ -856,12 +877,16 @@ fn write_pipeline_data_response_external_stream_stdout_err() {
     // Check response header
     let id = match test.next_written_output() {
         Some(PluginOutput::CallResponse(PluginCallResponse::PipelineData(
-            PipelineDataHeader::ExternalStream(id, info),
+            PipelineDataHeader::ExternalStream(info),
         ))) => {
             assert!(info.stdout.is_some(), "info.stdout is not present");
             assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
-            assert!(!info.has_exit_code, "info.has_exit_code=true");
-            id
+            assert!(
+                info.exit_code.is_none(),
+                "info.exit_code: {:?}",
+                info.exit_code
+            );
+            info.stdout.as_ref().unwrap().id
         }
         Some(other) => panic!("unexpected response written: {other:?}"),
         None => panic!("no response written"),
@@ -869,7 +894,7 @@ fn write_pipeline_data_response_external_stream_stdout_err() {
 
     // Check error
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::ExternalStdout(Some(result))))
+        Some(PluginOutput::StreamData(stream_id, StreamData::Raw(Some(result))))
             if id == stream_id =>
         {
             match result {
@@ -892,11 +917,7 @@ fn write_pipeline_data_response_external_stream_stdout_err() {
 
     // Check end of stream
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::ExternalStdout(None)))
-            if id == stream_id =>
-        {
-            ()
-        }
+        Some(PluginOutput::StreamData(stream_id, StreamData::Raw(None))) if id == stream_id => (),
         Some(other) => panic!("unexpected output: {other:?}"),
         None => panic!("didn't write the exit code end of stream signal"),
     }
@@ -926,13 +947,12 @@ fn write_pipeline_data_response_external_stream_exit_code_only() {
     // Check response header
     let id = match test.next_written_output() {
         Some(PluginOutput::CallResponse(PluginCallResponse::PipelineData(
-            PipelineDataHeader::ExternalStream(id, info),
+            PipelineDataHeader::ExternalStream(info),
         ))) => {
             // just check what matters here, the other tests cover other bits
             assert!(info.stdout.is_none(), "info.stdout: {:?}", info.stdout);
             assert!(info.stderr.is_none(), "info.stderr: {:?}", info.stderr);
-            assert!(info.has_exit_code);
-            id
+            info.exit_code.as_ref().expect("info.exit_code missing").id
         }
         Some(other) => panic!("unexpected response: {other:?}"),
         None => panic!("didn't write any response"),
@@ -940,7 +960,7 @@ fn write_pipeline_data_response_external_stream_exit_code_only() {
 
     // Check exit code value
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::ExternalExitCode(Some(value))))
+        Some(PluginOutput::StreamData(stream_id, StreamData::List(Some(value))))
             if id == stream_id =>
         {
             assert_eq!(Value::test_int(0), value);
@@ -951,11 +971,7 @@ fn write_pipeline_data_response_external_stream_exit_code_only() {
 
     // Check end of stream
     match test.next_written_output() {
-        Some(PluginOutput::StreamData(stream_id, StreamData::ExternalExitCode(None)))
-            if id == stream_id =>
-        {
-            ()
-        }
+        Some(PluginOutput::StreamData(stream_id, StreamData::List(None))) if id == stream_id => (),
         Some(other) => panic!("unexpected output: {other:?}"),
         None => panic!("didn't write the exit code end of stream signal"),
     }
@@ -1015,34 +1031,38 @@ fn write_pipeline_data_response_external_stream_full() {
         .expect("failed to write external stream pipeline data");
 
     // First, there should be a header telling us metadata about the external stream
-    let id = match test.next_written_output() {
+    let (out, err, exit);
+    match test.next_written_output() {
         Some(PluginOutput::CallResponse(PluginCallResponse::PipelineData(
-            PipelineDataHeader::ExternalStream(id, info),
+            PipelineDataHeader::ExternalStream(info),
         ))) => {
             assert_eq!(Span::test_data(), info.span, "info.span");
             match info.stdout {
                 Some(RawStreamInfo {
+                    id,
                     is_binary,
                     known_size,
                 }) => {
+                    out = id;
                     let _ = is_binary; // undefined, could be anything
                     assert_eq!(Some(stdout_len), known_size);
                 }
-                None => todo!(),
+                None => panic!("stdout missing"),
             }
             match info.stderr {
                 Some(RawStreamInfo {
+                    id,
                     is_binary,
                     known_size,
                 }) => {
+                    err = id;
                     let _ = is_binary; // undefined, could be anything
                     assert_eq!(None, known_size);
                 }
-                None => todo!(),
+                None => panic!("stderr missing"),
             }
-            assert!(info.has_exit_code);
+            exit = info.exit_code.as_ref().expect("exit_code missing").id;
             assert!(info.trim_end_newline);
-            id
         }
         Some(other) => panic!("unexpected response written: {other:?}"),
         None => panic!("no response written"),
@@ -1058,26 +1078,27 @@ fn write_pipeline_data_response_external_stream_full() {
 
     for output in test.written_outputs() {
         match output {
-            PluginOutput::StreamData(stream_id, data) if id == stream_id => match data {
-                StreamData::List(_) => panic!("got unexpected list stream data: {data:?}"),
-                StreamData::ExternalStdout(option) => {
+            PluginOutput::StreamData(stream_id, StreamData::List(value)) => {
+                if stream_id == exit {
+                    assert_eq!(exit_code_iter.next(), value);
+                } else {
+                    panic!("received unexpected list data on stream {stream_id}: {value:?}");
+                }
+            }
+            PluginOutput::StreamData(stream_id, StreamData::Raw(option)) => {
+                if stream_id == out {
                     let received = option
                         .transpose()
                         .expect("unexpected error in stdout stream");
                     assert_eq!(stdout_iter.next(), received);
-                }
-                StreamData::ExternalStderr(option) => {
+                } else if stream_id == err {
                     let received = option
                         .transpose()
                         .expect("unexpected error in stderr stream");
                     assert_eq!(stderr_iter.next(), received);
+                } else {
+                    panic!("received unexpected raw data on stream {stream_id}: {option:?}");
                 }
-                StreamData::ExternalExitCode(received) => {
-                    assert_eq!(exit_code_iter.next(), received);
-                }
-            },
-            PluginOutput::StreamData(id, data) => {
-                panic!("unexpected other stream output on id={id}, data={data:?}")
             }
             other => panic!("unexpected output: {other:?}"),
         }

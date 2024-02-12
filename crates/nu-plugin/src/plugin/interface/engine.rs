@@ -11,7 +11,7 @@ use nu_protocol::{engine::Closure, Config, CustomValue, PipelineData, ShellError
 use crate::{
     plugin::PluginEncoder,
     protocol::{
-        CallInfo, EngineCall, EngineCallId, EngineCallResponse, ExternalStreamInfo,
+        CallInfo, EngineCall, EngineCallId, EngineCallResponse, ExternalStreamInfo, ListStreamInfo,
         PipelineDataHeader, PluginCall, PluginCallResponse, PluginData, PluginInput, PluginOutput,
         RawStreamInfo, StreamId, StreamMessage,
     },
@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     buffers::StreamBuffers,
-    make_external_stream, make_list_stream, next_id_from,
+    make_pipe_external_stream, make_pipe_list_stream, next_id_from,
     stream_data_io::{
         StreamDataIo, StreamDataIoBase, StreamDataIoExt, StreamDataRead, StreamDataWrite,
     },
@@ -321,9 +321,9 @@ where
                         msg: err.to_string(),
                     })
             }
-            PipelineDataHeader::ListStream(id) => Ok(make_list_stream(self, id, None)),
-            PipelineDataHeader::ExternalStream(id, info) => {
-                Ok(make_external_stream(self, id, &info, None))
+            PipelineDataHeader::ListStream(info) => Ok(make_pipe_list_stream(self, &info, None)),
+            PipelineDataHeader::ExternalStream(info) => {
+                Ok(make_pipe_external_stream(self, &info, None))
             }
         }
     }
@@ -362,7 +362,9 @@ where
                 }
             }
             PipelineData::ListStream(..) => {
-                let header = PipelineDataHeader::ListStream(self.new_stream_id()?);
+                let header = PipelineDataHeader::ListStream(ListStreamInfo {
+                    id: self.new_stream_id()?,
+                });
                 Ok((header.clone(), Some((header, data))))
             }
             PipelineData::ExternalStream {
@@ -376,12 +378,26 @@ where
                 // Gather info from the stream
                 let info = ExternalStreamInfo {
                     span,
-                    stdout: stdout.as_ref().map(RawStreamInfo::from),
-                    stderr: stderr.as_ref().map(RawStreamInfo::from),
-                    has_exit_code: exit_code.is_some(),
+                    stdout: if let Some(stdout) = stdout {
+                        Some(RawStreamInfo::new(self.new_stream_id()?, stdout))
+                    } else {
+                        None
+                    },
+                    stderr: if let Some(stderr) = stderr {
+                        Some(RawStreamInfo::new(self.new_stream_id()?, stderr))
+                    } else {
+                        None
+                    },
+                    exit_code: if exit_code.is_some() {
+                        Some(ListStreamInfo {
+                            id: self.new_stream_id()?,
+                        })
+                    } else {
+                        None
+                    },
                     trim_end_newline,
                 };
-                let header = PipelineDataHeader::ExternalStream(self.new_stream_id()?, info);
+                let header = PipelineDataHeader::ExternalStream(info);
                 Ok((header.clone(), Some((header, data))))
             }
             PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
@@ -472,11 +488,13 @@ impl EngineInterface {
     /// Format a value in the user's preferred way:
     ///
     /// ```
-    /// #fn example(engine: &EngineInterface, value: &Value) -> Result<(), ShellError> {
+    /// # use nu_protocol::{Value, ShellError};
+    /// # use nu_plugin::EngineInterface;
+    /// # fn example(engine: &EngineInterface, value: &Value) -> Result<(), ShellError> {
     /// let config = engine.get_config()?;
     /// eprintln!("{}", value.into_string(", ", &config));
-    /// #Ok(())
-    /// #}
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn get_config(&self) -> Result<Box<Config>, ShellError> {
         let call_id = self.io.write_engine_call(EngineCall::GetConfig)?;
@@ -507,9 +525,11 @@ impl EngineInterface {
     /// ```
     ///
     /// ```
-    /// #fn example(engine: &EngineInterface, call: &crate::EvaluatedCall) -> Result<(), ShellError> {
+    /// # use nu_protocol::{Value, ShellError, PipelineData};
+    /// # use nu_plugin::{EngineInterface, EvaluatedCall};
+    /// # fn example(engine: &EngineInterface, call: &EvaluatedCall) -> Result<(), ShellError> {
     /// let closure = call.req(0)?;
-    /// let input = PipelineData::Value(Value::int(4, call.head));
+    /// let input = PipelineData::Value(Value::int(4, call.head), None);
     /// let output = engine.eval_closure_with_stream(
     ///     &closure,
     ///     vec![],
@@ -518,10 +538,10 @@ impl EngineInterface {
     ///     false,
     /// )?;
     /// for value in output {
-    ///     eprintln!("Closure says: {}", value.as_str()?);
+    ///     eprintln!("Closure says: {}", value.as_string()?);
     /// }
-    /// #Ok(())
-    /// #}
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// Output:
@@ -590,14 +610,16 @@ impl EngineInterface {
     /// ```
     ///
     /// ```
-    /// #fn example(engine: &EngineInterface, call: &crate::EvaluatedCall) -> Result<(), ShellError> {
+    /// # use nu_protocol::{Value, ShellError};
+    /// # use nu_plugin::{EngineInterface, EvaluatedCall};
+    /// # fn example(engine: &EngineInterface, call: &EvaluatedCall) -> Result<(), ShellError> {
     /// let closure = call.req(0)?;
     /// for n in 0..4 {
     ///     let result = engine.eval_closure(&closure, vec![Value::int(n, call.head)], None)?;
     ///     eprintln!("{} => {}", n, result.as_int()?);
     /// }
-    /// #Ok(())
-    /// #}
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// Output:

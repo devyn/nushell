@@ -302,6 +302,7 @@ pub trait Plugin {
 ///         &mut self,
 ///         name: &str,
 ///         config: &Option<Value>,
+///         engine: &EngineInterface,
 ///         call: &EvaluatedCall,
 ///         input: PipelineData,
 ///     ) -> Result<PipelineData, LabeledError> {

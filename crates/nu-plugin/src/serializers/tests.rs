@@ -418,10 +418,10 @@ macro_rules! generate_tests {
         }
 
         #[test]
-        fn input_round_trip_stream_data_external_stdout() {
+        fn input_round_trip_stream_data_raw() {
             let data = b"Hello world";
 
-            let stream_data = StreamData::ExternalStdout(Some(Ok(data.to_vec())));
+            let stream_data = StreamData::Raw(Some(Ok(data.to_vec())));
             let plugin_input = PluginInput::StreamData(1, stream_data);
 
             let encoder = $encoder;
@@ -435,68 +435,12 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::StreamData(id, StreamData::ExternalStdout(Some(bytes))) => {
+                PluginInput::StreamData(id, StreamData::Raw(Some(bytes))) => {
                     assert_eq!(1, id);
                     match bytes {
                         Ok(bytes) => assert_eq!(data, &bytes[..]),
                         Err(err) => panic!("decoded into error variant: {err:?}"),
                     }
-                }
-                _ => panic!("decoded into wrong value: {returned:?}"),
-            }
-        }
-
-        #[test]
-        fn input_round_trip_stream_data_external_stderr() {
-            let data = b"Hello world";
-
-            let stream_data = StreamData::ExternalStderr(Some(Ok(data.to_vec())));
-            let plugin_input = PluginInput::StreamData(2, stream_data);
-
-            let encoder = $encoder;
-            let mut buffer: Vec<u8> = Vec::new();
-            encoder
-                .encode_input(&plugin_input, &mut buffer)
-                .expect("unable to serialize message");
-            let returned = encoder
-                .decode_input(&mut buffer.as_slice())
-                .expect("unable to deserialize message")
-                .expect("eof");
-
-            match returned {
-                PluginInput::StreamData(id, StreamData::ExternalStderr(Some(bytes))) => {
-                    assert_eq!(2, id);
-                    match bytes {
-                        Ok(bytes) => assert_eq!(data, &bytes[..]),
-                        Err(err) => panic!("decoded into error variant: {err:?}"),
-                    }
-                }
-                _ => panic!("decoded into wrong value: {returned:?}"),
-            }
-        }
-
-        #[test]
-        fn input_round_trip_stream_data_external_exit_code() {
-            let span = Span::new(0, 0);
-            let exit_code = Value::int(1, span);
-
-            let stream_data = StreamData::ExternalExitCode(Some(exit_code.clone()));
-            let plugin_input = PluginInput::StreamData(3, stream_data);
-
-            let encoder = $encoder;
-            let mut buffer: Vec<u8> = Vec::new();
-            encoder
-                .encode_input(&plugin_input, &mut buffer)
-                .expect("unable to serialize message");
-            let returned = encoder
-                .decode_input(&mut buffer.as_slice())
-                .expect("unable to deserialize message")
-                .expect("eof");
-
-            match returned {
-                PluginInput::StreamData(id, StreamData::ExternalExitCode(Some(value))) => {
-                    assert_eq!(3, id);
-                    assert_eq!(exit_code, value);
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
@@ -530,10 +474,10 @@ macro_rules! generate_tests {
         }
 
         #[test]
-        fn output_round_trip_stream_data_external_stdout() {
+        fn output_round_trip_stream_data_raw() {
             let data = b"Hello world";
 
-            let stream_data = StreamData::ExternalStdout(Some(Ok(data.to_vec())));
+            let stream_data = StreamData::Raw(Some(Ok(data.to_vec())));
             let plugin_output = PluginOutput::StreamData(5, stream_data);
 
             let encoder = $encoder;
@@ -547,68 +491,12 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::StreamData(id, StreamData::ExternalStdout(Some(bytes))) => {
+                PluginOutput::StreamData(id, StreamData::Raw(Some(bytes))) => {
                     assert_eq!(5, id);
                     match bytes {
                         Ok(bytes) => assert_eq!(data, &bytes[..]),
                         Err(err) => panic!("decoded into error variant: {err:?}"),
                     }
-                }
-                _ => panic!("decoded into wrong value: {returned:?}"),
-            }
-        }
-
-        #[test]
-        fn output_round_trip_stream_data_external_stderr() {
-            let data = b"Hello world";
-
-            let stream_data = StreamData::ExternalStderr(Some(Ok(data.to_vec())));
-            let plugin_output = PluginOutput::StreamData(6, stream_data);
-
-            let encoder = $encoder;
-            let mut buffer: Vec<u8> = Vec::new();
-            encoder
-                .encode_output(&plugin_output, &mut buffer)
-                .expect("unable to serialize message");
-            let returned = encoder
-                .decode_output(&mut buffer.as_slice())
-                .expect("unable to deserialize message")
-                .expect("eof");
-
-            match returned {
-                PluginOutput::StreamData(id, StreamData::ExternalStderr(Some(bytes))) => {
-                    assert_eq!(6, id);
-                    match bytes {
-                        Ok(bytes) => assert_eq!(data, &bytes[..]),
-                        Err(err) => panic!("decoded into error variant: {err:?}"),
-                    }
-                }
-                _ => panic!("decoded into wrong value: {returned:?}"),
-            }
-        }
-
-        #[test]
-        fn output_round_trip_stream_data_external_exit_code() {
-            let span = Span::new(0, 0);
-            let exit_code = Value::int(1, span);
-
-            let stream_data = StreamData::ExternalExitCode(Some(exit_code.clone()));
-            let plugin_output = PluginOutput::StreamData(7, stream_data);
-
-            let encoder = $encoder;
-            let mut buffer: Vec<u8> = Vec::new();
-            encoder
-                .encode_output(&plugin_output, &mut buffer)
-                .expect("unable to serialize message");
-            let returned = encoder
-                .decode_output(&mut buffer.as_slice())
-                .expect("unable to deserialize message")
-                .expect("eof");
-
-            match returned {
-                PluginOutput::StreamData(id, StreamData::ExternalExitCode(Some(value))) => {
-                    assert_eq!(7, id);
-                    assert_eq!(exit_code, value);
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }

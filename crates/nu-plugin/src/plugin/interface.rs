@@ -9,7 +9,9 @@ use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Span, Value};
 
 use crate::{
     plugin::PluginEncoder,
-    protocol::{ExternalStreamInfo, PluginInput, PluginOutput, StreamId},
+    protocol::{
+        ExternalStreamInfo, ListStreamInfo, PluginInput, PluginOutput, RawStreamInfo, StreamId,
+    },
 };
 
 mod buffers;
@@ -111,141 +113,89 @@ impl Drop for PluginListStream {
     }
 }
 
-/// Create [PipelineData] for receiving a [ListStream] input.
-fn make_list_stream(
+/// Create [`PipelineData`] for receiving a [`ListStream`] input.
+fn make_pipe_list_stream(
     source: Arc<dyn StreamDataIo>,
-    id: StreamId,
+    info: &ListStreamInfo,
     ctrlc: Option<Arc<AtomicBool>>,
 ) -> PipelineData {
-    PipelineData::ListStream(
-        ListStream::from_stream(PluginListStream { io: source, id }.fuse(), ctrlc),
-        None,
+    PipelineData::ListStream(make_list_stream(source, info, ctrlc), None)
+}
+
+/// Create a [`ListStream`] for receiving input from `source`.
+fn make_list_stream(
+    source: Arc<dyn StreamDataIo>,
+    info: &ListStreamInfo,
+    ctrlc: Option<Arc<AtomicBool>>,
+) -> ListStream {
+    ListStream::from_stream(
+        PluginListStream {
+            io: source,
+            id: info.id,
+        }
+        .fuse(),
+        ctrlc,
     )
 }
 
-/// Iterate through byte chunks received on the `stdout` stream of an `ListStream` input.
+/// Iterate through byte chunks received on a `RawStream` input.
 ///
 /// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
 /// attempted to be read after end-of-input.
-struct PluginExternalStdoutStream {
+struct PluginRawStream {
     io: Arc<dyn StreamDataIo>,
     id: StreamId,
 }
 
-impl Iterator for PluginExternalStdoutStream {
+impl Iterator for PluginRawStream {
     type Item = Result<Vec<u8>, ShellError>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>, ShellError>> {
-        self.io.clone().read_external_stdout(self.id).transpose()
+        self.io.clone().read_raw(self.id).transpose()
     }
 }
 
-impl Drop for PluginExternalStdoutStream {
+impl Drop for PluginRawStream {
     fn drop(&mut self) {
         // Signal that we don't need the stream anymore.
-        self.io.drop_external_stdout(self.id);
+        self.io.drop_raw(self.id);
     }
 }
 
-/// Iterate through byte chunks received on the `stderr` stream of an `ListStream` input.
-///
-/// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
-/// attempted to be read after end-of-input.
-struct PluginExternalStderrStream {
-    io: Arc<dyn StreamDataIo>,
-    id: StreamId,
-}
-
-impl Iterator for PluginExternalStderrStream {
-    type Item = Result<Vec<u8>, ShellError>;
-
-    fn next(&mut self) -> Option<Result<Vec<u8>, ShellError>> {
-        self.io.clone().read_external_stderr(self.id).transpose()
+/// Create a [`RawStream`] for receiving raw input from `source`.
+fn make_raw_stream(
+    source: Arc<dyn StreamDataIo>,
+    info: &RawStreamInfo,
+    span: Span,
+    ctrlc: Option<Arc<AtomicBool>>,
+) -> RawStream {
+    let stream = PluginRawStream {
+        io: source.clone(),
+        id: info.id,
     }
-}
-
-impl Drop for PluginExternalStderrStream {
-    fn drop(&mut self) {
-        // Signal that we don't need the stream anymore.
-        self.io.drop_external_stderr(self.id);
-    }
-}
-
-/// Iterate through values received on the `exit_code` stream of an `ListStream` input.
-///
-/// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
-/// attempted to be read after end-of-input.
-struct PluginExternalExitCodeStream {
-    io: Arc<dyn StreamDataIo>,
-    id: StreamId,
-}
-
-impl Iterator for PluginExternalExitCodeStream {
-    type Item = Value;
-
-    fn next(&mut self) -> Option<Value> {
-        match self.io.clone().read_external_exit_code(self.id) {
-            Ok(value) => value,
-            Err(err) => Some(Value::error(err, Span::unknown())),
-        }
-    }
-}
-
-impl Drop for PluginExternalExitCodeStream {
-    fn drop(&mut self) {
-        // Signal that we don't need the stream anymore.
-        self.io.clone().drop_external_exit_code(self.id);
-    }
+    .fuse();
+    let mut raw = RawStream::new(Box::new(stream), ctrlc.clone(), span, info.known_size);
+    raw.is_binary = info.is_binary;
+    raw
 }
 
 /// Create [PipelineData] for receiving an [ExternalStream] input.
-fn make_external_stream(
+fn make_pipe_external_stream(
     source: Arc<dyn StreamDataIo>,
-    id: StreamId,
     info: &ExternalStreamInfo,
     ctrlc: Option<Arc<AtomicBool>>,
 ) -> PipelineData {
     PipelineData::ExternalStream {
         stdout: info.stdout.as_ref().map(|stdout_info| {
-            let stream = PluginExternalStdoutStream {
-                io: source.clone(),
-                id,
-            }
-            .fuse();
-            let mut raw = RawStream::new(
-                Box::new(stream),
-                ctrlc.clone(),
-                info.span,
-                stdout_info.known_size,
-            );
-            raw.is_binary = stdout_info.is_binary;
-            raw
+            make_raw_stream(source.clone(), stdout_info, info.span, ctrlc.clone())
         }),
         stderr: info.stderr.as_ref().map(|stderr_info| {
-            let stream = PluginExternalStderrStream {
-                io: source.clone(),
-                id,
-            }
-            .fuse();
-            let mut raw = RawStream::new(
-                Box::new(stream),
-                ctrlc.clone(),
-                info.span,
-                stderr_info.known_size,
-            );
-            raw.is_binary = stderr_info.is_binary;
-            raw
+            make_raw_stream(source.clone(), stderr_info, info.span, ctrlc.clone())
         }),
-        exit_code: info.has_exit_code.then(|| {
-            ListStream::from_stream(
-                PluginExternalExitCodeStream {
-                    io: source.clone(),
-                    id,
-                }
-                .fuse(),
-                ctrlc.clone(),
-            )
-        }),
+        exit_code: info
+            .exit_code
+            .as_ref()
+            .map(|exit_code_info| make_list_stream(source.clone(), exit_code_info, ctrlc.clone())),
         span: info.span,
         metadata: None,
         trim_end_newline: info.trim_end_newline,

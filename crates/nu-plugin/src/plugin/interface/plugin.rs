@@ -11,15 +11,15 @@ use nu_protocol::{PipelineData, ShellError, Value};
 use crate::{
     plugin::{context::PluginExecutionContext, PluginEncoder},
     protocol::{
-        EngineCall, EngineCallId, EngineCallResponse, ExternalStreamInfo, PipelineDataHeader,
-        PluginCall, PluginCallResponse, PluginCustomValue, PluginData, PluginInput, PluginOutput,
-        RawStreamInfo, StreamId, StreamMessage,
+        EngineCall, EngineCallId, EngineCallResponse, ExternalStreamInfo, ListStreamInfo,
+        PipelineDataHeader, PluginCall, PluginCallResponse, PluginCustomValue, PluginData,
+        PluginInput, PluginOutput, RawStreamInfo, StreamId, StreamMessage,
     },
 };
 
 use super::{
     buffers::StreamBuffers,
-    make_external_stream, make_list_stream, next_id_from,
+    make_pipe_external_stream, make_pipe_list_stream, next_id_from,
     stream_data_io::{
         StreamDataIo, StreamDataIoBase, StreamDataIoExt, StreamDataRead, StreamDataWrite,
     },
@@ -278,13 +278,13 @@ where
                 );
                 Ok(PipelineData::Value(value, None))
             }
-            PipelineDataHeader::ListStream(id) => {
+            PipelineDataHeader::ListStream(info) => {
                 let ctrlc = context.ctrlc().cloned();
-                Ok(make_list_stream(self, id, ctrlc))
+                Ok(make_pipe_list_stream(self, &info, ctrlc))
             }
-            PipelineDataHeader::ExternalStream(id, info) => {
+            PipelineDataHeader::ExternalStream(info) => {
                 let ctrlc = context.ctrlc().cloned();
-                Ok(make_external_stream(self, id, &info, ctrlc))
+                Ok(make_pipe_external_stream(self, &info, ctrlc))
             }
         }
     }
@@ -337,7 +337,9 @@ where
             }
             PipelineData::Value(value, _) => Ok((PipelineDataHeader::Value(value), None)),
             PipelineData::ListStream(_, _) => {
-                let header = PipelineDataHeader::ListStream(self.new_stream_id()?);
+                let header = PipelineDataHeader::ListStream(ListStreamInfo {
+                    id: self.new_stream_id()?,
+                });
                 Ok((header.clone(), Some((header, data))))
             }
             PipelineData::ExternalStream {
@@ -348,16 +350,27 @@ where
                 trim_end_newline,
                 ..
             } => {
-                let header = PipelineDataHeader::ExternalStream(
-                    self.new_stream_id()?,
-                    ExternalStreamInfo {
-                        span,
-                        stdout: stdout.as_ref().map(RawStreamInfo::from),
-                        stderr: stderr.as_ref().map(RawStreamInfo::from),
-                        has_exit_code: exit_code.is_some(),
-                        trim_end_newline,
+                let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+                    span,
+                    stdout: if let Some(ref stdout) = stdout {
+                        Some(RawStreamInfo::new(self.new_stream_id()?, stdout))
+                    } else {
+                        None
                     },
-                );
+                    stderr: if let Some(ref stderr) = stderr {
+                        Some(RawStreamInfo::new(self.new_stream_id()?, stderr))
+                    } else {
+                        None
+                    },
+                    exit_code: if exit_code.is_some() {
+                        Some(ListStreamInfo {
+                            id: self.new_stream_id()?,
+                        })
+                    } else {
+                        None
+                    },
+                    trim_end_newline,
+                });
                 Ok((header.clone(), Some((header, data))))
             }
             PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
