@@ -484,9 +484,9 @@ impl EngineInterface {
     /// Create the engine interface from the given reader, writer, and encoder.
     pub(crate) fn new<R, W, E>(reader: R, writer: W, encoder: E) -> EngineInterface
     where
-        R: BufRead + Send + 'static,
-        W: Write + Send + 'static,
-        E: PluginEncoder + 'static,
+        (R, E): PluginRead + 'static,
+        (W, E): PluginWrite + 'static,
+        E: PluginEncoder,
     {
         EngineInterfaceImpl::new((reader, encoder.clone()), (writer, encoder)).into()
     }

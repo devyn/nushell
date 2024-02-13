@@ -535,9 +535,9 @@ impl PluginInterface {
         context: Option<Arc<dyn PluginExecutionContext>>,
     ) -> PluginInterface
     where
-        R: BufRead + Send + 'static,
-        W: Write + Send + 'static,
-        E: PluginEncoder + 'static,
+        (R, E): PluginRead + 'static,
+        (W, E): PluginWrite + 'static,
+        E: PluginEncoder,
     {
         PluginInterfaceImpl::new((reader, encoder.clone()), (writer, encoder), context).into()
     }

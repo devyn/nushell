@@ -1,9 +1,9 @@
 //! Implements the stream multiplexing interface for both the plugin side and the engine side.
 
-use std::sync::{
+use std::{sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
-    Arc,
-};
+    Arc, Mutex,
+}, io::Write};
 
 use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Span, Value};
 
@@ -32,9 +32,8 @@ mod test_util;
 
 /// Read [PluginInput] or [PluginOutput] from the stream.
 ///
-/// This abstraction is really only used to make testing easier; in general this will usually be
-/// used on a pair of a [reader](std::io::BufRead) and an [encoder](PluginEncoder).
-trait PluginRead: Send {
+/// The read should be atomic, without interference from other threads.
+pub(crate) trait PluginRead: Send {
     /// Returns `Ok(None)` on end of stream.
     fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError>;
 
@@ -42,25 +41,42 @@ trait PluginRead: Send {
     fn read_output(&mut self) -> Result<Option<PluginOutput>, ShellError>;
 }
 
-impl<R, E> PluginRead for (R, E)
+impl<E> PluginRead for (std::io::Stdin, E) where E: PluginEncoder {
+    fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError> {
+        let mut lock = self.0.lock();
+        self.1.decode_input(&mut lock)
+    }
+
+    fn read_output(&mut self) -> Result<Option<PluginOutput>, ShellError> {
+        let mut lock = self.0.lock();
+        self.1.decode_output(&mut lock)
+    }
+}
+
+impl<R, E> PluginRead for (Mutex<R>, E)
 where
     R: std::io::BufRead + Send,
     E: PluginEncoder,
 {
     fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError> {
-        self.1.decode_input(&mut self.0)
+        let mut lock = self.0.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "reader mutex poisoned".into(),
+        })?;
+        self.1.decode_input(&mut *lock)
     }
 
     fn read_output(&mut self) -> Result<Option<PluginOutput>, ShellError> {
-        self.1.decode_output(&mut self.0)
+        let mut lock = self.0.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "reader mutex poisoned".into(),
+        })?;
+        self.1.decode_output(&mut *lock)
     }
 }
 
 /// Write [PluginInput] or [PluginOutput] to the stream.
 ///
-/// This abstraction is really only used to make testing easier; in general this will usually be
-/// used on a pair of a [writer](std::io::Write) and an [encoder](PluginEncoder).
-trait PluginWrite: Send {
+/// The write should be atomic, without interference from other threads.
+pub(crate) trait PluginWrite: Send {
     fn write_input(&mut self, input: &PluginInput) -> Result<(), ShellError>;
     fn write_output(&mut self, output: &PluginOutput) -> Result<(), ShellError>;
 
@@ -68,21 +84,48 @@ trait PluginWrite: Send {
     fn flush(&mut self) -> Result<(), ShellError>;
 }
 
-impl<W, E> PluginWrite for (W, E)
+impl<E> PluginWrite for (std::io::Stdout, E) where E: PluginEncoder {
+    fn write_input(&mut self, input: &PluginInput) -> Result<(), ShellError> {
+        let mut lock = self.0.lock();
+        self.1.encode_input(input, &mut lock)
+    }
+
+    fn write_output(&mut self, output: &PluginOutput) -> Result<(), ShellError> {
+        let mut lock = self.0.lock();
+        self.1.encode_output(output, &mut lock)
+    }
+
+    fn flush(&mut self) -> Result<(), ShellError> {
+        self.0.lock().flush().map_err(|err| ShellError::IOError {
+            msg: err.to_string(),
+        })
+    }
+}
+
+impl<W, E> PluginWrite for (Mutex<W>, E)
 where
     W: std::io::Write + Send,
     E: PluginEncoder,
 {
     fn write_input(&mut self, input: &PluginInput) -> Result<(), ShellError> {
-        self.1.encode_input(input, &mut self.0)
+        let mut lock = self.0.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "writer mutex poisoned".into(),
+        })?;
+        self.1.encode_input(input, &mut *lock)
     }
 
     fn write_output(&mut self, output: &PluginOutput) -> Result<(), ShellError> {
-        self.1.encode_output(output, &mut self.0)
+        let mut lock = self.0.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "writer mutex poisoned".into(),
+        })?;
+        self.1.encode_output(output, &mut *lock)
     }
 
     fn flush(&mut self) -> Result<(), ShellError> {
-        self.0.flush().map_err(|err| ShellError::IOError {
+        let mut lock = self.0.lock().map_err(|_| ShellError::NushellFailed {
+            msg: "writer mutex poisoned".into(),
+        })?;
+        lock.flush().map_err(|err| ShellError::IOError {
             msg: err.to_string(),
         })
     }

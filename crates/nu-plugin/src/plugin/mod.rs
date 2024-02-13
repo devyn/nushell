@@ -2,7 +2,7 @@ mod declaration;
 pub use declaration::PluginDeclaration;
 use nu_engine::documentation::get_flags_section;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::protocol::{
     CallInfo, LabeledError, PluginCall, PluginCallResponse, PluginInput, PluginOutput,
@@ -145,7 +145,7 @@ pub(crate) fn make_plugin_interface(
 
     let reader = BufReader::with_capacity(OUTPUT_BUFFER_SIZE, stdout);
 
-    Ok(PluginInterface::new(reader, stdin, encoder, context))
+    Ok(PluginInterface::new(Mutex::new(reader), Mutex::new(stdin), encoder, context))
 }
 
 #[doc(hidden)] // Note: not for plugin authors / only used in nu-parser
@@ -419,9 +419,7 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
             .expect("Failed to tell nushell my encoding when flushing stdout");
     }
 
-    let stdin_buf = BufReader::with_capacity(OUTPUT_BUFFER_SIZE, std::io::stdin());
-
-    let interface = EngineInterface::new(stdin_buf, stdout, encoder);
+    let interface = EngineInterface::new(std::io::stdin(), stdout, encoder);
 
     // Try an operation that could result in ShellError. Exit if an I/O error is encountered.
     // Try to report the error to nushell otherwise, and failing that, panic.
