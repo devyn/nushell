@@ -5,7 +5,7 @@ use nu_protocol::{
     Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type,
     Value,
 };
-use regex::Regex;
+use fancy_regex::Regex;
 #[derive(Clone)]
 pub struct SubCommand;
 

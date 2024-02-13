@@ -5,7 +5,7 @@ use nu_protocol::{
     record, Category, Example, PipelineData, Record, ShellError, Signature, Span, Spanned,
     SyntaxShape, Type, Value,
 };
-use regex::Regex;
+use fancy_regex::Regex;
 
 #[derive(Clone)]
 pub struct SubCommand;
@@ -124,7 +124,7 @@ fn split_column(
     let regex = if call.has_flag(engine_state, stack, "regex")? {
         Regex::new(&separator.item)
     } else {
-        let escaped = regex::escape(&separator.item);
+        let escaped = fancy_regex::escape(&separator.item);
         Regex::new(&escaped)
     }
     .map_err(|e| ShellError::GenericError {

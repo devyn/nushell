@@ -5,7 +5,7 @@ use nu_protocol::{
     Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, SyntaxShape,
     Type, Value,
 };
-use regex::Regex;
+use fancy_regex::Regex;
 
 #[derive(Clone)]
 pub struct SubCommand;
@@ -181,7 +181,7 @@ impl Matcher {
         Ok(match self {
             Matcher::Regex(regex) => {
                 if let Ok(rhs_str) = rhs.as_string() {
-                    regex.is_match(&rhs_str)
+                    regex.is_match(&rhs_str).unwrap_or(false)
                 } else {
                     false
                 }

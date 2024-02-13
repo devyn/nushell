@@ -3026,7 +3026,6 @@ dependencies = [
  "quickcheck_macros",
  "rand",
  "rayon",
- "regex",
  "roxmltree",
  "rstest",
  "rusqlite",
