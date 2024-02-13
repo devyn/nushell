@@ -114,24 +114,63 @@ impl From<StreamMessage> for PluginInput {
 }
 
 /// A single item of stream data for a stream.
-///
-/// A `None` value ends the stream.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum StreamData {
-    List(Option<Value>),
-    Raw(Option<Result<Vec<u8>, ShellError>>),
+    List(Value),
+    Raw(Result<Vec<u8>, ShellError>),
+}
+
+impl From<Value> for StreamData {
+    fn from(value: Value) -> Self {
+        StreamData::List(value)
+    }
+}
+
+impl From<Result<Vec<u8>, ShellError>> for StreamData {
+    fn from(value: Result<Vec<u8>, ShellError>) -> Self {
+        StreamData::Raw(value)
+    }
+}
+
+impl TryFrom<StreamData> for Value {
+    type Error = ShellError;
+
+    fn try_from(data: StreamData) -> Result<Value, ShellError> {
+        match data {
+            StreamData::List(value) => Ok(value),
+            StreamData::Raw(_) => Err(ShellError::PluginFailedToDecode {
+                msg: "expected list stream data, found raw data".into(),
+            })
+        }
+    }
+}
+
+impl TryFrom<StreamData> for Result<Vec<u8>, ShellError> {
+    type Error = ShellError;
+
+    fn try_from(data: StreamData) -> Result<Result<Vec<u8>, ShellError>, ShellError> {
+        match data {
+            StreamData::Raw(value) => Ok(value),
+            StreamData::List(_) => Err(ShellError::PluginFailedToDecode {
+                msg: "expected raw stream data, found list data".into(),
+            })
+        }
+    }
 }
 
 /// A stream control or data message.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum StreamMessage {
-    /// Append data to the given [`StreamId`].
+    /// Append data to the stream. Sent by the stream producer.
     Data(StreamId, StreamData),
-    /// Interrupt the given [`StreamId`].
-    ///
-    /// The stream should stop producing new messages and send `None` data to end it as soon as
-    /// possible.
-    Interrupt(StreamId),
+    /// End of stream. Sent by the stream producer.
+    End(StreamId),
+    /// Notify that the read end of the stream has closed, and further messages should not be
+    /// sent. Sent by the stream consumer.
+    Drop(StreamId),
+    /// Acknowledge that a message has been consumed. This is used to implement flow control by
+    /// the stream producer. Sent by the stream consumer.
+    Ack(StreamId),
 }
 
 /// An error message with debugging information that can be passed to Nushell from the plugin

@@ -453,7 +453,7 @@ fn read_call_response_with_overlapping_external_stream_ids_causes_error() {
     interface
         .clone()
         .read_call_response()
-        .expect_err("call succeded");
+        .expect_err("call succeeded");
 }
 
 #[test]

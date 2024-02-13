@@ -423,9 +423,6 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
 
     let interface = EngineInterface::new(stdin_buf, stdout, encoder);
 
-    // Start a background reader to ensure that signals like interrupts are handled.
-    interface.start_background_reader();
-
     // Try an operation that could result in ShellError. Exit if an I/O error is encountered.
     // Try to report the error to nushell otherwise, and failing that, panic.
     macro_rules! try_or_report {

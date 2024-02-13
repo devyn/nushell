@@ -116,11 +116,11 @@ mod tests {
         let output = PluginOutput::Stream(
             StreamMessage::Data(
                 0,
-                StreamData::List(Some(Value::test_list(vec![
+                StreamData::List(Value::test_list(vec![
                     Value::test_int(4),
                     // in case escaping failed
                     Value::test_string("newline\ncontaining\nstring"),
-                ]))),
+                ])),
             )
         );
         JsonSerializer {}

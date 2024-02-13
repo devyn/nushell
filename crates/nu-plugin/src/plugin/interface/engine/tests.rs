@@ -311,7 +311,7 @@ fn read_call_run_with_overlapping_external_stream_ids_causes_error() {
 
     let interface = test.engine_interface_impl();
 
-    interface.clone().read_call().expect_err("call succeded");
+    interface.clone().read_call().expect_err("call succeeded");
 }
 
 #[test]

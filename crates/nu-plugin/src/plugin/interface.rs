@@ -14,11 +14,12 @@ use crate::{
     },
 };
 
-mod buffers;
-mod interrupt;
+//mod buffers;
+//mod interrupt;
+mod stream;
 
-mod stream_data_io;
-pub(crate) use stream_data_io::StreamDataIo;
+//mod stream_data_io;
+//pub(crate) use stream_data_io::StreamDataIo;
 
 mod engine;
 pub use engine::EngineInterface;
@@ -91,121 +92,121 @@ where
 ///
 /// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
 /// attempted to be read after end-of-input.
-struct PluginListStream {
-    io: Arc<dyn StreamDataIo>,
-    id: StreamId,
-}
+// struct PluginListStream {
+//     io: Arc<dyn StreamDataIo>,
+//     id: StreamId,
+// }
 
-impl Iterator for PluginListStream {
-    type Item = Value;
+// impl Iterator for PluginListStream {
+//     type Item = Value;
 
-    fn next(&mut self) -> Option<Value> {
-        match self.io.clone().read_list(self.id) {
-            Ok(value) => value,
-            Err(err) => Some(Value::error(err, Span::unknown())),
-        }
-    }
-}
+//     fn next(&mut self) -> Option<Value> {
+//         match self.io.clone().read_list(self.id) {
+//             Ok(value) => value,
+//             Err(err) => Some(Value::error(err, Span::unknown())),
+//         }
+//     }
+// }
 
-impl Drop for PluginListStream {
-    fn drop(&mut self) {
-        // Signal that we don't need the stream anymore.
-        if let Err(err) = self.io.drop_list(self.id) {
-            log::warn!("Error while dropping PluginListStream: {err}");
-        }
-    }
-}
+// impl Drop for PluginListStream {
+//     fn drop(&mut self) {
+//         // Signal that we don't need the stream anymore.
+//         if let Err(err) = self.io.drop_list(self.id) {
+//             log::warn!("Error while dropping PluginListStream: {err}");
+//         }
+//     }
+// }
 
 /// Create [`PipelineData`] for receiving a [`ListStream`] input.
-fn make_pipe_list_stream(
-    source: Arc<dyn StreamDataIo>,
-    info: &ListStreamInfo,
-    ctrlc: Option<Arc<AtomicBool>>,
-) -> PipelineData {
-    PipelineData::ListStream(make_list_stream(source, info, ctrlc), None)
-}
+// fn make_pipe_list_stream(
+//     source: Arc<dyn StreamDataIo>,
+//     info: &ListStreamInfo,
+//     ctrlc: Option<Arc<AtomicBool>>,
+// ) -> PipelineData {
+//     PipelineData::ListStream(make_list_stream(source, info, ctrlc), None)
+// }
 
 /// Create a [`ListStream`] for receiving input from `source`.
-fn make_list_stream(
-    source: Arc<dyn StreamDataIo>,
-    info: &ListStreamInfo,
-    ctrlc: Option<Arc<AtomicBool>>,
-) -> ListStream {
-    ListStream::from_stream(
-        PluginListStream {
-            io: source,
-            id: info.id,
-        }
-        .fuse(),
-        ctrlc,
-    )
-}
+// fn make_list_stream(
+//     source: Arc<dyn StreamDataIo>,
+//     info: &ListStreamInfo,
+//     ctrlc: Option<Arc<AtomicBool>>,
+// ) -> ListStream {
+//     ListStream::from_stream(
+//         PluginListStream {
+//             io: source,
+//             id: info.id,
+//         }
+//         .fuse(),
+//         ctrlc,
+//     )
+// }
 
 /// Iterate through byte chunks received on a `RawStream` input.
 ///
 /// Non-fused iterator: should generally call .fuse() when using it, to ensure messages aren't
 /// attempted to be read after end-of-input.
-struct PluginRawStream {
-    io: Arc<dyn StreamDataIo>,
-    id: StreamId,
-}
+// struct PluginRawStream {
+//     io: Arc<dyn StreamDataIo>,
+//     id: StreamId,
+// }
 
-impl Iterator for PluginRawStream {
-    type Item = Result<Vec<u8>, ShellError>;
+// impl Iterator for PluginRawStream {
+//     type Item = Result<Vec<u8>, ShellError>;
 
-    fn next(&mut self) -> Option<Result<Vec<u8>, ShellError>> {
-        self.io.clone().read_raw(self.id).transpose()
-    }
-}
+//     fn next(&mut self) -> Option<Result<Vec<u8>, ShellError>> {
+//         self.io.clone().read_raw(self.id).transpose()
+//     }
+// }
 
-impl Drop for PluginRawStream {
-    fn drop(&mut self) {
-        // Signal that we don't need the stream anymore.
-        if let Err(err) = self.io.drop_raw(self.id) {
-            log::warn!("Error while dropping PluginRawStream: {err}");
-        }
-    }
-}
+// impl Drop for PluginRawStream {
+//     fn drop(&mut self) {
+//         // Signal that we don't need the stream anymore.
+//         if let Err(err) = self.io.drop_raw(self.id) {
+//             log::warn!("Error while dropping PluginRawStream: {err}");
+//         }
+//     }
+// }
 
 /// Create a [`RawStream`] for receiving raw input from `source`.
-fn make_raw_stream(
-    source: Arc<dyn StreamDataIo>,
-    info: &RawStreamInfo,
-    span: Span,
-    ctrlc: Option<Arc<AtomicBool>>,
-) -> RawStream {
-    let stream = PluginRawStream {
-        io: source.clone(),
-        id: info.id,
-    }
-    .fuse();
-    let mut raw = RawStream::new(Box::new(stream), ctrlc.clone(), span, info.known_size);
-    raw.is_binary = info.is_binary;
-    raw
-}
+// fn make_raw_stream(
+//     source: Arc<dyn StreamDataIo>,
+//     info: &RawStreamInfo,
+//     span: Span,
+//     ctrlc: Option<Arc<AtomicBool>>,
+// ) -> RawStream {
+//     let stream = PluginRawStream {
+//         io: source.clone(),
+//         id: info.id,
+//     }
+//     .fuse();
+//     let mut raw = RawStream::new(Box::new(stream), ctrlc.clone(), span, info.known_size);
+//     raw.is_binary = info.is_binary;
+//     raw
+// }
 
 /// Create [PipelineData] for receiving an [ExternalStream] input.
-fn make_pipe_external_stream(
-    source: Arc<dyn StreamDataIo>,
-    info: &ExternalStreamInfo,
-    ctrlc: Option<Arc<AtomicBool>>,
-) -> PipelineData {
-    PipelineData::ExternalStream {
-        stdout: info.stdout.as_ref().map(|stdout_info| {
-            make_raw_stream(source.clone(), stdout_info, info.span, ctrlc.clone())
-        }),
-        stderr: info.stderr.as_ref().map(|stderr_info| {
-            make_raw_stream(source.clone(), stderr_info, info.span, ctrlc.clone())
-        }),
-        exit_code: info
-            .exit_code
-            .as_ref()
-            .map(|exit_code_info| make_list_stream(source.clone(), exit_code_info, ctrlc.clone())),
-        span: info.span,
-        metadata: None,
-        trim_end_newline: info.trim_end_newline,
-    }
-}
+// fn make_pipe_external_stream(
+//     source: Arc<dyn StreamDataIo>,
+//     info: &ExternalStreamInfo,
+//     ctrlc: Option<Arc<AtomicBool>>,
+// ) -> PipelineData {
+//     PipelineData::ExternalStream {
+//         stdout: info.stdout.as_ref().map(|stdout_info| {
+//             make_raw_stream(source.clone(), stdout_info, info.span, ctrlc.clone())
+//         }),
+//         stderr: info.stderr.as_ref().map(|stderr_info| {
+//             make_raw_stream(source.clone(), stderr_info, info.span, ctrlc.clone())
+//         }),
+//         exit_code: info
+//             .exit_code
+//             .as_ref()
+//             .map(|exit_code_info| make_list_stream(source.clone(), exit_code_info, ctrlc.clone())),
+//         span: info.span,
+//         metadata: None,
+//         trim_end_newline: info.trim_end_newline,
+//     }
+// }
 
 /// Return the next available id from an accumulator, returning an error on overflow
 #[track_caller]

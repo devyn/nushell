@@ -145,10 +145,6 @@ impl Command for PluginDeclaration {
         // Spawn a thread just to wait for the child.
         std::thread::spawn(move || child.wait());
 
-        // Ensure the stream is always being read from so that nothing is blocked and events are
-        // responded to properly.
-        interface.start_background_reader();
-
         let (data_header, data_rest) = interface.make_pipeline_data_header(input)?;
 
         let plugin_call = PluginCall::Run(CallInfo {

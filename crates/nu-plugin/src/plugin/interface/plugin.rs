@@ -18,16 +18,12 @@ use crate::{
 };
 
 use super::{
-    buffers::StreamBuffers,
-    make_pipe_external_stream, make_pipe_list_stream, next_id_from,
-    stream_data_io::{
-        StreamDataIo, StreamDataIoBase, StreamDataIoExt, StreamDataRead, StreamDataWrite,
-    },
-    PluginRead, PluginWrite, interrupt::StreamInterruptFlags,
+    next_id_from,
+    PluginRead, PluginWrite,
 };
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 pub(crate) struct PluginInterfaceImpl<R, W> {
     // Always lock read and then write mutex, if using both
@@ -45,10 +41,10 @@ pub(crate) struct ReadPart<R, W> {
     error: Option<Box<ShellError>>,
     /// Stores [PluginCallResponse]s that can't be handled immediately
     responses: VecDeque<PluginCallResponse>,
-    /// Stores stream messages that can't be handled immediately
-    stream_buffers: StreamBuffers,
-    /// Stream interruption state
-    interrupt_flags: StreamInterruptFlags,
+    // /// Stores stream messages that can't be handled immediately
+    // stream_buffers: StreamBuffers,
+    // /// Stream interruption state
+    // interrupt_flags: StreamInterruptFlags,
     /// Keep the write type around
     write_marker: PhantomData<W>,
 }
@@ -72,8 +68,8 @@ impl<R, W> PluginInterfaceImpl<R, W> {
                 reader,
                 error: None,
                 responses: VecDeque::new(),
-                stream_buffers: StreamBuffers::default(),
-                interrupt_flags: StreamInterruptFlags::new(),
+                // stream_buffers: StreamBuffers::default(),
+                // interrupt_flags: StreamInterruptFlags::new(),
                 write_marker: PhantomData,
             }),
             write: Mutex::new(WritePart {
@@ -86,6 +82,7 @@ impl<R, W> PluginInterfaceImpl<R, W> {
     }
 }
 
+/*
 impl<R, W> StreamDataIoBase for PluginInterfaceImpl<R, W>
 where
     R: PluginRead + 'static,
@@ -176,10 +173,11 @@ where
         self.writer.flush()
     }
 }
+*/
 
 /// The trait indirection is so that we can hide the types with a trait object inside
 /// PluginInterface. As such, this trait must remain object safe.
-pub(crate) trait PluginInterfaceIo: StreamDataIo {
+pub(crate) trait PluginInterfaceIo: Send + Sync {
     fn context(&self) -> Option<&Arc<dyn PluginExecutionContext>>;
 
     /// Propagate an error to future attempts to read from the interface.
@@ -248,57 +246,59 @@ where
     }
 
     fn write_call(&self, call: PluginCall) -> Result<(), ShellError> {
-        let mut write = self.lock_write()?;
-        log::trace!("Writing plugin call: {call:?}");
+        // let mut write = self.lock_write()?;
+        // log::trace!("Writing plugin call: {call:?}");
 
-        if !write.waiting_for_call_response {
-            write.write(PluginInput::Call(call))?;
-            write.flush()?;
+        // if !write.waiting_for_call_response {
+        //     write.write(PluginInput::Call(call))?;
+        //     write.flush()?;
 
-            log::trace!("Wrote plugin call");
-            Ok(())
-        } else {
-            Err(ShellError::NushellFailed {
-                msg: "Attempted to make another call to the plugin before it responded".into(),
-            })
-        }
+        //     log::trace!("Wrote plugin call");
+        //     Ok(())
+        // } else {
+        //     Err(ShellError::NushellFailed {
+        //         msg: "Attempted to make another call to the plugin before it responded".into(),
+        //     })
+        // }
+        todo!()
     }
 
     fn read_call_response(self: Arc<Self>) -> Result<PluginCallResponse, ShellError> {
         log::trace!("Reading plugin call response");
 
-        loop {
-            let mut read = self.lock_read()?;
-            // Check if a call response was handled out of order
-            let response =
-                if let Some(response) = read.responses.pop_front() {
-                    response
-                } else {
-                    match read.read()? {
-                        Some(PluginOutput::CallResponse(response)) => response,
-                        // Handle some other message
-                        Some(other) => {
-                            read.handle_message(&self, other)?;
-                            continue;
-                        }
-                        // End of input
-                        None => {
-                            return Err(ShellError::PluginFailedToDecode {
-                                msg: "unexpected end of stream before receiving call response".into(),
-                            })
-                        }
-                    }
-                };
-            // Check the call input type to set the stream buffers up
-            if let PluginCallResponse::PipelineData(header) = &response {
-                read.stream_buffers.init_stream(header)?;
-            }
-            // Reset the flag so that another plugin call could be made later
-            drop(read);
-            self.lock_write()?.waiting_for_call_response = false;
+        // loop {
+        //     let mut read = self.lock_read()?;
+        //     // Check if a call response was handled out of order
+        //     let response =
+        //         if let Some(response) = read.responses.pop_front() {
+        //             response
+        //         } else {
+        //             match read.read()? {
+        //                 Some(PluginOutput::CallResponse(response)) => response,
+        //                 // Handle some other message
+        //                 Some(other) => {
+        //                     read.handle_message(&self, other)?;
+        //                     continue;
+        //                 }
+        //                 // End of input
+        //                 None => {
+        //                     return Err(ShellError::PluginFailedToDecode {
+        //                         msg: "unexpected end of stream before receiving call response".into(),
+        //                     })
+        //                 }
+        //             }
+        //         };
+        //     // Check the call input type to set the stream buffers up
+        //     if let PluginCallResponse::PipelineData(header) = &response {
+        //         read.stream_buffers.init_stream(header)?;
+        //     }
+        //     // Reset the flag so that another plugin call could be made later
+        //     drop(read);
+        //     self.lock_write()?.waiting_for_call_response = false;
 
-            return Ok(response);
-        }
+        //     return Ok(response);
+        // }
+        todo!()
     }
 
     fn write_engine_call_response(
@@ -306,54 +306,55 @@ where
         id: EngineCallId,
         response: EngineCallResponse,
     ) -> Result<(), ShellError> {
-        let mut write = self.lock_write()?;
+        // let mut write = self.lock_write()?;
         log::trace!("Writing engine call response for id={id}: {response:?}");
 
-        write.write(PluginInput::EngineCallResponse(id, response))?;
-        write.flush()?;
+        // write.write(PluginInput::EngineCallResponse(id, response))?;
+        // write.flush()?;
 
         log::trace!("Wrote engine call response for id={id}");
-        Ok(())
+        todo!()
     }
 
     fn make_pipeline_data(
         self: Arc<Self>,
         header: PipelineDataHeader,
     ) -> Result<PipelineData, ShellError> {
-        let context = self.context().ok_or_else(|| ShellError::NushellFailed {
-            msg: "PluginExecutionContext must be provided to call make_pipeline_data".into(),
-        })?;
+        // let context = self.context().ok_or_else(|| ShellError::NushellFailed {
+        //     msg: "PluginExecutionContext must be provided to call make_pipeline_data".into(),
+        // })?;
 
-        match header {
-            PipelineDataHeader::Empty => Ok(PipelineData::Empty),
-            PipelineDataHeader::Value(value) => Ok(PipelineData::Value(value, None)),
-            PipelineDataHeader::PluginData(plugin_data) => {
-                // Convert to PluginCustomData
-                let value = Value::custom_value(
-                    Box::new(PluginCustomValue {
-                        name: plugin_data
-                            .name
-                            .ok_or_else(|| ShellError::PluginFailedToDecode {
-                                msg: "String representation of PluginData not provided".into(),
-                            })?,
-                        data: plugin_data.data,
-                        filename: context.filename().to_owned(),
-                        shell: context.shell().map(|p| p.to_owned()),
-                        source: context.command_name().to_owned(),
-                    }),
-                    plugin_data.span,
-                );
-                Ok(PipelineData::Value(value, None))
-            }
-            PipelineDataHeader::ListStream(info) => {
-                let ctrlc = context.ctrlc().cloned();
-                Ok(make_pipe_list_stream(self, &info, ctrlc))
-            }
-            PipelineDataHeader::ExternalStream(info) => {
-                let ctrlc = context.ctrlc().cloned();
-                Ok(make_pipe_external_stream(self, &info, ctrlc))
-            }
-        }
+        // match header {
+        //     PipelineDataHeader::Empty => Ok(PipelineData::Empty),
+        //     PipelineDataHeader::Value(value) => Ok(PipelineData::Value(value, None)),
+        //     PipelineDataHeader::PluginData(plugin_data) => {
+        //         // Convert to PluginCustomData
+        //         let value = Value::custom_value(
+        //             Box::new(PluginCustomValue {
+        //                 name: plugin_data
+        //                     .name
+        //                     .ok_or_else(|| ShellError::PluginFailedToDecode {
+        //                         msg: "String representation of PluginData not provided".into(),
+        //                     })?,
+        //                 data: plugin_data.data,
+        //                 filename: context.filename().to_owned(),
+        //                 shell: context.shell().map(|p| p.to_owned()),
+        //                 source: context.command_name().to_owned(),
+        //             }),
+        //             plugin_data.span,
+        //         );
+        //         Ok(PipelineData::Value(value, None))
+        //     }
+        //     PipelineDataHeader::ListStream(info) => {
+        //         let ctrlc = context.ctrlc().cloned();
+        //         Ok(make_pipe_list_stream(self, &info, ctrlc))
+        //     }
+        //     PipelineDataHeader::ExternalStream(info) => {
+        //         let ctrlc = context.ctrlc().cloned();
+        //         Ok(make_pipe_external_stream(self, &info, ctrlc))
+        //     }
+        // }
+        todo!()
     }
 
     fn make_pipeline_data_header(
@@ -366,82 +367,83 @@ where
         ),
         ShellError,
     > {
-        let context = self.context().ok_or_else(|| ShellError::NushellFailed {
-            msg: "PluginExecutionContext must be provided to call make_pipeline_data_header".into(),
-        })?;
+        // let context = self.context().ok_or_else(|| ShellError::NushellFailed {
+        //     msg: "PluginExecutionContext must be provided to call make_pipeline_data_header".into(),
+        // })?;
 
-        match data {
-            PipelineData::Value(ref value @ Value::CustomValue { ref val, .. }, _) => {
-                match val.as_any().downcast_ref::<PluginCustomValue>() {
-                    Some(plugin_data) if plugin_data.filename == context.filename() => {
-                        Ok((
-                            PipelineDataHeader::PluginData(PluginData {
-                                name: None, // plugin doesn't need it.
-                                data: plugin_data.data.clone(),
-                                span: value.span(),
-                            }),
-                            None,
-                        ))
-                    }
-                    _ => {
-                        let custom_value_name = val.value_string();
-                        Err(ShellError::GenericError {
-                            error: format!(
-                                "Plugin {} can not handle the custom value {}",
-                                context.command_name(),
-                                custom_value_name
-                            ),
-                            msg: format!("custom value {custom_value_name}"),
-                            span: Some(value.span()),
-                            help: None,
-                            inner: vec![],
-                        })
-                    }
-                }
-            }
-            PipelineData::Value(Value::LazyRecord { ref val, .. }, _) => {
-                Ok((PipelineDataHeader::Value(val.collect()?), None))
-            }
-            PipelineData::Value(value, _) => Ok((PipelineDataHeader::Value(value), None)),
-            PipelineData::ListStream(_, _) => {
-                let header = PipelineDataHeader::ListStream(ListStreamInfo {
-                    id: self.new_stream_id()?,
-                });
-                Ok((header.clone(), Some((header, data))))
-            }
-            PipelineData::ExternalStream {
-                span,
-                ref stdout,
-                ref stderr,
-                ref exit_code,
-                trim_end_newline,
-                ..
-            } => {
-                let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
-                    span,
-                    stdout: if let Some(ref stdout) = stdout {
-                        Some(RawStreamInfo::new(self.new_stream_id()?, stdout))
-                    } else {
-                        None
-                    },
-                    stderr: if let Some(ref stderr) = stderr {
-                        Some(RawStreamInfo::new(self.new_stream_id()?, stderr))
-                    } else {
-                        None
-                    },
-                    exit_code: if exit_code.is_some() {
-                        Some(ListStreamInfo {
-                            id: self.new_stream_id()?,
-                        })
-                    } else {
-                        None
-                    },
-                    trim_end_newline,
-                });
-                Ok((header.clone(), Some((header, data))))
-            }
-            PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
-        }
+        // match data {
+        //     PipelineData::Value(ref value @ Value::CustomValue { ref val, .. }, _) => {
+        //         match val.as_any().downcast_ref::<PluginCustomValue>() {
+        //             Some(plugin_data) if plugin_data.filename == context.filename() => {
+        //                 Ok((
+        //                     PipelineDataHeader::PluginData(PluginData {
+        //                         name: None, // plugin doesn't need it.
+        //                         data: plugin_data.data.clone(),
+        //                         span: value.span(),
+        //                     }),
+        //                     None,
+        //                 ))
+        //             }
+        //             _ => {
+        //                 let custom_value_name = val.value_string();
+        //                 Err(ShellError::GenericError {
+        //                     error: format!(
+        //                         "Plugin {} can not handle the custom value {}",
+        //                         context.command_name(),
+        //                         custom_value_name
+        //                     ),
+        //                     msg: format!("custom value {custom_value_name}"),
+        //                     span: Some(value.span()),
+        //                     help: None,
+        //                     inner: vec![],
+        //                 })
+        //             }
+        //         }
+        //     }
+        //     PipelineData::Value(Value::LazyRecord { ref val, .. }, _) => {
+        //         Ok((PipelineDataHeader::Value(val.collect()?), None))
+        //     }
+        //     PipelineData::Value(value, _) => Ok((PipelineDataHeader::Value(value), None)),
+        //     PipelineData::ListStream(_, _) => {
+        //         let header = PipelineDataHeader::ListStream(ListStreamInfo {
+        //             id: self.new_stream_id()?,
+        //         });
+        //         Ok((header.clone(), Some((header, data))))
+        //     }
+        //     PipelineData::ExternalStream {
+        //         span,
+        //         ref stdout,
+        //         ref stderr,
+        //         ref exit_code,
+        //         trim_end_newline,
+        //         ..
+        //     } => {
+        //         let header = PipelineDataHeader::ExternalStream(ExternalStreamInfo {
+        //             span,
+        //             stdout: if let Some(ref stdout) = stdout {
+        //                 Some(RawStreamInfo::new(self.new_stream_id()?, stdout))
+        //             } else {
+        //                 None
+        //             },
+        //             stderr: if let Some(ref stderr) = stderr {
+        //                 Some(RawStreamInfo::new(self.new_stream_id()?, stderr))
+        //             } else {
+        //                 None
+        //             },
+        //             exit_code: if exit_code.is_some() {
+        //                 Some(ListStreamInfo {
+        //                     id: self.new_stream_id()?,
+        //                 })
+        //             } else {
+        //                 None
+        //             },
+        //             trim_end_newline,
+        //         });
+        //         Ok((header.clone(), Some((header, data))))
+        //     }
+        //     PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
+        // }
+        todo!()
     }
 
     fn handle_engine_call(
@@ -449,52 +451,53 @@ where
         id: EngineCallId,
         engine_call: EngineCall,
     ) -> Result<(), ShellError> {
-        let context = self.context().ok_or_else(|| ShellError::NushellFailed {
-            msg: "PluginExecutionContext was not provided before making an engine call".into(),
-        })?;
+        // let context = self.context().ok_or_else(|| ShellError::NushellFailed {
+        //     msg: "PluginExecutionContext was not provided before making an engine call".into(),
+        // })?;
 
-        log::trace!("Handling engine call id={id}: {engine_call:?}");
+        // log::trace!("Handling engine call id={id}: {engine_call:?}");
 
-        match engine_call {
-            EngineCall::GetConfig => {
-                let config = context.get_config().clone().into();
-                let response = EngineCallResponse::Config(config);
-                self.write_engine_call_response(id, response)
-            }
-            EngineCall::EvalClosure {
-                closure,
-                positional,
-                input,
-                redirect_stdout,
-                redirect_stderr,
-            } => {
-                // Build the input PipelineData
-                let input = self.clone().make_pipeline_data(input)?;
-                // Evaluate the closure
-                match context.eval_closure(
-                    closure,
-                    positional,
-                    input,
-                    redirect_stdout,
-                    redirect_stderr,
-                ) {
-                    Ok(output) => {
-                        let (header, rest) = self.make_pipeline_data_header(output)?;
-                        self.write_engine_call_response(
-                            id,
-                            EngineCallResponse::PipelineData(header),
-                        )?;
-                        // Write the stream if necessary
-                        if let Some((header, data)) = rest {
-                            self.write_pipeline_data_stream(&header, data)
-                        } else {
-                            Ok(())
-                        }
-                    }
-                    Err(err) => self.write_engine_call_response(id, EngineCallResponse::Error(err)),
-                }
-            }
-        }
+        // match engine_call {
+        //     EngineCall::GetConfig => {
+        //         let config = context.get_config().clone().into();
+        //         let response = EngineCallResponse::Config(config);
+        //         self.write_engine_call_response(id, response)
+        //     }
+        //     EngineCall::EvalClosure {
+        //         closure,
+        //         positional,
+        //         input,
+        //         redirect_stdout,
+        //         redirect_stderr,
+        //     } => {
+        //         // Build the input PipelineData
+        //         let input = self.clone().make_pipeline_data(input)?;
+        //         // Evaluate the closure
+        //         match context.eval_closure(
+        //             closure,
+        //             positional,
+        //             input,
+        //             redirect_stdout,
+        //             redirect_stderr,
+        //         ) {
+        //             Ok(output) => {
+        //                 let (header, rest) = self.make_pipeline_data_header(output)?;
+        //                 self.write_engine_call_response(
+        //                     id,
+        //                     EngineCallResponse::PipelineData(header),
+        //                 )?;
+        //                 // Write the stream if necessary
+        //                 if let Some((header, data)) = rest {
+        //                     self.write_pipeline_data_stream(&header, data)
+        //                 } else {
+        //                     Ok(())
+        //                 }
+        //             }
+        //             Err(err) => self.write_engine_call_response(id, EngineCallResponse::Error(err)),
+        //         }
+        //     }
+        // }
+        todo!()
     }
 }
 
@@ -537,25 +540,6 @@ impl PluginInterface {
         E: PluginEncoder + 'static,
     {
         PluginInterfaceImpl::new((reader, encoder.clone()), (writer, encoder), context).into()
-    }
-
-    /// Create a background reader to ensure that the stream is always being read from.
-    ///
-    /// This is necessary to ensure signals like interrupts are handled appropriately.
-    ///
-    /// If an error occurs while reading, all future read calls will return the same error.
-    pub(crate) fn start_background_reader(&self) -> std::thread::JoinHandle<()> {
-        // Automatically stop reading if the interface is dropped
-        let weak = Arc::downgrade(&self.io);
-        std::thread::spawn(move || {
-            while let Some(io) = weak.upgrade() {
-                match io.clone().read_any() {
-                    Ok(true) => (),
-                    Ok(false) => break, // end of input
-                    Err(err) => io.set_read_failed(err), // propagate error
-                }
-            }
-        })
     }
 
     /// Write a [PluginCall] to the plugin.
@@ -604,6 +588,7 @@ impl PluginInterface {
         header: &PipelineDataHeader,
         data: PipelineData,
     ) -> Result<(), ShellError> {
-        self.io.write_pipeline_data_stream(header, data)
+        // self.io.write_pipeline_data_stream(header, data)
+        todo!()
     }
 }
