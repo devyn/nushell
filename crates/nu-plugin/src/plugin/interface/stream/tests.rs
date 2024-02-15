@@ -248,31 +248,36 @@ fn signal_set_dropped() -> Result<(), ShellError> {
 }
 
 #[test]
-fn signal_notify_sent_wont_block_if_flowing() -> Result<(), ShellError> {
-    let signal = StreamWriterSignal::new(1);
-    std::thread::scope(|scope| {
-        let spawned = scope.spawn(|| {
-            for _ in 0..100 {
-                signal.notify_sent()?;
-            }
-            Ok(())
-        });
-        for _ in 0..100 {
-            signal.notify_acknowledged()?;
-        }
-        std::thread::sleep(WAIT_DURATION);
-        assert!(spawned.is_finished(), "blocked");
-        spawned.join().unwrap()
-    })
+fn signal_notify_sent_false_if_unacknowledged() -> Result<(), ShellError> {
+    let signal = StreamWriterSignal::new(2);
+    assert!(signal.notify_sent()?);
+    for _ in 0..100 {
+        assert!(!signal.notify_sent()?);
+    }
+    Ok(())
 }
 
 #[test]
-fn signal_notify_blocks_on_unacknowledged() -> Result<(), ShellError> {
+fn signal_notify_sent_never_false_if_flowing() -> Result<(), ShellError> {
+    let signal = StreamWriterSignal::new(1);
+    for _ in 0..100 {
+        signal.notify_acknowledged()?;
+    }
+    for _ in 0..100 {
+        assert!(signal.notify_sent()?);
+    }
+    Ok(())
+}
+
+#[test]
+fn signal_wait_for_drain_blocks_on_unacknowledged() -> Result<(), ShellError> {
     let signal = StreamWriterSignal::new(50);
     std::thread::scope(|scope| {
         let spawned = scope.spawn(|| {
             for _ in 0..100 {
-                signal.notify_sent()?;
+                if !signal.notify_sent()? {
+                    signal.wait_for_drain()?;
+                }
             }
             Ok(())
         });
@@ -288,12 +293,14 @@ fn signal_notify_blocks_on_unacknowledged() -> Result<(), ShellError> {
 }
 
 #[test]
-fn signal_notify_unblocks_on_dropped() -> Result<(), ShellError> {
+fn signal_wait_for_drain_unblocks_on_dropped() -> Result<(), ShellError> {
     let signal = StreamWriterSignal::new(1);
     std::thread::scope(|scope| {
         let spawned = scope.spawn(|| {
             while !signal.is_dropped()? {
-                signal.notify_sent()?;
+                if !signal.notify_sent()? {
+                    signal.wait_for_drain()?;
+                }
             }
             Ok(())
         });

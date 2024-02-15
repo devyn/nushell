@@ -15,8 +15,8 @@ use super::{
 /// Mock read/write helper for the engine and plugin interfaces.
 #[derive(Debug, Clone)]
 pub(crate) struct TestCase {
-    r#in: Arc<Mutex<TestData>>,
-    out: Arc<Mutex<TestData>>,
+    pub r#in: Arc<Mutex<TestData>>,
+    pub out: Arc<Mutex<TestData>>,
 }
 
 #[derive(Debug, Default)]
@@ -27,9 +27,7 @@ pub(crate) struct TestData {
     flushed: bool,
 }
 
-type TestIo = Arc<Mutex<TestData>>;
-
-impl PluginRead for TestIo {
+impl PluginRead for Arc<Mutex<TestData>> {
     fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError> {
         let mut lock = self.lock().unwrap();
         if let Some(err) = lock.error.take() {
@@ -49,7 +47,7 @@ impl PluginRead for TestIo {
     }
 }
 
-impl PluginWrite for TestIo {
+impl PluginWrite for Arc<Mutex<TestData>> {
     fn write_input(&self, input: &PluginInput) -> Result<(), ShellError> {
         let mut lock = self.lock().unwrap();
         lock.flushed = false;

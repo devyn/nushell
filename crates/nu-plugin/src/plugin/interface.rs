@@ -33,6 +33,9 @@ use self::stream::{StreamManager, StreamManagerHandle, StreamWriter, WriteStream
 #[cfg(test)]
 mod test_util;
 
+#[cfg(test)]
+mod tests;    
+
 /// The maximum number of list stream values to send without acknowledgement. This should be tuned
 /// with consideration for memory usage.
 const LIST_STREAM_HIGH_PRESSURE: i32 = 100;
@@ -272,6 +275,8 @@ pub(crate) trait Interface: Clone + Send {
     ///
     /// Note that not all [`PipelineData`] starts a stream. You should call `write()` anyway, as
     /// it will automatically handle this case.
+    ///
+    /// This method is provided for implementors to use.
     fn init_write_pipeline_data(
         &self,
         data: PipelineData,
@@ -387,6 +392,7 @@ where
     /// Write all of the data in each of the streams. This method returns immediately; any necessary
     /// write will happen in the background
     pub(crate) fn write(self) -> Result<(), ShellError> {
+        // TODO: errors should really go somewhere, but I'm not sure where
         match self {
             // If no stream was contained in the PipelineData, do nothing.
             PipelineDataWriter::NoStream => Ok(()),
@@ -411,7 +417,7 @@ where
                     std::thread::spawn(move || writer.write_all(stream));
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
