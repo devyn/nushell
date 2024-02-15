@@ -64,15 +64,27 @@ where
     /// * an error was sent on the channel
     /// * the message received couldn't be converted to `T`
     pub(crate) fn recv(&mut self) -> Result<Option<T>, ShellError> {
+        let connection_lost = || ShellError::GenericError {
+            error: "Stream ended unexpectedly".into(),
+            msg: "connection lost before explicit end of stream".into(),
+            span: None,
+            help: None,
+            inner: vec![],
+        };
+
         if let Some(ref rx) = self.receiver {
-            // Handle both the receiver error and the on-stream error
-            let msg = rx.recv().map_err(|_| ShellError::GenericError {
-                error: "Stream ended unexpectedly".into(),
-                msg: "connection lost before explicit end of stream".into(),
-                span: None,
-                help: None,
-                inner: vec![],
-            })??;
+            // Try to receive a message first
+            let msg = match rx.try_recv() {
+                Ok(msg) => msg?,
+                Err(mpsc::TryRecvError::Empty) => {
+                    // The receiver doesn't have any messages waiting for us. It's possible that the
+                    // other side hasn't seen our acknowledgements. Let's flush the writer and then
+                    // wait
+                    self.writer.flush()?;
+                    rx.recv().map_err(|_| connection_lost())??
+                }
+                Err(mpsc::TryRecvError::Disconnected) => return Err(connection_lost()),
+            };
 
             if let Some(data) = msg {
                 // Acknowledge the message
@@ -122,6 +134,7 @@ where
         if let Err(err) = self
             .writer
             .write_stream_message(StreamMessage::Drop(self.id))
+            .and_then(|_| self.writer.flush())
         {
             log::warn!("Failed to send message to drop stream: {err}");
         }
@@ -185,7 +198,13 @@ where
             self.writer
                 .write_stream_message(StreamMessage::Data(self.id, data.into()))?;
             // This implements flow control, so we don't write too many messages:
-            self.signal.notify_sent()
+            if !self.signal.notify_sent()? {
+                // Flush the output, and then wait for acknowledgements
+                self.writer.flush()?;
+                self.signal.wait_for_drain()
+            } else {
+                Ok(())
+            }
         } else {
             Err(ShellError::GenericError {
                 error: "Wrote to a stream after it ended".into(),
@@ -238,7 +257,8 @@ where
             // Set the flag first so we don't double-report in the Drop
             self.ended = true;
             self.writer
-                .write_stream_message(StreamMessage::End(self.id))
+                .write_stream_message(StreamMessage::End(self.id))?;
+            self.writer.flush()
         } else {
             Ok(())
         }
@@ -315,9 +335,10 @@ impl StreamWriterSignal {
         Ok(())
     }
 
-    /// Track that a message has been sent, and wait for the manager to receive acknowledgements
-    /// if too many messages have been sent.
-    pub fn notify_sent(&self) -> Result<(), ShellError> {
+    /// Track that a message has been sent. Returns `Ok(true)` if more messages can be sent,
+    /// or `Ok(false)` if the high pressure mark has been reached and [`wait_for_drain()`] should
+    /// be called to block.
+    pub fn notify_sent(&self) -> Result<bool, ShellError> {
         let mut state = self.lock()?;
         state.unacknowledged =
             state
@@ -327,7 +348,12 @@ impl StreamWriterSignal {
                     msg: "Overflow in counter: too many unacknowledged messages".into(),
                 })?;
 
-        // Wait if too many messages have been sent
+        Ok(state.unacknowledged < state.high_pressure_mark)
+    }
+
+    /// Wait for acknowledgements before sending more data. Also returns if the stream is dropped.
+    pub fn wait_for_drain(&self) -> Result<(), ShellError> {
+        let mut state = self.lock()?;
         while !state.dropped && state.unacknowledged >= state.high_pressure_mark {
             state = self
                 .change_cond
@@ -359,6 +385,7 @@ impl StreamWriterSignal {
 /// A sink for a [`StreamMessage`]
 pub(crate) trait WriteStreamMessage {
     fn write_stream_message(&mut self, msg: StreamMessage) -> Result<(), ShellError>;
+    fn flush(&mut self) -> Result<(), ShellError>;
 }
 
 #[derive(Debug, Default)]

@@ -24,6 +24,10 @@ impl WriteStreamMessage for TestSink {
         self.0.push(msg);
         Ok(())
     }
+
+    fn flush(&mut self) -> Result<(), ShellError> {
+        Ok(())
+    }
 }
 
 impl WriteStreamMessage for mpsc::Sender<StreamMessage> {
@@ -31,6 +35,10 @@ impl WriteStreamMessage for mpsc::Sender<StreamMessage> {
         self.send(msg).map_err(|err| ShellError::NushellFailed {
             msg: err.to_string(),
         })
+    }
+
+    fn flush(&mut self) -> Result<(), ShellError> {
+        Ok(())
     }
 }
 
@@ -150,6 +158,10 @@ fn reader_drop() {
         fn write_stream_message(&mut self, msg: StreamMessage) -> Result<(), ShellError> {
             assert!(matches!(msg, StreamMessage::Drop(1)), "got {:?}", msg);
             self.0.store(true, Relaxed);
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), ShellError> {
             Ok(())
         }
     }

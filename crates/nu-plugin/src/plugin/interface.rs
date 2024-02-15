@@ -248,6 +248,9 @@ pub(crate) trait Interface: Clone + Send {
     /// Write an output message.
     fn write(&self, output: Self::Output) -> Result<(), ShellError>;
 
+    /// Flush the output buffer, so messages are visible to the other side.
+    fn flush(&self) -> Result<(), ShellError>;
+
     /// Get the sequence for generating new [`StreamId`]s.
     fn stream_id_sequence(&self) -> &Sequence;
 
@@ -357,6 +360,10 @@ where
 {
     fn write_stream_message(&mut self, msg: StreamMessage) -> Result<(), ShellError> {
         self.write(msg.into())
+    }
+
+    fn flush(&mut self) -> Result<(), ShellError> {
+        <Self as Interface>::flush(self)
     }
 }
 

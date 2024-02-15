@@ -396,6 +396,7 @@ impl PluginInterface {
 
         // Write the response, including the pipeline data header if present
         self.write(PluginInput::EngineCallResponse(id, response))?;
+        self.flush()?;
 
         // If we have a stream to write, do it now
         if let Some(writer) = writer {
@@ -452,6 +453,7 @@ impl PluginInterface {
 
         // Write request
         self.write(PluginInput::Call(id, call))?;
+        self.flush()?;
 
         // Finish writing stream, if present
         if let Some(writer) = writer {
@@ -490,6 +492,7 @@ impl PluginInterface {
                     };
                     // Write the response, then the stream
                     self.write(PluginInput::EngineCallResponse(engine_call_id, resp))?;
+                    self.flush()?;
                     if let Some(writer) = writer {
                         writer.write()?;
                     }
@@ -553,7 +556,10 @@ impl Interface for PluginInterface {
 
     fn write(&self, input: PluginInput) -> Result<(), ShellError> {
         log::trace!("to plugin: {:?}", input);
-        self.state.writer.write_input(&input)?;
+        self.state.writer.write_input(&input)
+    }
+
+    fn flush(&self) -> Result<(), ShellError> {
         self.state.writer.flush()
     }
 

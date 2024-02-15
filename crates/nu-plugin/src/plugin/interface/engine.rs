@@ -310,11 +310,13 @@ impl EngineInterface {
                 // Write pipeline data header response, and the full stream
                 let response = PluginCallResponse::PipelineData(header);
                 self.write(PluginOutput::CallResponse(self.context()?, response))?;
+                self.flush()?;
                 writer.write()
             }
             Err(err) => {
                 let response = PluginCallResponse::Error(err.into());
-                self.write(PluginOutput::CallResponse(self.context()?, response))
+                self.write(PluginOutput::CallResponse(self.context()?, response))?;
+                self.flush()
             }
         }
     }
@@ -325,7 +327,8 @@ impl EngineInterface {
         signature: Vec<PluginSignature>,
     ) -> Result<(), ShellError> {
         let response = PluginCallResponse::Signature(signature);
-        self.write(PluginOutput::CallResponse(self.context()?, response))
+        self.write(PluginOutput::CallResponse(self.context()?, response))?;
+        self.flush()
     }
 
     /// Perform an engine call. Input and output streams are handled.
@@ -369,6 +372,7 @@ impl EngineInterface {
 
         // Write request
         self.write(PluginOutput::EngineCall { context, id, call })?;
+        self.flush()?;
 
         // Finish writing stream, if present
         if let Some(writer) = writer {
@@ -538,7 +542,10 @@ impl Interface for EngineInterface {
 
     fn write(&self, output: PluginOutput) -> Result<(), ShellError> {
         log::trace!("to engine: {:?}", output);
-        self.state.writer.write_output(&output)?;
+        self.state.writer.write_output(&output)
+    }
+
+    fn flush(&self) -> Result<(), ShellError> {
         self.state.writer.flush()
     }
 
