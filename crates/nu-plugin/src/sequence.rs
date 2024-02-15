@@ -7,11 +7,6 @@ use nu_protocol::ShellError;
 pub(crate) struct Sequence(AtomicUsize);
 
 impl Sequence {
-    /// Create a new sequence starting at the given value.
-    pub(crate) fn new(initial: usize) -> Sequence {
-        Sequence(AtomicUsize::new(initial))
-    }
-
     /// Return the next available id from a sequence, returning an error on overflow
     #[track_caller]
     pub(crate) fn next(&self) -> Result<usize, ShellError> {

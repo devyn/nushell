@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use nu_protocol::{CustomValue, ShellError, Value};
 use serde::Serialize;
 
-use crate::plugin::{create_command, make_plugin_interface};
+use crate::plugin::{create_command, make_plugin_interface, PluginExecutionNonCommandContext};
 
-use super::{PipelineDataHeader, PluginCall, PluginCallResponse, PluginData};
+use super::PluginData;
 
 /// An opaque container for a custom value that is handled fully by a plugin
 ///
@@ -47,79 +47,37 @@ impl CustomValue for PluginCustomValue {
     ) -> Result<nu_protocol::Value, nu_protocol::ShellError> {
         let mut plugin_cmd = create_command(&self.filename, self.shell.as_deref());
 
-        let mut child = plugin_cmd.spawn().map_err(|err| ShellError::GenericError {
+        let wrap_err = |err: String| ShellError::GenericError {
             error: format!(
-                "Unable to spawn plugin for {} to get base value",
+                "Unable to spawn plugin for `{}` to get base value",
                 self.source
             ),
-            msg: format!("{err}"),
+            msg: err,
             span: Some(span),
             help: None,
             inner: vec![],
-        })?;
+        };
 
-        let plugin_call = PluginCall::CollapseCustomValue(PluginData {
+        let child = plugin_cmd.spawn().map_err(|err| wrap_err(err.to_string()))?;
+
+        let plugin_data = PluginData {
             name: None,
             data: self.data.clone(),
             span,
-        });
-
-        let interface = make_plugin_interface(&mut child, None)?;
-        let interface_clone = interface.clone();
-
-        // Write the call on another thread to avoid blocking
-        std::thread::spawn(move || interface_clone.write_call(plugin_call));
-
-        let response = interface
-            .read_call_response()
-            .map_err(|err| ShellError::GenericError {
-                error: format!(
-                    "Unable to decode call for {} to get base value",
-                    self.source
-                ),
-                msg: format!("{err}"),
-                span: Some(span),
-                help: None,
-                inner: vec![],
-            });
-
-        drop(interface);
-
-        let value = match response {
-            Ok(PluginCallResponse::PipelineData(data)) => match data {
-                PipelineDataHeader::Value(value) => Ok(value),
-                PipelineDataHeader::PluginData(..) => Err(ShellError::GenericError {
-                    error: "Plugin misbehaving".into(),
-                    msg: "Plugin returned custom data as a response to a collapse call".into(),
-                    span: Some(span),
-                    help: None,
-                    inner: vec![],
-                }),
-                PipelineDataHeader::Empty
-                | PipelineDataHeader::ListStream(..)
-                | PipelineDataHeader::ExternalStream(..) => Err(ShellError::GenericError {
-                    error: "Plugin misbehaving".into(),
-                    msg: "Plugin returned stream as a response to a collapse call".into(),
-                    span: Some(span),
-                    help: None,
-                    inner: vec![],
-                }),
-            },
-            Ok(PluginCallResponse::Error(err)) => Err(err.into()),
-            Ok(PluginCallResponse::Signature(..)) => Err(ShellError::GenericError {
-                error: "Plugin missing value".into(),
-                msg: "Received a signature from plugin instead of value".into(),
-                span: Some(span),
-                help: None,
-                inner: vec![],
-            }),
-            Err(err) => Err(err),
         };
 
-        // We need to call .wait() on the child, or we'll risk summoning the zombie horde
-        let _ = child.wait();
+        let context = Arc::new(PluginExecutionNonCommandContext::new(
+            self.filename.clone(),
+            self.shell.clone(),
+            self.source.clone(),
+            span,
+        ));
 
-        value
+        let interface = make_plugin_interface(child)
+            .map_err(|err| wrap_err(err.to_string()))?;
+
+        interface.collapse_custom_value(plugin_data, context)
+            .map_err(|err| wrap_err(err.to_string()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

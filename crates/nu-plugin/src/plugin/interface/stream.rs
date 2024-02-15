@@ -1,4 +1,4 @@
-use std::{sync::{mpsc, Mutex, Condvar, Arc, MutexGuard, Weak}, marker::PhantomData, collections::BTreeMap};
+use std::{sync::{mpsc, Mutex, Condvar, Arc, MutexGuard, Weak}, marker::PhantomData, collections::BTreeMap, iter::FusedIterator};
 
 use nu_protocol::{Value, ShellError, Span};
 
@@ -94,6 +94,14 @@ where
         // Converting the error to the value here makes the implementation a lot easier
         self.recv().unwrap_or_else(|err| Some(T::from_shell_error(err)))
     }
+}
+
+// Guaranteed not to return anything after the end
+impl<T, W> FusedIterator for StreamReader<T, W>
+where
+    T: FromShellError + TryFrom<StreamData, Error = ShellError>,
+    W: WriteStreamMessage,
+{
 }
 
 impl<T, W> Drop for StreamReader<T, W>
@@ -458,7 +466,7 @@ impl Drop for StreamManager {
 /// a [`StreamWriter`].
 #[derive(Debug, Clone)]
 pub(crate) struct StreamManagerHandle {
-    state: Arc<Mutex<StreamManagerState>>,
+    state: Weak<Mutex<StreamManagerState>>,
 }
 
 impl StreamManagerHandle {

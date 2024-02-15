@@ -23,14 +23,13 @@ pub(crate) enum ReceivedPluginCall {
     Signature {
         engine: EngineInterface,
     },
-    Call {
+    Run {
         engine: EngineInterface,
         call: CallInfo<PipelineData>,
     },
     CollapseCustomValue {
         engine: EngineInterface,
-        /// The custom value has already been collapsed - just write this response.
-        result: Result<Value, ShellError>,
+        plugin_data: PluginData,
     },
 }
 
@@ -83,10 +82,7 @@ pub(crate) struct EngineInterfaceManager {
 }
 
 impl EngineInterfaceManager {
-    pub(crate) fn new<W>(writer: W) -> EngineInterfaceManager
-    where
-        W: PluginWrite,
-    {
+    pub(crate) fn new(writer: impl PluginWrite + 'static) -> EngineInterfaceManager {
         let (plug_tx, plug_rx) = mpsc::channel();
 
         EngineInterfaceManager {
@@ -121,7 +117,7 @@ impl EngineInterfaceManager {
 
     /// Send a [`ReceivedPluginCall`] to the channel
     fn send_plugin_call(&self, plugin_call: ReceivedPluginCall) -> Result<(), ShellError> {
-        self.plugin_call_sender.send(plugin_call).map_err(|err| ShellError::NushellFailed {
+        self.plugin_call_sender.send(plugin_call).map_err(|_| ShellError::NushellFailed {
             msg: "Received a plugin call, but there's nowhere to send it".into(),
         })
     }
@@ -132,7 +128,7 @@ impl EngineInterfaceManager {
         id: EngineCallId,
         response: EngineCallResponse<PipelineData>
     ) -> Result<(), ShellError> {
-        let senders = self.state.lock_engine_call_response_senders()?;
+        let mut senders = self.state.lock_engine_call_response_senders()?;
         // Remove the sender - there is only one response per engine call
         if let Some(index) = senders.iter().position(|(sender_id, _)| *sender_id == id) {
             let (_, sender) = senders.swap_remove(index);
@@ -155,13 +151,18 @@ impl EngineInterfaceManager {
     }
 
     /// Loop on input from the given reader as long as `is_finished()` is false
+    ///
+    /// Any errors will be propagated to all read streams automatically.
     pub(crate) fn consume_all<R: PluginRead>(&mut self, mut reader: R) -> Result<(), ShellError> {
         while let Some(msg) = reader.read_input()? {
             if self.is_finished() {
                 break;
             }
 
-            self.consume(msg)?;
+            if let Err(err) = self.consume(msg) {
+                let _ = self.stream_manager.broadcast_read_error(err.clone());
+                return Err(err);
+            }
         }
         Ok(())
     }
@@ -195,19 +196,18 @@ impl InterfaceManager for EngineInterfaceManager {
                     // If there's an error with initialization of the input stream, just send
                     // the error response rather than failing here
                     match self.read_pipeline_data(input, &()) {
-                        Ok(input) => self.send_plugin_call(ReceivedPluginCall::Call {
+                        Ok(input) => self.send_plugin_call(ReceivedPluginCall::Run {
                             engine: interface,
                             call: CallInfo { name, call, input, config },
                         }),
                         err @ Err(_) => interface.write_response(err)
                     }
                 }
-                // We have everything we need to handle this here, but we shouldn't write from
-                // this thread as it could block, which could cause a deadlock
+                // Send request with the plugin data
                 PluginCall::CollapseCustomValue(plugin_data) => {
                     self.send_plugin_call(ReceivedPluginCall::CollapseCustomValue {
                         engine: self.interface_for_context(id),
-                        result: self.value_from_plugin_data(plugin_data, &()),
+                        plugin_data,
                     })
                 }
             },
@@ -229,7 +229,7 @@ impl InterfaceManager for EngineInterfaceManager {
         }
     }
 
-    fn value_from_plugin_data(&self, data: PluginData, context: &()) -> Result<Value, ShellError> {
+    fn value_from_plugin_data(&self, data: PluginData, _context: &()) -> Result<Value, ShellError> {
         bincode::deserialize::<Box<dyn CustomValue>>(&data.data)
             .map(|custom_value| Value::custom_value(custom_value, data.span))
             .map_err(|err| ShellError::PluginFailedToDecode {
@@ -237,7 +237,7 @@ impl InterfaceManager for EngineInterfaceManager {
             })
     }
 
-    fn ctrlc(&self, context: &()) -> Option<Arc<AtomicBool>> {
+    fn ctrlc(&self, _context: &()) -> Option<Arc<AtomicBool>> {
         None
     }
 
@@ -512,7 +512,8 @@ impl Interface for EngineInterface {
     type Context = ();
 
     fn write(&self, output: Self::Output) -> Result<(), ShellError> {
-        self.state.writer.write_output(&output)
+        self.state.writer.write_output(&output)?;
+        self.state.writer.flush()
     }
 
     fn stream_id_sequence(&self) -> &Sequence {
@@ -526,7 +527,7 @@ impl Interface for EngineInterface {
     fn value_to_plugin_data(
         &self,
         value: &Value,
-        context: &(),
+        _context: &(),
     ) -> Result<Option<PluginData>, ShellError> {
         let span = value.span();
         if let Value::CustomValue { val, .. } = value {

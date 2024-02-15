@@ -5,7 +5,6 @@ use std::{
 
 use nu_protocol::ShellError;
 
-use crate::plugin::context::PluginExecutionContext;
 use crate::protocol::{PluginInput, PluginOutput};
 
 use super::{
@@ -55,7 +54,7 @@ impl PluginRead for TestIo {
 }
 
 impl PluginWrite for TestIo {
-    fn write_input(&mut self, input: &PluginInput) -> Result<(), ShellError> {
+    fn write_input(&self, input: &PluginInput) -> Result<(), ShellError> {
         let mut lock = self.lock().unwrap();
         lock.flushed = false;
 
@@ -67,7 +66,7 @@ impl PluginWrite for TestIo {
         }
     }
 
-    fn write_output(&mut self, output: &PluginOutput) -> Result<(), ShellError> {
+    fn write_output(&self, output: &PluginOutput) -> Result<(), ShellError> {
         let mut lock = self.lock().unwrap();
         lock.flushed = false;
 
@@ -79,7 +78,7 @@ impl PluginWrite for TestIo {
         }
     }
 
-    fn flush(&mut self) -> Result<(), ShellError> {
+    fn flush(&self) -> Result<(), ShellError> {
         let mut lock = self.lock().unwrap();
         lock.flushed = true;
         Ok(())

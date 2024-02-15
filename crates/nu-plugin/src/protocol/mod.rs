@@ -194,21 +194,12 @@ pub struct LabeledError {
 
 impl From<LabeledError> for ShellError {
     fn from(error: LabeledError) -> Self {
-        match error.span {
-            Some(span) => ShellError::GenericError {
-                error: error.label,
-                msg: error.msg,
-                span: Some(span),
-                help: None,
-                inner: vec![],
-            },
-            None => ShellError::GenericError {
-                error: error.label,
-                msg: "".into(),
-                span: None,
-                help: Some(error.msg),
-                inner: vec![],
-            },
+        ShellError::GenericError {
+            error: error.label,
+            msg: error.msg,
+            span: error.span,
+            help: None,
+            inner: vec![],
         }
     }
 }
@@ -238,18 +229,18 @@ impl From<ShellError> for LabeledError {
                 span: Some(span),
             },
             ShellError::PluginFailedToLoad { msg } => LabeledError {
-                label: "Plugin failed to load".into(),
-                msg,
+                label: format!("Plugin failed to load: {msg}"),
+                msg: "".into(),
                 span: None,
             },
             ShellError::PluginFailedToEncode { msg } => LabeledError {
-                label: "Plugin failed to encode".into(),
-                msg,
+                label: format!("Plugin failed to encode: {msg}"),
+                msg: "".into(),
                 span: None,
             },
             ShellError::PluginFailedToDecode { msg } => LabeledError {
-                label: "Plugin failed to decode".into(),
-                msg,
+                label: format!("Plugin failed to decode: {msg}").into(),
+                msg: "".into(),
                 span: None,
             },
             ShellError::NushellFailed { msg } => LabeledError {

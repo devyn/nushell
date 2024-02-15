@@ -148,7 +148,7 @@ fn encoding_benchmarks(c: &mut Criterion) {
         for fmt in ["json", "msgpack"] {
             group.bench_function(&format!("{fmt} encode {row_cnt} * {col_cnt}"), |b| {
                 let mut res = vec![];
-                let test_data = PluginOutput::CallResponse(PluginCallResponse::value(
+                let test_data = PluginOutput::CallResponse(0, PluginCallResponse::value(
                     encoding_test_data(row_cnt, col_cnt),
                 ));
                 let encoder = EncodingType::try_from_bytes(fmt.as_bytes()).unwrap();
@@ -166,7 +166,7 @@ fn decoding_benchmarks(c: &mut Criterion) {
         for fmt in ["json", "msgpack"] {
             group.bench_function(&format!("{fmt} decode for {row_cnt} * {col_cnt}"), |b| {
                 let mut res = vec![];
-                let test_data = PluginOutput::CallResponse(PluginCallResponse::value(
+                let test_data = PluginOutput::CallResponse(0, PluginCallResponse::value(
                     encoding_test_data(row_cnt, col_cnt),
                 ));
                 let encoder = EncodingType::try_from_bytes(fmt.as_bytes()).unwrap();

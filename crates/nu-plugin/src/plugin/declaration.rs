@@ -1,6 +1,5 @@
-use super::{create_command, make_plugin_interface};
-use crate::plugin::context::PluginExecutionNushellContext;
-use crate::protocol::{CallInfo, EvaluatedCall, PluginCall, PluginCallResponse};
+use super::{create_command, make_plugin_interface, PluginExecutionCommandContext};
+use crate::protocol::{CallInfo, EvaluatedCall};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -74,26 +73,9 @@ impl Command for PluginDeclaration {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        // Call the command with self path
-        // Decode information from plugin
-        // Create PipelineData
-        let source_file = Path::new(&self.filename);
-        let mut plugin_cmd = create_command(source_file, self.shell.as_deref());
-        // We need the current environment variables for `python` based plugins
-        // Or we'll likely have a problem when a plugin is implemented in a virtual Python environment.
-        let current_envs = nu_engine::env::env_to_strings(engine_state, stack).unwrap_or_default();
-        plugin_cmd.envs(current_envs);
-
-        let mut child = plugin_cmd.spawn().map_err(|err| {
-            let decl = engine_state.get_decl(call.decl_id);
-            ShellError::GenericError {
-                error: format!("Unable to spawn plugin for {}", decl.name()),
-                msg: format!("{err}"),
-                span: Some(call.head),
-                help: None,
-                inner: vec![],
-            }
-        })?;
+        // Create the EvaluatedCall to send to the plugin first - it's best for this to fail early,
+        // before we actually try to run the plugin command
+        let evaluated_call = EvaluatedCall::try_from_call(call, engine_state, stack)?;
 
         // Fetch the configuration for a plugin
         //
@@ -132,7 +114,28 @@ impl Command for PluginDeclaration {
                 }
             });
 
-        let context = Arc::new(PluginExecutionNushellContext::new(
+        // Set up the plugin command to execute
+        let source_file = Path::new(&self.filename);
+        let mut plugin_cmd = create_command(source_file, self.shell.as_deref());
+        // We need the current environment variables for `python` based plugins
+        // Or we'll likely have a problem when a plugin is implemented in a virtual Python environment.
+        let current_envs = nu_engine::env::env_to_strings(engine_state, stack).unwrap_or_default();
+        plugin_cmd.envs(current_envs);
+
+        // Run the plugin command
+        let child = plugin_cmd.spawn().map_err(|err| {
+            let decl = engine_state.get_decl(call.decl_id);
+            ShellError::GenericError {
+                error: format!("Unable to spawn plugin for {}", decl.name()),
+                msg: format!("{err}"),
+                span: Some(call.head),
+                help: None,
+                inner: vec![],
+            }
+        })?;
+
+        // Create the context to execute in - this supports engine calls and custom values
+        let context = Arc::new(PluginExecutionCommandContext::new(
             self.filename.clone(),
             self.shell.clone(),
             engine_state,
@@ -140,38 +143,17 @@ impl Command for PluginDeclaration {
             call,
         ));
 
-        let interface = make_plugin_interface(&mut child, Some(context))?;
+        let plugin = make_plugin_interface(child)?;
 
-        // Spawn a thread just to wait for the child.
-        std::thread::spawn(move || child.wait());
-
-        let (data_header, data_rest) = interface.make_pipeline_data_header(input)?;
-
-        let plugin_call = PluginCall::Run(CallInfo {
-            name: self.name.clone(),
-            call: EvaluatedCall::try_from_call(call, engine_state, stack)?,
-            input: data_header,
-            config,
-        });
-
-        interface.write_call(plugin_call)?;
-        if let Some((header, data)) = data_rest {
-            interface.write_pipeline_data_stream(&header, data)?;
-        }
-
-        // Return the pipeline data from the response
-        let response = interface.read_call_response()?;
-        match response {
-            PluginCallResponse::Signature(_) => Err(ShellError::GenericError {
-                error: "Plugin missing value".into(),
-                msg: "Received a signature from plugin instead of value or stream".into(),
-                span: Some(call.head),
-                help: None,
-                inner: vec![],
-            }),
-            PluginCallResponse::Error(err) => Err(err.into()),
-            PluginCallResponse::PipelineData(header) => interface.make_pipeline_data(header),
-        }
+        plugin.run(
+            CallInfo {
+                name: self.name.clone(),
+                call: evaluated_call,
+                input,
+                config,
+            },
+            context
+        )
     }
 
     fn is_plugin(&self) -> Option<(&Path, Option<&Path>)> {
