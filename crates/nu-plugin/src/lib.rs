@@ -47,6 +47,7 @@
 mod plugin;
 mod protocol;
 mod serializers;
+mod sequence;
 
 pub use plugin::{
     get_signature, serve_plugin, EngineInterface, Plugin, PluginDeclaration, PluginEncoder,

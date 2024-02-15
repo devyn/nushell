@@ -327,6 +327,7 @@ struct StreamManagerState {
 }
 
 impl StreamManagerState {
+    /// Lock the state, or return a [`ShellError`] if the mutex is poisoned.
     fn lock(
         state: &Mutex<StreamManagerState>,
     ) -> Result<MutexGuard<StreamManagerState>, ShellError> {
@@ -342,22 +343,25 @@ pub(crate) struct StreamManager {
 }
 
 impl StreamManager {
-    fn lock(&self) -> Result<MutexGuard<StreamManagerState>, ShellError> {
-        StreamManagerState::lock(&self.state)
-    }
-
+    /// Create a new StreamManager.
     pub(crate) fn new() -> StreamManager {
         StreamManager {
             state: Default::default(),
         }
     }
 
+    fn lock(&self) -> Result<MutexGuard<StreamManagerState>, ShellError> {
+        StreamManagerState::lock(&self.state)
+    }
+
+    /// Create a new handle to the StreamManager for registering streams.
     pub(crate) fn get_handle(&self) -> StreamManagerHandle {
         StreamManagerHandle {
             state: Arc::downgrade(&self.state)
         }
     }
 
+    /// Process a stream message, and update internal state accordingly.
     pub(crate) fn handle_message(&self, message: StreamMessage) -> Result<(), ShellError> {
         let mut state = self.lock()?;
         match message {
@@ -414,6 +418,16 @@ impl StreamManager {
         }
     }
 
+    /// Broadcast an error to all stream readers. This is useful for error propagation.
+    pub(crate) fn broadcast_read_error(&self, error: ShellError) -> Result<(), ShellError> {
+        let state = self.lock()?;
+        for (_, channel) in &state.reading_streams {
+            // Ignore send errors.
+            let _ = channel.send(Err(error.clone()));
+        }
+        Ok(())
+    }
+
     // If the `StreamManager` is dropped, we should let all of the stream writers know that they
     // won't be able to write anymore. We don't need to do anything about the readers though
     // because they'll know when the `Sender` is dropped automatically
@@ -438,12 +452,19 @@ impl Drop for StreamManager {
     }
 }
 
+/// A [`StreamManagerHandle`] supports operations for interacting with the [`StreamManager`].
+///
+/// Streams can be registered for reading, returning a [`StreamReader`], or for writing, returning
+/// a [`StreamWriter`].
 #[derive(Debug, Clone)]
 pub(crate) struct StreamManagerHandle {
-    state: Weak<Mutex<StreamManagerState>>,
+    state: Arc<Mutex<StreamManagerState>>,
 }
 
 impl StreamManagerHandle {
+    /// Because the handle only has a weak reference to the [`StreamManager`] state, we have to
+    /// first try to upgrade to a strong reference and then lock. This function wraps those two
+    /// operations together, handling errors appropriately.
     fn with_lock<T, F>(&self, f: F) -> Result<T, ShellError>
     where
         F: FnOnce(MutexGuard<StreamManagerState>) -> Result<T, ShellError>
@@ -457,6 +478,9 @@ impl StreamManagerHandle {
         f(guard)
     }
 
+    /// Register a new stream for reading, and return a [`StreamReader`] that can be used to iterate
+    /// on the values received. A [`StreamMessage`] writer is required for writing control messages
+    /// back to the producer.
     pub(crate) fn read_stream<T, W>(
         &self,
         id: StreamId,
@@ -485,6 +509,12 @@ impl StreamManagerHandle {
         Ok(StreamReader::new(id, rx, writer))
     }
 
+    /// Register a new stream for writing, and return a [`StreamWriter`] that can be used to send
+    /// data to the stream.
+    ///
+    /// The `high_pressure_mark` value controls how many messages can be written without receiving
+    /// an acknowledgement before any further attempts to write will wait for the consumer to
+    /// acknowledge them. This prevents overwhelming the reader.
     pub(crate) fn write_stream<W>(
         &self,
         id: StreamId,

@@ -81,7 +81,7 @@ macro_rules! generate_tests {
         #[test]
         fn call_round_trip_signature() {
             let plugin_call = PluginCall::Signature;
-            let plugin_input = PluginInput::Call(plugin_call);
+            let plugin_input = PluginInput::Call(0, plugin_call);
             let encoder = $encoder;
 
             let mut buffer: Vec<u8> = Vec::new();
@@ -94,7 +94,7 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::Call(PluginCall::Signature) => {}
+                PluginInput::Call(0, PluginCall::Signature) => {}
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
         }
@@ -127,7 +127,7 @@ macro_rules! generate_tests {
                 config: None,
             });
 
-            let plugin_input = PluginInput::Call(plugin_call);
+            let plugin_input = PluginInput::Call(1, plugin_call);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -140,7 +140,7 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::Call(PluginCall::Run(call_info)) => {
+                PluginInput::Call(1, PluginCall::Run(call_info)) => {
                     assert_eq!(name, call_info.name);
                     assert_eq!(PipelineDataHeader::Value(input), call_info.input);
                     assert_eq!(call.head, call_info.call.head);
@@ -180,7 +180,7 @@ macro_rules! generate_tests {
                 span,
             });
 
-            let plugin_input = PluginInput::Call(collapse_custom_value);
+            let plugin_input = PluginInput::Call(2, collapse_custom_value);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -193,7 +193,7 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::Call(PluginCall::CollapseCustomValue(plugin_data)) => {
+                PluginInput::Call(2, PluginCall::CollapseCustomValue(plugin_data)) => {
                     assert!(plugin_data.name.is_none());
                     assert_eq!(data, plugin_data.data);
                     assert_eq!(span, plugin_data.span);
@@ -217,7 +217,7 @@ macro_rules! generate_tests {
                 .rest("remaining", SyntaxShape::Int, "remaining");
 
             let response = PluginCallResponse::Signature(vec![signature.clone()]);
-            let output = PluginOutput::CallResponse(response);
+            let output = PluginOutput::CallResponse(3, response);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -230,7 +230,7 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::Signature(returned_signature)) => {
+                PluginOutput::CallResponse(3, PluginCallResponse::Signature(returned_signature)) => {
                     assert_eq!(returned_signature.len(), 1);
                     assert_eq!(signature.sig.name, returned_signature[0].sig.name);
                     assert_eq!(signature.sig.usage, returned_signature[0].sig.usage);
@@ -275,7 +275,7 @@ macro_rules! generate_tests {
             let value = Value::int(10, Span::new(2, 30));
 
             let response = PluginCallResponse::value(value.clone());
-            let output = PluginOutput::CallResponse(response);
+            let output = PluginOutput::CallResponse(4, response);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -288,7 +288,7 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::PipelineData(
+                PluginOutput::CallResponse(4, PluginCallResponse::PipelineData(
                     PipelineDataHeader::Value(returned_value),
                 )) => {
                     assert_eq!(value, returned_value)
@@ -310,7 +310,7 @@ macro_rules! generate_tests {
                     data: data.clone(),
                     span,
                 }));
-            let output = PluginOutput::CallResponse(response);
+            let output = PluginOutput::CallResponse(5, response);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -323,7 +323,7 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::PipelineData(
+                PluginOutput::CallResponse(5, PluginCallResponse::PipelineData(
                     PipelineDataHeader::PluginData(returned_plugin_data),
                 )) => {
                     assert_eq!(name, returned_plugin_data.name);
@@ -342,7 +342,7 @@ macro_rules! generate_tests {
                 span: Some(Span::new(2, 30)),
             };
             let response = PluginCallResponse::Error(error.clone());
-            let output = PluginOutput::CallResponse(response);
+            let output = PluginOutput::CallResponse(6, response);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -355,7 +355,7 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::Error(msg)) => {
+                PluginOutput::CallResponse(6, PluginCallResponse::Error(msg)) => {
                     assert_eq!(error, msg)
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
@@ -370,7 +370,7 @@ macro_rules! generate_tests {
                 span: None,
             };
             let response = PluginCallResponse::Error(error.clone());
-            let output = PluginOutput::CallResponse(response);
+            let output = PluginOutput::CallResponse(7, response);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -383,7 +383,7 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(PluginCallResponse::Error(msg)) => {
+                PluginOutput::CallResponse(7, PluginCallResponse::Error(msg)) => {
                     assert_eq!(error, msg)
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),

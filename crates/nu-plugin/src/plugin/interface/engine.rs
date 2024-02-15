@@ -1,535 +1,360 @@
 //! Interface used by the plugin to communicate with the engine.
 
-use std::{
-    io::{BufRead, Write},
-    marker::PhantomData,
-    sync::{atomic::AtomicUsize, Arc, Mutex, MutexGuard}, collections::VecDeque,
-};
+use std::sync::{Arc, Mutex, mpsc, atomic::AtomicBool, MutexGuard};
 
-use nu_protocol::{engine::Closure, Config, CustomValue, PipelineData, ShellError, Spanned, Value};
+use nu_protocol::{PipelineData, ShellError, Value, CustomValue, PluginSignature, Config, Spanned, engine::Closure};
 
 use crate::{
-    plugin::PluginEncoder,
     protocol::{
-        CallInfo, EngineCall, EngineCallId, EngineCallResponse, ExternalStreamInfo, ListStreamInfo,
-        PipelineDataHeader, PluginCall, PluginCallResponse, PluginData, PluginInput, PluginOutput,
-        RawStreamInfo, StreamId,
-    },
+        EngineCallId, EngineCallResponse, PluginCall, PluginCallResponse, PluginInput, PluginCallId, PluginData, CallInfo, EngineCall,
+    }, PluginOutput, LabeledError,
 };
 
-use super::{next_id_from, PluginRead, PluginWrite};
+use super::{PluginWrite, InterfaceManager, Interface, stream::{StreamManager, StreamManagerHandle}, PluginRead};
+use crate::sequence::Sequence;
+
+/// Plugin calls that are received by the [`EngineInterfaceManager`] for handling.
+///
+/// With each call, an [`EngineInterface`] is included that can be provided to the plugin code
+/// and should be used to send the response. The interface sent includes the [`PluginCallId`] for
+/// sending associated messages with the correct context.
+#[derive(Debug)]
+pub(crate) enum ReceivedPluginCall {
+    Signature {
+        engine: EngineInterface,
+    },
+    Call {
+        engine: EngineInterface,
+        call: CallInfo<PipelineData>,
+    },
+    CollapseCustomValue {
+        engine: EngineInterface,
+        /// The custom value has already been collapsed - just write this response.
+        result: Result<Value, ShellError>,
+    },
+}
 
 // #[cfg(test)]
 // mod tests;
 
-#[derive(Debug)]
-pub(crate) struct EngineInterfaceImpl<R, W> {
-    // Always lock read and then write mutex, if using both
-    read: Mutex<ReadPart<R, W>>,
-    write: Mutex<WritePart<W>>,
-    /// The next available stream id
-    next_stream_id: AtomicUsize,
-    /// The next available engine call id
-    next_engine_call_id: AtomicUsize,
+/// Internal shared state between the manager and each interface.
+struct EngineInterfaceState {
+    /// Sequence for generating engine call ids
+    engine_call_id_sequence: Sequence,
+    /// Sequence for generating stream ids
+    stream_id_sequence: Sequence,
+    /// Channels waiting for a response to an engine call
+    engine_call_response_senders: Mutex<Vec<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>>,
+    /// The synchronized output writer
+    writer: Box<dyn PluginWrite>,
+}
+
+impl EngineInterfaceState {
+    fn lock_engine_call_response_senders(&self) -> Result<MutexGuard<Vec<(usize, mpsc::Sender<EngineCallResponse<PipelineData>>)>>, ShellError> {
+        self
+            .engine_call_response_senders
+            .lock()
+            .map_err(|_| ShellError::NushellFailed {
+                msg: "engine_call_response_senders mutex poisoned".into(),
+            })
+    }
+}
+
+impl std::fmt::Debug for EngineInterfaceState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EngineInterfaceState")
+            .field("engine_call_id_sequence", &self.engine_call_id_sequence)
+            .field("stream_id_sequence", &self.stream_id_sequence)
+            .field("engine_call_response_senders", &self.engine_call_response_senders)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug)]
-pub(crate) struct ReadPart<R, W> {
-    reader: R,
-    /// Always return this read error if set, in order to propagate it from somewhere it won't be
-    error: Option<Box<ShellError>>,
-    /// Stores [PluginCall]s that can't be handled immediately
-    calls: VecDeque<PluginCall>,
-    /// Stores stream messages that can't be handled immediately
-    // stream_buffers: StreamBuffers,
-    /// Stream interruption state
-    // interrupt_flags: StreamInterruptFlags,
-    /// Lists engine calls that are expecting a response. If a response is received out of order
-    /// it can be placed in here for the waiting thread to pick up later
-    pending_engine_calls: Vec<(EngineCallId, Option<EngineCallResponse>)>,
-    /// Just to preserve the writer type
-    write_marker: PhantomData<W>,
+pub(crate) struct EngineInterfaceManager {
+    /// Shared state
+    state: Arc<EngineInterfaceState>,
+    /// Channel to send received PluginCalls to
+    plugin_call_sender: mpsc::Sender<ReceivedPluginCall>,
+    /// Receiver for PluginCalls. This is usually taken after initialization
+    plugin_call_receiver: Option<mpsc::Receiver<ReceivedPluginCall>>,
+    /// Manages stream messages and state
+    stream_manager: StreamManager,
 }
 
-#[derive(Debug)]
-pub(crate) struct WritePart<W>(W);
+impl EngineInterfaceManager {
+    pub(crate) fn new<W>(writer: W) -> EngineInterfaceManager
+    where
+        W: PluginWrite,
+    {
+        let (plug_tx, plug_rx) = mpsc::channel();
 
-impl<R, W> EngineInterfaceImpl<R, W> {
-    pub(crate) fn new(reader: R, writer: W) -> EngineInterfaceImpl<R, W> {
-        EngineInterfaceImpl {
-            read: Mutex::new(ReadPart {
-                reader,
-                error: None,
-                calls: VecDeque::new(),
-                // stream_buffers: StreamBuffers::default(),
-                // interrupt_flags: StreamInterruptFlags::new(),
-                pending_engine_calls: vec![],
-                write_marker: PhantomData,
+        EngineInterfaceManager {
+            state: Arc::new(EngineInterfaceState {
+                engine_call_id_sequence: Sequence::default(),
+                stream_id_sequence: Sequence::default(),
+                engine_call_response_senders: Mutex::new(Vec::new()),
+                writer: Box::new(writer)
             }),
-            write: Mutex::new(WritePart(writer)),
-            next_stream_id: AtomicUsize::new(0),
-            next_engine_call_id: AtomicUsize::new(0),
-        }
-    }
-}
-/*
-impl<R, W> StreamDataIoBase for EngineInterfaceImpl<R, W>
-where
-    R: PluginRead,
-    W: PluginWrite,
-{
-    type ReadPart = ReadPart<R, W>;
-    type WritePart = WritePart<W>;
-
-    fn lock_read(&self) -> Result<MutexGuard<ReadPart<R, W>>, ShellError> {
-        let read = self.read.lock().map_err(|_| ShellError::NushellFailed {
-            msg: "error in EngineInterface: read mutex poisoned due to panic".into(),
-        })?;
-
-        if let Some(ref err) = read.error {
-            // Propagate an error
-            Err((**err).clone())
-        } else {
-            Ok(read)
+            plugin_call_sender: plug_tx,
+            plugin_call_receiver: Some(plug_rx),
+            stream_manager: StreamManager::new(),
         }
     }
 
-    fn lock_write(&self) -> Result<MutexGuard<WritePart<W>>, ShellError> {
-        self.write.lock().map_err(|_| ShellError::NushellFailed {
-            msg: "error in EngineInterface: write mutex poisoned due to panic".into(),
+    /// Get the receiving end of the plugin call channel. Plugin calls that need to be handled
+    /// will be sent here.
+    pub(crate) fn take_plugin_call_receiver(
+        &mut self,
+    ) -> Option<mpsc::Receiver<ReceivedPluginCall>> {
+        self.plugin_call_receiver.take()
+    }
+
+    /// Create an [`EngineInterface`] associated with the given call id.
+    fn interface_for_context(&self, context: PluginCallId) -> EngineInterface {
+        EngineInterface {
+            state: self.state.clone(),
+            stream_manager_handle: self.stream_manager.get_handle(),
+            context: Some(context),
+        }
+    }
+
+    /// Send a [`ReceivedPluginCall`] to the channel
+    fn send_plugin_call(&self, plugin_call: ReceivedPluginCall) -> Result<(), ShellError> {
+        self.plugin_call_sender.send(plugin_call).map_err(|err| ShellError::NushellFailed {
+            msg: "Received a plugin call, but there's nowhere to send it".into(),
         })
     }
 
-    fn new_stream_id(&self) -> Result<StreamId, ShellError> {
-        next_id_from(&self.next_stream_id)
-    }
-}
-
-impl<R, W> StreamDataRead for ReadPart<R, W>
-where
-    R: PluginRead,
-    W: PluginWrite,
-{
-    type Message = PluginInput;
-    type Base = EngineInterfaceImpl<R, W>;
-
-    fn read(&mut self) -> Result<Option<Self::Message>, ShellError> {
-        self.reader.read_input()
-    }
-
-    fn interrupt_flags(&mut self) -> &mut StreamInterruptFlags {
-        &mut self.interrupt_flags
-    }
-
-    fn stream_buffers(&mut self) -> &mut StreamBuffers {
-        &mut self.stream_buffers
-    }
-
-    // Default message handler
-    fn handle_message(
-        &mut self,
-        _io: &Arc<Self::Base>,
-        msg: PluginInput,
+    /// Send a [`EngineCallResponse`] to the appropriate sender
+    fn send_engine_call_response(
+        &self,
+        id: EngineCallId,
+        response: EngineCallResponse<PipelineData>
     ) -> Result<(), ShellError> {
-        match msg {
-            // Store an out of order call
-            PluginInput::Call(call) => {
-                self.calls.push_back(call);
-                Ok(())
+        let senders = self.state.lock_engine_call_response_senders()?;
+        // Remove the sender - there is only one response per engine call
+        if let Some(index) = senders.iter().position(|(sender_id, _)| *sender_id == id) {
+            let (_, sender) = senders.swap_remove(index);
+            drop(senders);
+            if sender.send(response).is_err() {
+                log::warn!("Received an engine call response for id={id}, but the caller hung up");
             }
-            // Handle out of order stream messages
-            PluginInput::Stream(stream_msg) => {
-                self.handle_out_of_order(stream_msg)
-            }
-            // Store engine call responses in pending_engine_calls. If the call response will
-            // produce a stream, that also must be initialized now so we can store those stream
-            // messages.
-            PluginInput::EngineCallResponse(id, response) => {
-                // Find the matching engine call response hole, or error if it wasn't registered
-                let (_, response_hole) = self
-                    .pending_engine_calls
-                    .iter_mut()
-                    .find(|(call_id, _)| id == *call_id)
-                    .ok_or_else(|| ShellError::PluginFailedToDecode {
-                        msg: format!("unexpected EngineCallResponse id={id}"),
-                    })?;
-
-                if response_hole.is_none() {
-                    // We may have to set up a stream
-                    if let EngineCallResponse::PipelineData(header) = &response {
-                        self.stream_buffers.init_stream(header)?;
-                    }
-                    *response_hole = Some(response);
-                    Ok(())
-                } else {
-                    Err(ShellError::PluginFailedToDecode {
-                        msg: format!("received multiple responses for engine call id={id}"),
-                    })
-                }
-            }
+            Ok(())
+        } else {
+            Err(ShellError::PluginFailedToDecode {
+                msg: format!("Unknown engine call ID: {id}"),
+            })
         }
     }
+
+    /// True if there are no other copies of the state (which would mean there are no interfaces
+    /// and no stream readers/writers)
+    pub(crate) fn is_finished(&self) -> bool {
+        Arc::strong_count(&self.state) < 2
+    }
+
+    /// Loop on input from the given reader as long as `is_finished()` is false
+    pub(crate) fn consume_all<R: PluginRead>(&mut self, mut reader: R) -> Result<(), ShellError> {
+        while let Some(msg) = reader.read_input()? {
+            if self.is_finished() {
+                break;
+            }
+
+            self.consume(msg)?;
+        }
+        Ok(())
+    }
 }
 
-impl<W> StreamDataWrite for WritePart<W>
-where
-    W: PluginWrite,
-{
-    type Message = PluginOutput;
+impl InterfaceManager for EngineInterfaceManager {
+    type Interface = EngineInterface;
+    type Input = PluginInput;
+    type Context = ();
 
-    fn write(&mut self, msg: Self::Message) -> Result<(), ShellError> {
-        self.0.write_output(&msg)
+    fn get_interface(&self) -> Self::Interface {
+        EngineInterface {
+            state: self.state.clone(),
+            stream_manager_handle: self.stream_manager.get_handle(),
+            context: None,
+        }
     }
 
-    fn flush(&mut self) -> Result<(), ShellError> {
-        self.0.flush()
-    }
-}
-*/
-
-/// The trait indirection is so that we can hide the types with a trait object inside
-/// EngineInterface. As such, this trait must remain object safe.
-pub(crate) trait EngineInterfaceIo: Send + Sync {
-    /// Propagate an error to future attempts to read from the interface.
-    fn set_read_failed(&self, err: ShellError);
-
-    /// Read a [PluginCall] from the engine.
-    fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError>;
-
-    /// Write a response to a [PluginCall].
-    fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError>;
-
-    /// Write an [EngineCall] and return the [EngineCallId] it was registered with.
-    fn write_engine_call(&self, call: EngineCall) -> Result<EngineCallId, ShellError>;
-
-    /// Read the [EngineCallResponse] corresponding to `id`.
-    ///
-    /// Panics if the `id` was not one previously returned by `write_engine_call` or if it was
-    /// already read before.
-    fn read_engine_call_response(
-        self: Arc<Self>,
-        id: EngineCallId,
-    ) -> Result<EngineCallResponse, ShellError>;
-
-    /// Create [PipelineData] appropriate for the given received [PipelineDataHeader].
-    fn make_pipeline_data(
-        self: Arc<Self>,
-        header: PipelineDataHeader,
-    ) -> Result<PipelineData, ShellError>;
-
-    /// Create a valid header to send the given [`PipelineData`].
-    ///
-    /// Returns the header, and the arguments to be sent to `write_pipeline_data_stream`
-    /// if necessary.
-    fn make_pipeline_data_header(
-        &self,
-        data: PipelineData,
-    ) -> Result<
-        (
-            PipelineDataHeader,
-            Option<(PipelineDataHeader, PipelineData)>,
-        ),
-        ShellError,
-    >;
-}
-
-impl<R, W> EngineInterfaceIo for EngineInterfaceImpl<R, W>
-where
-    R: PluginRead + 'static,
-    W: PluginWrite + 'static,
-{
-    fn set_read_failed(&self, err: ShellError) {
-        // // If we fail to unlock, it will cause an error somewhere anyway
-        // if let Ok(mut guard) = self.read.lock() {
-        //     guard.error = Some(err.into());
-        // }
-        todo!()
+    fn consume(&mut self, input: Self::Input) -> Result<(), ShellError> {
+        match input {
+            PluginInput::Stream(message) => self.consume_stream_message(message),
+            PluginInput::Call(id, call) => match call {
+                // We just let the receiver handle it rather than trying to store signature here
+                // or something
+                PluginCall::Signature => self.send_plugin_call(ReceivedPluginCall::Signature {
+                    engine: self.interface_for_context(id),
+                }),
+                // Set up the streams from the input and reformat to a ReceivedPluginCall
+                PluginCall::Run(CallInfo { name, call, input, config }) => {
+                    let interface = self.interface_for_context(id);
+                    // If there's an error with initialization of the input stream, just send
+                    // the error response rather than failing here
+                    match self.read_pipeline_data(input, &()) {
+                        Ok(input) => self.send_plugin_call(ReceivedPluginCall::Call {
+                            engine: interface,
+                            call: CallInfo { name, call, input, config },
+                        }),
+                        err @ Err(_) => interface.write_response(err)
+                    }
+                }
+                // We have everything we need to handle this here, but we shouldn't write from
+                // this thread as it could block, which could cause a deadlock
+                PluginCall::CollapseCustomValue(plugin_data) => {
+                    self.send_plugin_call(ReceivedPluginCall::CollapseCustomValue {
+                        engine: self.interface_for_context(id),
+                        result: self.value_from_plugin_data(plugin_data, &()),
+                    })
+                }
+            },
+            PluginInput::EngineCallResponse(id, response) => {
+                let response = match response {
+                    EngineCallResponse::Error(err) => EngineCallResponse::Error(err),
+                    EngineCallResponse::Config(config) => EngineCallResponse::Config(config),
+                    EngineCallResponse::PipelineData(header) => {
+                        // If there's an error with initializing this stream, change it to an engine
+                        // call error response, but send it anyway
+                        match self.read_pipeline_data(header, &()) {
+                            Ok(data) => EngineCallResponse::PipelineData(data),
+                            Err(err) => EngineCallResponse::Error(err),
+                        }
+                    }
+                };
+                self.send_engine_call_response(id, response)
+            },
+        }
     }
 
-    fn read_call(self: Arc<Self>) -> Result<Option<PluginCall>, ShellError> {
-        // loop {
-        //     let mut read = self.lock_read()?;
-        //     // Check if a call was handled out of order
-        //     let call =
-        //         if let Some(call) = read.calls.pop_front() {
-        //             call
-        //         } else {
-        //             match read.read()? {
-        //                 Some(PluginInput::Call(call)) => call,
-        //                 // Handle some other message
-        //                 Some(other) => {
-        //                     read.handle_message(&self, other)?;
-        //                     continue;
-        //                 }
-        //                 // End of input
-        //                 None => return Ok(None),
-        //             }
-        //         };
-        //     // Check the call input type to set the stream buffers up
-        //     if let PluginCall::Run(CallInfo { ref input, .. }) = call {
-        //         read.stream_buffers.init_stream(input)?;
-        //     }
-        //     return Ok(Some(call));
-        // }
-        todo!()
+    fn value_from_plugin_data(&self, data: PluginData, context: &()) -> Result<Value, ShellError> {
+        bincode::deserialize::<Box<dyn CustomValue>>(&data.data)
+            .map(|custom_value| Value::custom_value(custom_value, data.span))
+            .map_err(|err| ShellError::PluginFailedToDecode {
+                msg: err.to_string(),
+            })
     }
 
-    fn write_call_response(&self, response: PluginCallResponse) -> Result<(), ShellError> {
-        // let mut write = self.lock_write()?;
-
-        // write.write(PluginOutput::CallResponse(response))?;
-        // write.flush()
-        todo!()
+    fn ctrlc(&self, context: &()) -> Option<Arc<AtomicBool>> {
+        None
     }
 
-    fn write_engine_call(&self, call: EngineCall) -> Result<EngineCallId, ShellError> {
-        // // Get a new id for the engine call
-        // let id = next_id_from(&self.next_engine_call_id)?;
-
-        // // Register the pending engine call
-        // let mut read = self.lock_read()?;
-        // read.pending_engine_calls.push((id, None));
-        // drop(read);
-
-        // // Send the call
-        // let mut write = self.lock_write()?;
-
-        // write.write(PluginOutput::EngineCall(id, call))?;
-        // write.flush()?;
-
-        // Ok(id)
-        todo!()
-    }
-
-    fn read_engine_call_response(
-        self: Arc<Self>,
-        id: EngineCallId,
-    ) -> Result<EngineCallResponse, ShellError> {
-        // loop {
-        //     let mut read = self.lock_read()?;
-
-        //     let pending_index = read
-        //         .pending_engine_calls
-        //         .iter()
-        //         .position(|(reg_id, _)| id == *reg_id)
-        //         .ok_or_else(|| ShellError::NushellFailed {
-        //             msg: "engine call not found in pending_engine_calls".into(),
-        //         })?;
-
-        //     // Check if another thread already read our response
-        //     if read.pending_engine_calls[pending_index].1.is_some() {
-        //         // It's already been received. The other thread will have already set up the stream
-        //         // so we just need to return it.
-        //         return Ok(read
-        //             .pending_engine_calls
-        //             .swap_remove(pending_index)
-        //             .1
-        //             .unwrap());
-        //     }
-
-        //     // Otherwise read and hope that we get the response
-        //     match read.read()? {
-        //         Some(PluginInput::EngineCallResponse(resp_id, response)) if id == resp_id => {
-        //             // Remove the pending call
-        //             read.pending_engine_calls.swap_remove(pending_index);
-        //             // Initialize stream, if necessary
-        //             if let EngineCallResponse::PipelineData(header) = &response {
-        //                 read.stream_buffers.init_stream(header)?;
-        //             }
-        //             return Ok(response);
-        //         }
-        //         // Handle some other message
-        //         Some(other) => read.handle_message(&self, other)?,
-        //         // End of input
-        //         None => {
-        //             return Err(ShellError::PluginFailedToDecode {
-        //                 msg: "unexpected end of input".into(),
-        //             })
-        //         }
-        //     }
-        // }
-        todo!()
-    }
-
-    fn make_pipeline_data(
-        self: Arc<Self>,
-        header: PipelineDataHeader,
-    ) -> Result<PipelineData, ShellError> {
-        // match header {
-        //     PipelineDataHeader::Empty => Ok(PipelineData::Empty),
-        //     PipelineDataHeader::Value(value) => Ok(PipelineData::Value(value, None)),
-        //     PipelineDataHeader::PluginData(plugin_data) => {
-        //         // Deserialize custom value
-        //         bincode::deserialize::<Box<dyn CustomValue>>(&plugin_data.data)
-        //             .map(|custom_value| {
-        //                 let value = Value::custom_value(custom_value, plugin_data.span);
-        //                 PipelineData::Value(value, None)
-        //             })
-        //             .map_err(|err| ShellError::PluginFailedToDecode {
-        //                 msg: err.to_string(),
-        //             })
-        //     }
-        //     PipelineDataHeader::ListStream(info) => Ok(make_pipe_list_stream(self, &info, None)),
-        //     PipelineDataHeader::ExternalStream(info) => {
-        //         Ok(make_pipe_external_stream(self, &info, None))
-        //     }
-        // }
-        todo!()
-    }
-
-    fn make_pipeline_data_header(
-        &self,
-        data: PipelineData,
-    ) -> Result<
-        (
-            PipelineDataHeader,
-            Option<(PipelineDataHeader, PipelineData)>,
-        ),
-        ShellError,
-    > {
-        // match data {
-        //     PipelineData::Value(value, _) => {
-        //         let span = value.span();
-        //         match value {
-        //             // Serialize custom values as PluginData
-        //             Value::CustomValue { val, .. } => match bincode::serialize(&val) {
-        //                 Ok(data) => {
-        //                     let name = Some(val.value_string());
-        //                     Ok((
-        //                         PipelineDataHeader::PluginData(PluginData { name, data, span }),
-        //                         None,
-        //                     ))
-        //                 }
-        //                 Err(err) => {
-        //                     return Err(ShellError::PluginFailedToEncode {
-        //                         msg: err.to_string(),
-        //                     })
-        //                 }
-        //             },
-        //             // Other values can be serialized as-is
-        //             value => Ok((PipelineDataHeader::Value(value), None)),
-        //         }
-        //     }
-        //     PipelineData::ListStream(..) => {
-        //         let header = PipelineDataHeader::ListStream(ListStreamInfo {
-        //             id: self.new_stream_id()?,
-        //         });
-        //         Ok((header.clone(), Some((header, data))))
-        //     }
-        //     PipelineData::ExternalStream {
-        //         ref stdout,
-        //         ref stderr,
-        //         ref exit_code,
-        //         span,
-        //         trim_end_newline,
-        //         ..
-        //     } => {
-        //         // Gather info from the stream
-        //         let info = ExternalStreamInfo {
-        //             span,
-        //             stdout: if let Some(stdout) = stdout {
-        //                 Some(RawStreamInfo::new(self.new_stream_id()?, stdout))
-        //             } else {
-        //                 None
-        //             },
-        //             stderr: if let Some(stderr) = stderr {
-        //                 Some(RawStreamInfo::new(self.new_stream_id()?, stderr))
-        //             } else {
-        //                 None
-        //             },
-        //             exit_code: if exit_code.is_some() {
-        //                 Some(ListStreamInfo {
-        //                     id: self.new_stream_id()?,
-        //                 })
-        //             } else {
-        //                 None
-        //             },
-        //             trim_end_newline,
-        //         };
-        //         let header = PipelineDataHeader::ExternalStream(info);
-        //         Ok((header.clone(), Some((header, data))))
-        //     }
-        //     PipelineData::Empty => Ok((PipelineDataHeader::Empty, None)),
-        // }
-        todo!()
+    fn stream_manager(&self) -> &StreamManager {
+        &self.stream_manager
     }
 }
 
 /// A reference through which the nushell engine can be interacted with during execution.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct EngineInterface {
-    io: Arc<dyn EngineInterfaceIo>,
-}
-
-impl<R, W> From<EngineInterfaceImpl<R, W>> for EngineInterface
-where
-    R: PluginRead + 'static,
-    W: PluginWrite + 'static,
-{
-    fn from(engine_impl: EngineInterfaceImpl<R, W>) -> Self {
-        Arc::new(engine_impl).into()
-    }
-}
-
-impl<T> From<Arc<T>> for EngineInterface
-where
-    T: EngineInterfaceIo + 'static,
-{
-    fn from(value: Arc<T>) -> Self {
-        EngineInterface { io: value }
-    }
+    /// Shared state with the manager
+    state: Arc<EngineInterfaceState>,
+    /// Handle to stream manager
+    stream_manager_handle: StreamManagerHandle,
+    /// The plugin call this interface belongs to.
+    context: Option<PluginCallId>,
 }
 
 impl EngineInterface {
-    /// Create the engine interface from the given reader, writer, and encoder.
-    pub(crate) fn new<R, W, E>(reader: R, writer: W, encoder: E) -> EngineInterface
-    where
-        (R, E): PluginRead + 'static,
-        (W, E): PluginWrite + 'static,
-        E: PluginEncoder,
-    {
-        EngineInterfaceImpl::new((reader, encoder.clone()), (writer, encoder)).into()
+    fn context(&self) -> Result<PluginCallId, ShellError> {
+        self.context.ok_or_else(|| ShellError::NushellFailed {
+            msg: "Tried to call an EngineInterface method that requires a call context \
+                outside of one".into(),
+        })
     }
 
-    /// Read a plugin call from the engine
-    pub(crate) fn read_call(&self) -> Result<Option<PluginCall>, ShellError> {
-        self.io.clone().read_call()
-    }
-
-    /// Create [PipelineData] appropriate for the given [PipelineDataHeader].
-    pub(crate) fn make_pipeline_data(
+    /// Write a call response of either [`PipelineData`] or an error. Writes the full stream
+    /// before returning.
+    pub(crate) fn write_response(
         &self,
-        header: PipelineDataHeader,
-    ) -> Result<PipelineData, ShellError> {
-        self.io.clone().make_pipeline_data(header)
-    }
-
-    /// Write a plugin call response back to the engine
-    pub(crate) fn write_call_response(
-        &self,
-        response: PluginCallResponse,
+        result: Result<PipelineData, impl Into<LabeledError>>,
     ) -> Result<(), ShellError> {
-        self.io.write_call_response(response)
-    }
-
-    /// Write a response appropriate for the given [PipelineData] and consume the stream(s) to
-    /// completion, if any.
-    pub(crate) fn write_pipeline_data_response(
-        &self,
-        data: PipelineData,
-    ) -> Result<(), ShellError> {
-        let (header, rest) = self.io.make_pipeline_data_header(data)?;
-
-        self.io
-            .write_call_response(PluginCallResponse::PipelineData(header))?;
-
-        if let Some((header, data)) = rest {
-            // self.io.write_pipeline_data_stream(&header, data)
-            todo!()
-        } else {
-            Ok(())
+        match result {
+            Ok(data) => {
+                let (header, writer) = match self.init_write_pipeline_data(data, &()) {
+                    Ok(tup) => tup,
+                    // If we get an error while trying to construct the pipeline data, send that
+                    // instead
+                    Err(err) => return self.write_response(Err(err)),
+                };
+                // Write pipeline data header response, and the full stream
+                let response = PluginCallResponse::PipelineData(header);
+                self.write(PluginOutput::CallResponse(self.context()?, response))?;
+                writer.write()
+            }
+            Err(err) => {
+                let response = PluginCallResponse::Error(err.into());
+                self.write(PluginOutput::CallResponse(self.context()?, response))
+            }
         }
     }
+
+    /// Write a call response of plugin signatures.
+    pub(crate) fn write_signature(
+        &self,
+        signature: Vec<PluginSignature>,
+    ) -> Result<(), ShellError> {
+        let response = PluginCallResponse::Signature(signature);
+        self.write(PluginOutput::CallResponse(self.context()?, response))
+    }
+
+    /// Perform an engine call. Input and output streams are handled.
+    fn engine_call(
+        &self,
+        call: EngineCall<PipelineData>,
+    ) -> Result<EngineCallResponse<PipelineData>, ShellError> {
+        let context = self.context()?;
+        let id = self.state.engine_call_id_sequence.next()?;
+        let (tx, rx) = mpsc::channel();
+
+        // Convert the call into one with a header and handle the stream, if necessary
+        let (call, writer) = match call {
+            EngineCall::EvalClosure {
+                closure,
+                positional,
+                input,
+                redirect_stdout,
+                redirect_stderr,
+            } => {
+                let (header, writer) = self.init_write_pipeline_data(input, &())?;
+                (
+                    EngineCall::EvalClosure {
+                        closure,
+                        positional,
+                        input: header,
+                        redirect_stdout,
+                        redirect_stderr,
+                    },
+                    Some(writer),
+                )
+            },
+            // These calls have no pipeline data, so they're just the same on both sides
+            EngineCall::GetConfig => (EngineCall::GetConfig, None),
+        };
+
+        // Register the channel
+        self.state.lock_engine_call_response_senders()?.push((id, tx));
+
+        // Write request
+        self.write(PluginOutput::EngineCall {
+            context,
+            id,
+            call,
+        })?;
+
+        // Finish writing stream, if present
+        if let Some(writer) = writer {
+            writer.write()?;
+        }
+
+        // Wait on receiver to get the response
+        rx.recv().map_err(|_| ShellError::NushellFailed {
+            msg: "Failed to get response to engine call because the channel was closed".into(),
+        })
+    }
+
 
     /// Get the full shell configuration from the engine. As this is quite a large object, it is
     /// provided on request only.
@@ -548,12 +373,11 @@ impl EngineInterface {
     /// # }
     /// ```
     pub fn get_config(&self) -> Result<Box<Config>, ShellError> {
-        let call_id = self.io.write_engine_call(EngineCall::GetConfig)?;
-        match self.io.clone().read_engine_call_response(call_id)? {
+        match self.engine_call(EngineCall::GetConfig)? {
             EngineCallResponse::Config(config) => Ok(config),
             EngineCallResponse::Error(err) => Err(err),
             _ => Err(ShellError::PluginFailedToDecode {
-                msg: "received unexpected response for EngineCall::GetConfig".into(),
+                msg: "Received unexpected response for EngineCall::GetConfig".into(),
             }),
         }
     }
@@ -611,34 +435,19 @@ impl EngineInterface {
         redirect_stdout: bool,
         redirect_stderr: bool,
     ) -> Result<PipelineData, ShellError> {
-        let (input_header, input_stream) = self.io.make_pipeline_data_header(input)?;
-
         let call = EngineCall::EvalClosure {
             closure: closure.clone(),
             positional,
-            input: input_header.clone(),
+            input,
             redirect_stdout,
             redirect_stderr,
         };
 
-        // Write call and get id
-        let call_id = self.io.write_engine_call(call)?;
-
-        // Send input if necessary
-        if let Some((header, data)) = input_stream {
-            // self.io.write_pipeline_data_stream(&header, data)?;
-            todo!()
-        }
-
-        // Wait for response
-        match self.io.clone().read_engine_call_response(call_id)? {
-            EngineCallResponse::PipelineData(header) => {
-                // Generate PipelineData (possibly stream) according to the header returned
-                self.io.clone().make_pipeline_data(header)
-            }
-            EngineCallResponse::Error(err) => Err(err),
+        match self.engine_call(call)? {
+            EngineCallResponse::Error(error) => Err(error),
+            EngineCallResponse::PipelineData(data) => Ok(data),
             _ => Err(ShellError::PluginFailedToDecode {
-                msg: "unexpected response to EngineCall::EvalClosure".into(),
+                msg: "Received unexpected response type for EngineCall::EvalClosure".into(),
             }),
         }
     }
@@ -694,6 +503,44 @@ impl EngineInterface {
         match output.into_value(closure.span) {
             Value::Error { error, .. } => Err(*error),
             value => Ok(value),
+        }
+    }
+}
+
+impl Interface for EngineInterface {
+    type Output = PluginOutput;
+    type Context = ();
+
+    fn write(&self, output: Self::Output) -> Result<(), ShellError> {
+        self.state.writer.write_output(&output)
+    }
+
+    fn stream_id_sequence(&self) -> &Sequence {
+        &self.state.stream_id_sequence
+    }
+
+    fn stream_manager_handle(&self) -> &StreamManagerHandle {
+        &self.stream_manager_handle
+    }
+
+    fn value_to_plugin_data(
+        &self,
+        value: &Value,
+        context: &(),
+    ) -> Result<Option<PluginData>, ShellError> {
+        let span = value.span();
+        if let Value::CustomValue { val, .. } = value {
+            bincode::serialize(&val)
+                .map(|data| Some(PluginData {
+                    name: Some(val.value_string()),
+                    data,
+                    span
+                }))
+                .map_err(|err| ShellError::PluginFailedToEncode {
+                    msg: err.to_string(),
+                })
+        } else {
+            Ok(None)
         }
     }
 }

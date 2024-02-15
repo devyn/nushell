@@ -13,14 +13,17 @@ use serde::{Deserialize, Serialize};
 /// A sequential identifier for a stream
 pub type StreamId = usize;
 
-/// A sequential identifier for an [EngineCall]
+/// A sequential identifer for a [`PluginCall`]
+pub type PluginCallId = usize;
+
+/// A sequential identifier for an [`EngineCall`]
 pub type EngineCallId = usize;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CallInfo {
+pub struct CallInfo<D> {
     pub name: String,
     pub call: EvaluatedCall,
-    pub input: PipelineDataHeader,
+    pub input: D,
     pub config: Option<Value>,
 }
 
@@ -82,18 +85,18 @@ impl RawStreamInfo {
 
 /// Initial message sent to the plugin
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum PluginCall {
+pub enum PluginCall<D> {
     Signature,
-    Run(CallInfo),
+    Run(CallInfo<D>),
     CollapseCustomValue(PluginData),
 }
 
 /// Any data sent to the plugin
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PluginInput {
-    Call(PluginCall),
+    Call(PluginCallId, PluginCall<PipelineDataHeader>),
     Stream(StreamMessage),
-    EngineCallResponse(EngineCallId, EngineCallResponse),
+    EngineCallResponse(EngineCallId, EngineCallResponse<PipelineDataHeader>),
 }
 
 impl TryFrom<PluginInput> for StreamMessage {
@@ -249,6 +252,21 @@ impl From<ShellError> for LabeledError {
                 msg,
                 span: None,
             },
+            ShellError::NushellFailed { msg } => LabeledError {
+                label: format!("Nushell failed: {msg}"),
+                msg: "This shouldn't happen. Please file an issue: https://github.com/nushell/nushell/issues".into(),
+                span: None,
+            },
+            ShellError::NushellFailedSpanned { msg, label, span } => LabeledError {
+                msg: label,
+                label: msg,
+                span: Some(span),
+            },
+            ShellError::NushellFailedHelp { msg, help } => LabeledError {
+                label: format!("Nushell failed: {msg}"),
+                msg: help,
+                span: None,
+            },
             err => LabeledError {
                 label: format!("Error - Add to LabeledError From<ShellError>: {err:?}"),
                 msg: err.to_string(),
@@ -263,15 +281,15 @@ impl From<ShellError> for LabeledError {
 /// Note: exported for internal use, not public.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[doc(hidden)]
-pub enum PluginCallResponse {
+pub enum PluginCallResponse<D> {
     Error(LabeledError),
     Signature(Vec<PluginSignature>),
-    PipelineData(PipelineDataHeader),
+    PipelineData(D),
 }
 
-impl PluginCallResponse {
+impl PluginCallResponse<PipelineDataHeader> {
     /// Construct a plugin call response with a single value
-    pub fn value(value: Value) -> PluginCallResponse {
+    pub fn value(value: Value) -> PluginCallResponse<PipelineDataHeader> {
         if value.is_nothing() {
             PluginCallResponse::PipelineData(PipelineDataHeader::Empty)
         } else {
@@ -286,9 +304,13 @@ impl PluginCallResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[doc(hidden)]
 pub enum PluginOutput {
-    CallResponse(PluginCallResponse),
+    CallResponse(PluginCallId, PluginCallResponse<PipelineDataHeader>),
     Stream(StreamMessage),
-    EngineCall(EngineCallId, EngineCall),
+    EngineCall {
+        context: PluginCallId,
+        id: EngineCallId,
+        call: EngineCall<PipelineDataHeader>,
+    },
 }
 
 impl TryFrom<PluginOutput> for StreamMessage {
@@ -310,7 +332,7 @@ impl From<StreamMessage> for PluginOutput {
 
 /// A remote call back to the engine during the plugin's execution.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum EngineCall {
+pub enum EngineCall<D> {
     /// Get the full engine configuration
     GetConfig,
     /// Evaluate a closure with stream input/output
@@ -322,7 +344,7 @@ pub enum EngineCall {
         /// Positional arguments to add to the closure call
         positional: Vec<Value>,
         /// Input to the closure
-        input: PipelineDataHeader,
+        input: D,
         /// Whether to redirect stdout from external commands
         redirect_stdout: bool,
         /// Whether to redirect stderr from external commands
@@ -330,10 +352,20 @@ pub enum EngineCall {
     },
 }
 
+impl<D> EngineCall<D> {
+    /// Get the name of the engine call so it can be embedded in things like error messages
+    pub fn name(&self) -> &'static str {
+        match self {
+            EngineCall::GetConfig => "GetConfig",
+            EngineCall::EvalClosure { .. } => "EvalClosure",
+        }
+    }
+}
+
 /// The response to an [EngineCall].
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum EngineCallResponse {
+pub enum EngineCallResponse<D> {
     Error(ShellError),
-    PipelineData(PipelineDataHeader),
+    PipelineData(D),
     Config(Box<Config>),
 }

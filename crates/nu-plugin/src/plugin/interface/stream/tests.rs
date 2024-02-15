@@ -362,6 +362,36 @@ fn stream_manager_write_scenario() -> Result<(), ShellError> {
 }
 
 #[test]
+fn stream_manager_broadcast_read_error() -> Result<(), ShellError> {
+    let manager = StreamManager::new();
+    let handle = manager.get_handle();
+    let mut readable0 = handle.read_stream::<Value, _>(0, TestSink::default())?;
+    let mut readable1 = handle.read_stream::<Result<Vec<u8>, _>, _>(1, TestSink::default())?;
+
+    let error = ShellError::PluginFailedToDecode { msg: "test decode error".into() };
+
+    manager.broadcast_read_error(error.clone())?;
+    drop(manager);
+
+    assert_eq!(
+        error.to_string(),
+        readable0.recv()
+            .transpose()
+            .expect("nothing received from readable0")
+            .expect_err("not an error received from readable0")
+            .to_string()
+    );
+    assert_eq!(
+        error.to_string(),
+        readable1.next()
+            .expect("nothing received from readable1")
+            .expect_err("not an error received from readable1")
+            .to_string()
+    );
+    Ok(())
+}
+
+#[test]
 fn stream_manager_drop_writers_on_drop() -> Result<(), ShellError> {
     let manager = StreamManager::new();
     let handle = manager.get_handle();

@@ -9,8 +9,12 @@ use crate::plugin::context::PluginExecutionContext;
 use crate::protocol::{PluginInput, PluginOutput};
 
 use super::{
-    engine::EngineInterfaceImpl, plugin::PluginInterfaceImpl, EngineInterface, PluginInterface,
-    PluginRead, PluginWrite,
+    EngineInterfaceManager,
+    PluginInterfaceManager,
+    EngineInterface,
+    PluginInterface,
+    PluginRead,
+    PluginWrite,
 };
 
 /// Mock read/write helper for the engine and plugin interfaces.
@@ -166,31 +170,5 @@ impl TestCase {
     pub(crate) fn has_unconsumed_write(&self) -> bool {
         let lock = self.out.lock().unwrap();
         !lock.inputs.is_empty() || !lock.outputs.is_empty()
-    }
-
-    /// Create an [EngineInterfaceImpl] using the test data.
-    pub(crate) fn engine_interface_impl(&self) -> Arc<EngineInterfaceImpl<TestIo, TestIo>> {
-        EngineInterfaceImpl::new(self.r#in.clone(), self.out.clone()).into()
-    }
-
-    /// Create an [EngineInterface] using the test data.
-    pub(crate) fn engine_interface(&self) -> EngineInterface {
-        self.engine_interface_impl().into()
-    }
-
-    /// Create a [PluginInterfaceImpl] using the test data.
-    pub(crate) fn plugin_interface_impl(
-        &self,
-        context: Option<Arc<dyn PluginExecutionContext>>,
-    ) -> Arc<PluginInterfaceImpl<TestIo, TestIo>> {
-        PluginInterfaceImpl::new(self.r#in.clone(), self.out.clone(), context).into()
-    }
-
-    /// Create a [PluginInterface] using the test data.
-    pub(crate) fn plugin_interface(
-        &self,
-        context: Option<Arc<dyn PluginExecutionContext>>,
-    ) -> PluginInterface {
-        self.plugin_interface_impl(context).into()
     }
 }

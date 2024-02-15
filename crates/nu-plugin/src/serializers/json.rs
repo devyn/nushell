@@ -99,7 +99,7 @@ mod tests {
     fn json_ends_in_newline() {
         let mut out = vec![];
         JsonSerializer {}
-            .encode_input(&PluginInput::Call(PluginCall::Signature), &mut out)
+            .encode_input(&PluginInput::Call(0, PluginCall::Signature), &mut out)
             .expect("serialization error");
         let string = std::str::from_utf8(&out).expect("utf-8 error");
         assert!(
