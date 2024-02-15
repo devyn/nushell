@@ -1,16 +1,23 @@
 //! Interface used by the plugin to communicate with the engine.
 
-use std::sync::{Arc, Mutex, mpsc, atomic::AtomicBool, MutexGuard};
+use std::sync::{atomic::AtomicBool, mpsc, Arc, Mutex, MutexGuard};
 
-use nu_protocol::{PipelineData, ShellError, Value, CustomValue, PluginSignature, Config, Spanned, engine::Closure};
+use nu_protocol::{
+    engine::Closure, Config, CustomValue, PipelineData, PluginSignature, ShellError, Spanned, Value,
+};
 
 use crate::{
     protocol::{
-        EngineCallId, EngineCallResponse, PluginCall, PluginCallResponse, PluginInput, PluginCallId, PluginData, CallInfo, EngineCall,
-    }, PluginOutput, LabeledError,
+        CallInfo, EngineCall, EngineCallId, EngineCallResponse, PluginCall, PluginCallId,
+        PluginCallResponse, PluginData, PluginInput,
+    },
+    LabeledError, PluginOutput,
 };
 
-use super::{PluginWrite, InterfaceManager, Interface, stream::{StreamManager, StreamManagerHandle}, PluginRead};
+use super::{
+    stream::{StreamManager, StreamManagerHandle},
+    Interface, InterfaceManager, PluginRead, PluginWrite,
+};
 use crate::sequence::Sequence;
 
 /// Plugin calls that are received by the [`EngineInterfaceManager`] for handling.
@@ -43,15 +50,18 @@ struct EngineInterfaceState {
     /// Sequence for generating stream ids
     stream_id_sequence: Sequence,
     /// Channels waiting for a response to an engine call
-    engine_call_response_senders: Mutex<Vec<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>>,
+    engine_call_response_senders:
+        Mutex<Vec<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>>,
     /// The synchronized output writer
     writer: Box<dyn PluginWrite>,
 }
 
 impl EngineInterfaceState {
-    fn lock_engine_call_response_senders(&self) -> Result<MutexGuard<Vec<(usize, mpsc::Sender<EngineCallResponse<PipelineData>>)>>, ShellError> {
-        self
-            .engine_call_response_senders
+    fn lock_engine_call_response_senders(
+        &self,
+    ) -> Result<MutexGuard<Vec<(usize, mpsc::Sender<EngineCallResponse<PipelineData>>)>>, ShellError>
+    {
+        self.engine_call_response_senders
             .lock()
             .map_err(|_| ShellError::NushellFailed {
                 msg: "engine_call_response_senders mutex poisoned".into(),
@@ -64,7 +74,10 @@ impl std::fmt::Debug for EngineInterfaceState {
         f.debug_struct("EngineInterfaceState")
             .field("engine_call_id_sequence", &self.engine_call_id_sequence)
             .field("stream_id_sequence", &self.stream_id_sequence)
-            .field("engine_call_response_senders", &self.engine_call_response_senders)
+            .field(
+                "engine_call_response_senders",
+                &self.engine_call_response_senders,
+            )
             .finish_non_exhaustive()
     }
 }
@@ -90,7 +103,7 @@ impl EngineInterfaceManager {
                 engine_call_id_sequence: Sequence::default(),
                 stream_id_sequence: Sequence::default(),
                 engine_call_response_senders: Mutex::new(Vec::new()),
-                writer: Box::new(writer)
+                writer: Box::new(writer),
             }),
             plugin_call_sender: plug_tx,
             plugin_call_receiver: Some(plug_rx),
@@ -117,16 +130,18 @@ impl EngineInterfaceManager {
 
     /// Send a [`ReceivedPluginCall`] to the channel
     fn send_plugin_call(&self, plugin_call: ReceivedPluginCall) -> Result<(), ShellError> {
-        self.plugin_call_sender.send(plugin_call).map_err(|_| ShellError::NushellFailed {
-            msg: "Received a plugin call, but there's nowhere to send it".into(),
-        })
+        self.plugin_call_sender
+            .send(plugin_call)
+            .map_err(|_| ShellError::NushellFailed {
+                msg: "Received a plugin call, but there's nowhere to send it".into(),
+            })
     }
 
     /// Send a [`EngineCallResponse`] to the appropriate sender
     fn send_engine_call_response(
         &self,
         id: EngineCallId,
-        response: EngineCallResponse<PipelineData>
+        response: EngineCallResponse<PipelineData>,
     ) -> Result<(), ShellError> {
         let mut senders = self.state.lock_engine_call_response_senders()?;
         // Remove the sender - there is only one response per engine call
@@ -193,16 +208,26 @@ impl InterfaceManager for EngineInterfaceManager {
                     engine: self.interface_for_context(id),
                 }),
                 // Set up the streams from the input and reformat to a ReceivedPluginCall
-                PluginCall::Run(CallInfo { name, call, input, config }) => {
+                PluginCall::Run(CallInfo {
+                    name,
+                    call,
+                    input,
+                    config,
+                }) => {
                     let interface = self.interface_for_context(id);
                     // If there's an error with initialization of the input stream, just send
                     // the error response rather than failing here
                     match self.read_pipeline_data(input, &()) {
                         Ok(input) => self.send_plugin_call(ReceivedPluginCall::Run {
                             engine: interface,
-                            call: CallInfo { name, call, input, config },
+                            call: CallInfo {
+                                name,
+                                call,
+                                input,
+                                config,
+                            },
                         }),
-                        err @ Err(_) => interface.write_response(err)
+                        err @ Err(_) => interface.write_response(err),
                     }
                 }
                 // Send request with the plugin data
@@ -227,7 +252,7 @@ impl InterfaceManager for EngineInterfaceManager {
                     }
                 };
                 self.send_engine_call_response(id, response)
-            },
+            }
         }
     }
 
@@ -263,7 +288,8 @@ impl EngineInterface {
     fn context(&self) -> Result<PluginCallId, ShellError> {
         self.context.ok_or_else(|| ShellError::NushellFailed {
             msg: "Tried to call an EngineInterface method that requires a call context \
-                outside of one".into(),
+                outside of one"
+                .into(),
         })
     }
 
@@ -331,20 +357,18 @@ impl EngineInterface {
                     },
                     Some(writer),
                 )
-            },
+            }
             // These calls have no pipeline data, so they're just the same on both sides
             EngineCall::GetConfig => (EngineCall::GetConfig, None),
         };
 
         // Register the channel
-        self.state.lock_engine_call_response_senders()?.push((id, tx));
+        self.state
+            .lock_engine_call_response_senders()?
+            .push((id, tx));
 
         // Write request
-        self.write(PluginOutput::EngineCall {
-            context,
-            id,
-            call,
-        })?;
+        self.write(PluginOutput::EngineCall { context, id, call })?;
 
         // Finish writing stream, if present
         if let Some(writer) = writer {
@@ -356,7 +380,6 @@ impl EngineInterface {
             msg: "Failed to get response to engine call because the channel was closed".into(),
         })
     }
-
 
     /// Get the full shell configuration from the engine. As this is quite a large object, it is
     /// provided on request only.
@@ -535,11 +558,13 @@ impl Interface for EngineInterface {
         let span = value.span();
         if let Value::CustomValue { val, .. } = value {
             bincode::serialize(&val)
-                .map(|data| Some(PluginData {
-                    name: Some(val.value_string()),
-                    data,
-                    span
-                }))
+                .map(|data| {
+                    Some(PluginData {
+                        name: Some(val.value_string()),
+                        data,
+                        span,
+                    })
+                })
                 .map_err(|err| ShellError::PluginFailedToEncode {
                     msg: err.to_string(),
                 })

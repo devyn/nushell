@@ -58,7 +58,9 @@ impl CustomValue for PluginCustomValue {
             inner: vec![],
         };
 
-        let child = plugin_cmd.spawn().map_err(|err| wrap_err(err.to_string()))?;
+        let child = plugin_cmd
+            .spawn()
+            .map_err(|err| wrap_err(err.to_string()))?;
 
         let plugin_data = PluginData {
             name: None,
@@ -73,10 +75,10 @@ impl CustomValue for PluginCustomValue {
             span,
         ));
 
-        let interface = make_plugin_interface(child)
-            .map_err(|err| wrap_err(err.to_string()))?;
+        let interface = make_plugin_interface(child).map_err(|err| wrap_err(err.to_string()))?;
 
-        interface.collapse_custom_value(plugin_data, context)
+        interface
+            .collapse_custom_value(plugin_data, context)
             .map_err(|err| wrap_err(err.to_string()))
     }
 

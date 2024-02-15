@@ -46,8 +46,8 @@
 //! that demonstrates the full range of plugin capabilities.
 mod plugin;
 mod protocol;
-mod serializers;
 mod sequence;
+mod serializers;
 
 pub use plugin::{
     get_signature, serve_plugin, EngineInterface, Plugin, PluginDeclaration, PluginEncoder,

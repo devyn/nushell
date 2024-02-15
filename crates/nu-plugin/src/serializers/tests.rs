@@ -230,7 +230,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(3, PluginCallResponse::Signature(returned_signature)) => {
+                PluginOutput::CallResponse(
+                    3,
+                    PluginCallResponse::Signature(returned_signature),
+                ) => {
                     assert_eq!(returned_signature.len(), 1);
                     assert_eq!(signature.sig.name, returned_signature[0].sig.name);
                     assert_eq!(signature.sig.usage, returned_signature[0].sig.usage);
@@ -288,9 +291,10 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(4, PluginCallResponse::PipelineData(
-                    PipelineDataHeader::Value(returned_value),
-                )) => {
+                PluginOutput::CallResponse(
+                    4,
+                    PluginCallResponse::PipelineData(PipelineDataHeader::Value(returned_value)),
+                ) => {
                     assert_eq!(value, returned_value)
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
@@ -323,9 +327,12 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginOutput::CallResponse(5, PluginCallResponse::PipelineData(
-                    PipelineDataHeader::PluginData(returned_plugin_data),
-                )) => {
+                PluginOutput::CallResponse(
+                    5,
+                    PluginCallResponse::PipelineData(PipelineDataHeader::PluginData(
+                        returned_plugin_data,
+                    )),
+                ) => {
                     assert_eq!(name, returned_plugin_data.name);
                     assert_eq!(data, returned_plugin_data.data);
                     assert_eq!(span, returned_plugin_data.span);

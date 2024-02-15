@@ -143,7 +143,7 @@ impl TryFrom<StreamData> for Value {
             StreamData::List(value) => Ok(value),
             StreamData::Raw(_) => Err(ShellError::PluginFailedToDecode {
                 msg: "expected list stream data, found raw data".into(),
-            })
+            }),
         }
     }
 }
@@ -156,7 +156,7 @@ impl TryFrom<StreamData> for Result<Vec<u8>, ShellError> {
             StreamData::Raw(value) => Ok(value),
             StreamData::List(_) => Err(ShellError::PluginFailedToDecode {
                 msg: "expected raw stream data, found list data".into(),
-            })
+            }),
         }
     }
 }

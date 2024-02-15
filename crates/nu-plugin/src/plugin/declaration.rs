@@ -152,7 +152,7 @@ impl Command for PluginDeclaration {
                 input,
                 config,
             },
-            context
+            context,
         )
     }
 

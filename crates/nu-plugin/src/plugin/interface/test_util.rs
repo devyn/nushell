@@ -8,11 +8,7 @@ use nu_protocol::ShellError;
 use crate::protocol::{PluginInput, PluginOutput};
 
 use super::{
-    EngineInterfaceManager,
-    PluginInterfaceManager,
-    EngineInterface,
-    PluginInterface,
-    PluginRead,
+    EngineInterface, EngineInterfaceManager, PluginInterface, PluginInterfaceManager, PluginRead,
     PluginWrite,
 };
 

@@ -1,8 +1,13 @@
-use std::{sync::{mpsc, Mutex, Condvar, Arc, MutexGuard, Weak}, marker::PhantomData, collections::BTreeMap, iter::FusedIterator};
+use std::{
+    collections::BTreeMap,
+    iter::FusedIterator,
+    marker::PhantomData,
+    sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, Weak},
+};
 
-use nu_protocol::{Value, ShellError, Span};
+use nu_protocol::{ShellError, Span, Value};
 
-use crate::protocol::{StreamMessage, StreamId, StreamData};
+use crate::protocol::{StreamData, StreamId, StreamMessage};
 
 #[cfg(test)]
 mod tests;
@@ -22,7 +27,10 @@ mod tests;
 /// For each message read, it sends [`StreamMessage::Ack`] to the writer. When dropped,
 /// it sends [`StreamMessage::Drop`].
 #[derive(Debug)]
-pub(crate) struct StreamReader<T, W> where W: WriteStreamMessage {
+pub(crate) struct StreamReader<T, W>
+where
+    W: WriteStreamMessage,
+{
     id: StreamId,
     receiver: Option<mpsc::Receiver<Result<Option<StreamData>, ShellError>>>,
     writer: W,
@@ -68,7 +76,8 @@ where
 
             if let Some(data) = msg {
                 // Acknowledge the message
-                self.writer.write_stream_message(StreamMessage::Ack(self.id))?;
+                self.writer
+                    .write_stream_message(StreamMessage::Ack(self.id))?;
                 // Try to convert it into the correct type
                 Ok(Some(data.try_into()?))
             } else {
@@ -92,7 +101,8 @@ where
 
     fn next(&mut self) -> Option<T> {
         // Converting the error to the value here makes the implementation a lot easier
-        self.recv().unwrap_or_else(|err| Some(T::from_shell_error(err)))
+        self.recv()
+            .unwrap_or_else(|err| Some(T::from_shell_error(err)))
     }
 }
 
@@ -109,7 +119,10 @@ where
     W: WriteStreamMessage,
 {
     fn drop(&mut self) {
-        if let Err(err) = self.writer.write_stream_message(StreamMessage::Drop(self.id)) {
+        if let Err(err) = self
+            .writer
+            .write_stream_message(StreamMessage::Drop(self.id))
+        {
             log::warn!("Failed to send message to drop stream: {err}");
         }
     }
@@ -136,7 +149,7 @@ impl<T> FromShellError for Result<T, ShellError> {
 
 /// Writes messages to a stream, with flow control.
 ///
-/// The `signal` contained 
+/// The `signal` contained
 #[derive(Debug)]
 pub(crate) struct StreamWriter<W: WriteStreamMessage> {
     id: StreamId,
@@ -145,7 +158,10 @@ pub(crate) struct StreamWriter<W: WriteStreamMessage> {
     ended: bool,
 }
 
-impl<W> StreamWriter<W> where W: WriteStreamMessage {
+impl<W> StreamWriter<W>
+where
+    W: WriteStreamMessage,
+{
     pub(crate) fn new(id: StreamId, signal: Arc<StreamWriterSignal>, writer: W) -> StreamWriter<W> {
         StreamWriter {
             id,
@@ -166,16 +182,20 @@ impl<W> StreamWriter<W> where W: WriteStreamMessage {
     /// Error if something failed with the write, or if [`end()`] was already called previously.
     pub(crate) fn write(&mut self, data: impl Into<StreamData>) -> Result<(), ShellError> {
         if !self.ended {
-            self.writer.write_stream_message(StreamMessage::Data(self.id, data.into()))?;
+            self.writer
+                .write_stream_message(StreamMessage::Data(self.id, data.into()))?;
             // This implements flow control, so we don't write too many messages:
             self.signal.notify_sent()
         } else {
             Err(ShellError::GenericError {
                 error: "Wrote to a stream after it ended".into(),
-                msg: format!("tried to write to stream {} after it was already ended", self.id),
+                msg: format!(
+                    "tried to write to stream {} after it was already ended",
+                    self.id
+                ),
                 span: None,
                 help: Some("this may be a bug in the nu-plugin crate".into()),
-                inner: vec![]
+                inner: vec![],
             })
         }
     }
@@ -190,7 +210,7 @@ impl<W> StreamWriter<W> where W: WriteStreamMessage {
     /// the stream from the other side.
     pub(crate) fn write_all<T>(
         &mut self,
-        data: impl IntoIterator<Item=T>,
+        data: impl IntoIterator<Item = T>,
     ) -> Result<bool, ShellError>
     where
         T: Into<StreamData>,
@@ -217,14 +237,18 @@ impl<W> StreamWriter<W> where W: WriteStreamMessage {
         if !self.ended {
             // Set the flag first so we don't double-report in the Drop
             self.ended = true;
-            self.writer.write_stream_message(StreamMessage::End(self.id))
+            self.writer
+                .write_stream_message(StreamMessage::End(self.id))
         } else {
             Ok(())
         }
     }
 }
 
-impl<W> Drop for StreamWriter<W> where W: WriteStreamMessage {
+impl<W> Drop for StreamWriter<W>
+where
+    W: WriteStreamMessage,
+{
     fn drop(&mut self) {
         // Make sure we ended the stream
         if let Err(err) = self.end() {
@@ -264,15 +288,15 @@ impl StreamWriterSignal {
             mutex: Mutex::new(StreamWriterSignalState {
                 dropped: false,
                 unacknowledged: 0,
-                high_pressure_mark
+                high_pressure_mark,
             }),
-            change_cond: Condvar::new()
+            change_cond: Condvar::new(),
         }
     }
 
     fn lock(&self) -> Result<MutexGuard<StreamWriterSignalState>, ShellError> {
         self.mutex.lock().map_err(|_| ShellError::NushellFailed {
-            msg: "StreamWriterSignal mutex poisoned due to panic".into()
+            msg: "StreamWriterSignal mutex poisoned due to panic".into(),
         })
     }
 
@@ -295,16 +319,22 @@ impl StreamWriterSignal {
     /// if too many messages have been sent.
     pub fn notify_sent(&self) -> Result<(), ShellError> {
         let mut state = self.lock()?;
-        state.unacknowledged = state.unacknowledged.checked_add(1)
-            .ok_or_else(|| ShellError::NushellFailed {
-                msg: "Overflow in counter: too many unacknowledged messages".into(),
-            })?;
+        state.unacknowledged =
+            state
+                .unacknowledged
+                .checked_add(1)
+                .ok_or_else(|| ShellError::NushellFailed {
+                    msg: "Overflow in counter: too many unacknowledged messages".into(),
+                })?;
 
         // Wait if too many messages have been sent
         while !state.dropped && state.unacknowledged >= state.high_pressure_mark {
-            state = self.change_cond.wait(state).map_err(|_| ShellError::NushellFailed {
-                msg: "StreamWriterSignal mutex poisoned due to panic".into()
-            })?;
+            state = self
+                .change_cond
+                .wait(state)
+                .map_err(|_| ShellError::NushellFailed {
+                    msg: "StreamWriterSignal mutex poisoned due to panic".into(),
+                })?;
         }
         Ok(())
     }
@@ -313,10 +343,13 @@ impl StreamWriterSignal {
     /// if they were waiting.
     pub fn notify_acknowledged(&self) -> Result<(), ShellError> {
         let mut state = self.lock()?;
-        state.unacknowledged = state.unacknowledged.checked_sub(1)
-            .ok_or_else(|| ShellError::NushellFailed {
-                msg: "Underflow in counter: too many message acknowledgements".into()
-            })?;
+        state.unacknowledged =
+            state
+                .unacknowledged
+                .checked_sub(1)
+                .ok_or_else(|| ShellError::NushellFailed {
+                    msg: "Underflow in counter: too many message acknowledgements".into(),
+                })?;
         // Unblock the writer
         self.change_cond.notify_one();
         Ok(())
@@ -365,7 +398,7 @@ impl StreamManager {
     /// Create a new handle to the StreamManager for registering streams.
     pub(crate) fn get_handle(&self) -> StreamManagerHandle {
         StreamManagerHandle {
-            state: Arc::downgrade(&self.state)
+            state: Arc::downgrade(&self.state),
         }
     }
 
@@ -382,7 +415,7 @@ impl StreamManager {
                     Ok(())
                 } else {
                     Err(ShellError::PluginFailedToDecode {
-                        msg: format!("received Data for unknown stream {id}")
+                        msg: format!("received Data for unknown stream {id}"),
                     })
                 }
             }
@@ -394,7 +427,7 @@ impl StreamManager {
                     Ok(())
                 } else {
                     Err(ShellError::PluginFailedToDecode {
-                        msg: format!("received End for unknown stream {id}")
+                        msg: format!("received End for unknown stream {id}"),
                     })
                 }
             }
@@ -422,7 +455,7 @@ impl StreamManager {
                 // It's possible that the stream has already finished writing and we don't have it
                 // anymore, so we fall through to Ok
                 Ok(())
-            },
+            }
         }
     }
 
@@ -475,11 +508,14 @@ impl StreamManagerHandle {
     /// operations together, handling errors appropriately.
     fn with_lock<T, F>(&self, f: F) -> Result<T, ShellError>
     where
-        F: FnOnce(MutexGuard<StreamManagerState>) -> Result<T, ShellError>
+        F: FnOnce(MutexGuard<StreamManagerState>) -> Result<T, ShellError>,
     {
-        let upgraded = self.state.upgrade().ok_or_else(|| ShellError::NushellFailed {
-            msg: "StreamManager is no longer alive".into(),
-        })?;
+        let upgraded = self
+            .state
+            .upgrade()
+            .ok_or_else(|| ShellError::NushellFailed {
+                msg: "StreamManager is no longer alive".into(),
+            })?;
         let guard = upgraded.lock().map_err(|_| ShellError::NushellFailed {
             msg: "StreamManagerState mutex poisoned due to a panic".into(),
         })?;
@@ -510,7 +546,7 @@ impl StreamManagerHandle {
                     msg: "tried to get a reader for a stream that's already being read".into(),
                     span: None,
                     help: Some("this may be a bug in the nu-plugin crate".into()),
-                    inner: vec![]
+                    inner: vec![],
                 })
             }
         })?;
@@ -527,7 +563,7 @@ impl StreamManagerHandle {
         &self,
         id: StreamId,
         writer: W,
-        high_pressure_mark: i32
+        high_pressure_mark: i32,
     ) -> Result<StreamWriter<W>, ShellError>
     where
         W: WriteStreamMessage,
@@ -535,7 +571,9 @@ impl StreamManagerHandle {
         let signal = Arc::new(StreamWriterSignal::new(high_pressure_mark));
         self.with_lock(|mut state| {
             // Remove dead writing streams
-            state.writing_streams.retain(|_, signal| signal.strong_count() > 0);
+            state
+                .writing_streams
+                .retain(|_, signal| signal.strong_count() > 0);
             // Must be exclusive
             if !state.writing_streams.contains_key(&id) {
                 state.writing_streams.insert(id, Arc::downgrade(&signal));
@@ -546,7 +584,7 @@ impl StreamManagerHandle {
                     msg: "tried to get a writer for a stream that's already being written".into(),
                     span: None,
                     help: Some("this may be a bug in the nu-plugin crate".into()),
-                    inner: vec![]
+                    inner: vec![],
                 })
             }
         })?;

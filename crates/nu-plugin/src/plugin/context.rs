@@ -63,7 +63,7 @@ impl PluginExecutionNonCommandContext {
             msg: "error occurred here".into(),
             span: Some(self.span),
             help: None,
-            inner: vec![]
+            inner: vec![],
         }
     }
 }

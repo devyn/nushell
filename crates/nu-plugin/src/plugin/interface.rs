@@ -1,16 +1,20 @@
 //! Implements the stream multiplexing interface for both the plugin side and the engine side.
 
-use std::{sync::{
-    atomic::{AtomicBool, Ordering::Relaxed},
-    Arc, Mutex,
-}, io::Write};
+use std::{
+    io::Write,
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Arc, Mutex,
+    },
+};
 
 use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Value};
 
 use crate::{
     plugin::PluginEncoder,
     protocol::{
-        ExternalStreamInfo, ListStreamInfo, PluginInput, PluginOutput, RawStreamInfo, StreamMessage, PipelineDataHeader, PluginData,
+        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginData, PluginInput,
+        PluginOutput, RawStreamInfo, StreamMessage,
     },
     sequence::Sequence,
 };
@@ -24,7 +28,7 @@ pub(crate) use engine::{EngineInterfaceManager, ReceivedPluginCall};
 mod plugin;
 pub(crate) use plugin::{PluginInterface, PluginInterfaceManager};
 
-use self::stream::{WriteStreamMessage, StreamManager, StreamWriter, StreamManagerHandle};
+use self::stream::{StreamManager, StreamManagerHandle, StreamWriter, WriteStreamMessage};
 
 #[cfg(test)]
 mod test_util;
@@ -71,7 +75,10 @@ pub(crate) trait PluginWrite: Send + Sync {
     fn flush(&self) -> Result<(), ShellError>;
 }
 
-impl<E> PluginWrite for (std::io::Stdout, E) where E: PluginEncoder {
+impl<E> PluginWrite for (std::io::Stdout, E)
+where
+    E: PluginEncoder,
+{
     fn write_input(&self, input: &PluginInput) -> Result<(), ShellError> {
         let mut lock = self.0.lock();
         self.1.encode_input(input, &mut lock)
@@ -187,7 +194,7 @@ pub(crate) trait InterfaceManager {
                 let reader = handle.read_stream(info.id, self.get_interface())?;
                 Ok(PipelineData::ListStream(
                     ListStream::from_stream(reader, self.ctrlc(context)),
-                    None
+                    None,
                 ))
             }
             PipelineDataHeader::ExternalStream(info) => {
@@ -207,10 +214,14 @@ pub(crate) trait InterfaceManager {
                 Ok(PipelineData::ExternalStream {
                     stdout: info.stdout.map(&new_raw_stream).transpose()?,
                     stderr: info.stderr.map(&new_raw_stream).transpose()?,
-                    exit_code: info.exit_code.map(|list_info| {
-                        handle.read_stream(list_info.id, self.get_interface())
-                            .map(|reader| ListStream::from_stream(reader, self.ctrlc(context)))
-                    }).transpose()?,
+                    exit_code: info
+                        .exit_code
+                        .map(|list_info| {
+                            handle
+                                .read_stream(list_info.id, self.get_interface())
+                                .map(|reader| ListStream::from_stream(reader, self.ctrlc(context)))
+                        })
+                        .transpose()?,
                     span: info.span,
                     metadata: None,
                     trim_end_newline: info.trim_end_newline,
@@ -268,11 +279,9 @@ pub(crate) trait Interface: Clone + Send {
             // Get a free stream id
             let id = self.stream_id_sequence().next()?;
             // Create the writer
-            let writer = self.stream_manager_handle().write_stream(
-                id,
-                self.clone(),
-                high_pressure_mark,
-            )?;
+            let writer =
+                self.stream_manager_handle()
+                    .write_stream(id, self.clone(), high_pressure_mark)?;
             Ok::<_, ShellError>((id, writer))
         };
         match data {
@@ -285,15 +294,12 @@ pub(crate) trait Interface: Clone + Send {
                 },
                 PipelineDataWriter::NoStream,
             )),
-            PipelineData::Empty => Ok((
-                PipelineDataHeader::Empty,
-                PipelineDataWriter::NoStream,
-            )),
+            PipelineData::Empty => Ok((PipelineDataHeader::Empty, PipelineDataWriter::NoStream)),
             PipelineData::ListStream(stream, _) => {
                 let (id, writer) = new_stream(LIST_STREAM_HIGH_PRESSURE)?;
                 Ok((
                     PipelineDataHeader::ListStream(ListStreamInfo { id }),
-                    PipelineDataWriter::ListStream(writer, stream)
+                    PipelineDataWriter::ListStream(writer, stream),
                 ))
             }
             PipelineData::ExternalStream {
@@ -328,7 +334,9 @@ pub(crate) trait Interface: Clone + Send {
                         .as_ref()
                         .zip(stderr_stream.as_ref())
                         .map(|(stream, (id, _))| RawStreamInfo::new(*id, stream)),
-                    exit_code: exit_code_stream.as_ref().map(|&(id, _)| ListStreamInfo { id }),
+                    exit_code: exit_code_stream
+                        .as_ref()
+                        .map(|&(id, _)| ListStreamInfo { id }),
                     trim_end_newline,
                 });
                 // Collect the writers
@@ -343,7 +351,10 @@ pub(crate) trait Interface: Clone + Send {
     }
 }
 
-impl<T> WriteStreamMessage for T where T: Interface {
+impl<T> WriteStreamMessage for T
+where
+    T: Interface,
+{
     fn write_stream_message(&mut self, msg: StreamMessage) -> Result<(), ShellError> {
         self.write(msg.into())
     }
@@ -362,7 +373,10 @@ pub(crate) enum PipelineDataWriter<W: WriteStreamMessage> {
     },
 }
 
-impl<W> PipelineDataWriter<W> where W: WriteStreamMessage + Send {
+impl<W> PipelineDataWriter<W>
+where
+    W: WriteStreamMessage + Send,
+{
     /// Write all of the data in each of the streams.
     pub(crate) fn write(self) -> Result<(), ShellError> {
         match self {
@@ -374,32 +388,38 @@ impl<W> PipelineDataWriter<W> where W: WriteStreamMessage + Send {
                 Ok(())
             }
             // Write all three possible streams of an ExternalStream on separate threads.
-            PipelineDataWriter::ExternalStream { stdout, stderr, exit_code } => {
-                std::thread::scope(|scope| {
-                    for thread in [
-                        stdout.map(|(mut writer, stream)| {
-                            scope.spawn(move || writer.write_all(raw_stream_iter(stream)))
-                        }),
-                        stderr.map(|(mut writer, stream)| {
-                            scope.spawn(move || writer.write_all(raw_stream_iter(stream)))
-                        }),
-                        exit_code.map(|(mut writer, stream)| {
-                            scope.spawn(move || writer.write_all(stream))
-                        }),
-                    ].into_iter().flatten() {
-                        thread.join().map_err(|_| ShellError::NushellFailed {
-                            msg: "a panic occured on an ExternalStream writer thread".into()
-                        })??;
-                    }
-                    Ok(())
-                })
-            },
+            PipelineDataWriter::ExternalStream {
+                stdout,
+                stderr,
+                exit_code,
+            } => std::thread::scope(|scope| {
+                for thread in [
+                    stdout.map(|(mut writer, stream)| {
+                        scope.spawn(move || writer.write_all(raw_stream_iter(stream)))
+                    }),
+                    stderr.map(|(mut writer, stream)| {
+                        scope.spawn(move || writer.write_all(raw_stream_iter(stream)))
+                    }),
+                    exit_code
+                        .map(|(mut writer, stream)| scope.spawn(move || writer.write_all(stream))),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    thread.join().map_err(|_| ShellError::NushellFailed {
+                        msg: "a panic occured on an ExternalStream writer thread".into(),
+                    })??;
+                }
+                Ok(())
+            }),
         }
     }
 }
 
 /// Custom iterator for [`RawStream`] that respects ctrlc, but still has binary chunks
-fn raw_stream_iter(stream: RawStream) -> impl Iterator<Item=Result<Vec<u8>, ShellError>> {
+fn raw_stream_iter(stream: RawStream) -> impl Iterator<Item = Result<Vec<u8>, ShellError>> {
     let ctrlc = stream.ctrlc;
-    stream.stream.take_while(move |_| ctrlc.as_ref().map(|b| !b.load(Relaxed)).unwrap_or(true))
+    stream
+        .stream
+        .take_while(move |_| ctrlc.as_ref().map(|b| !b.load(Relaxed)).unwrap_or(true))
 }

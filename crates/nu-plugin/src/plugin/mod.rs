@@ -5,9 +5,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::plugin::interface::{EngineInterfaceManager, ReceivedPluginCall};
-use crate::protocol::{
-    CallInfo, LabeledError, PluginInput, PluginOutput,
-};
+use crate::protocol::{CallInfo, LabeledError, PluginInput, PluginOutput};
 use crate::EncodingType;
 use std::env;
 use std::fmt::Write;
@@ -15,7 +13,7 @@ use std::io::{BufReader, ErrorKind, Read, Write as WriteTrait};
 use std::path::Path;
 use std::process::{Child, ChildStdout, Command as CommandSys, Stdio};
 
-use nu_protocol::{PipelineData, PluginSignature, ShellError, Value, CustomValue};
+use nu_protocol::{CustomValue, PipelineData, PluginSignature, ShellError, Value};
 
 mod interface;
 pub use interface::EngineInterface;
@@ -24,7 +22,7 @@ pub(crate) use interface::PluginInterface;
 mod context;
 pub(crate) use context::{PluginExecutionCommandContext, PluginExecutionNonCommandContext};
 
-use self::interface::{PluginInterfaceManager, InterfaceManager};
+use self::interface::{InterfaceManager, PluginInterfaceManager};
 
 use super::EvaluatedCall;
 
@@ -404,7 +402,8 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
     }
 
     let mut manager = EngineInterfaceManager::new((stdout, encoder.clone()));
-    let call_receiver = manager.take_plugin_call_receiver()
+    let call_receiver = manager
+        .take_plugin_call_receiver()
         // This expect should be totally safe, as we just created the manager
         .expect("take_plugin_call_receiver returned None");
 
@@ -443,7 +442,11 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
                 .as_ref()
                 .and_then(|path| path.file_stem())
                 .map(|stem| stem.to_string_lossy().into_owned())
-                .map(|stem| stem.strip_prefix("nu_plugin_").map(|s| s.to_owned()).unwrap_or(stem))
+                .map(|stem| {
+                    stem.strip_prefix("nu_plugin_")
+                        .map(|s| s.to_owned())
+                        .unwrap_or(stem)
+                })
                 .unwrap_or_else(|| "(unknown)".into());
 
             eprintln!("Plugin `{plugin_name}` read error: {err}");
@@ -458,15 +461,27 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
                 try_or_report!(engine, engine.write_signature(plugin.signature()));
             }
             // Run the plugin, handling any input or output streams
-            ReceivedPluginCall::Run { engine, call: CallInfo { name, config, call, input } } => {
+            ReceivedPluginCall::Run {
+                engine,
+                call:
+                    CallInfo {
+                        name,
+                        config,
+                        call,
+                        input,
+                    },
+            } => {
                 let result = plugin.run(&name, &config, &engine, &call, input);
                 try_or_report!(engine, engine.write_response(result));
             }
             // Collapse a custom value into plain nushell data
-            ReceivedPluginCall::CollapseCustomValue { engine, plugin_data } => {
+            ReceivedPluginCall::CollapseCustomValue {
+                engine,
+                plugin_data,
+            } => {
                 let result = bincode::deserialize::<Box<dyn CustomValue>>(&plugin_data.data)
                     .map_err(|err| ShellError::PluginFailedToDecode {
-                        msg: err.to_string()
+                        msg: err.to_string(),
                     })
                     // If deserialize succeeded, call to_base_value() and then make PipelineData
                     // to send the response.
