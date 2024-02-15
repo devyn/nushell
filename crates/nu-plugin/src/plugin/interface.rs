@@ -411,7 +411,7 @@ where
                     std::thread::spawn(move || writer.write_all(stream));
                 }
                 Ok(())
-            },
+            }
         }
     }
 }
