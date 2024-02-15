@@ -250,6 +250,8 @@ impl InterfaceManager for PluginInterfaceManager {
     }
 
     fn consume(&mut self, input: Self::Input) -> Result<(), ShellError> {
+        log::trace!("from plugin: {:?}", input);
+
         match input {
             PluginOutput::Stream(message) => self.consume_stream_message(message),
             PluginOutput::CallResponse(id, response) => {
@@ -516,8 +518,9 @@ impl Interface for PluginInterface {
     type Output = PluginInput;
     type Context = Option<Context>;
 
-    fn write(&self, output: Self::Output) -> Result<(), ShellError> {
-        self.state.writer.write_input(&output)?;
+    fn write(&self, input: PluginInput) -> Result<(), ShellError> {
+        log::trace!("to plugin: {:?}", input);
+        self.state.writer.write_input(&input)?;
         self.state.writer.flush()
     }
 

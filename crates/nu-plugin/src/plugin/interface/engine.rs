@@ -182,6 +182,8 @@ impl InterfaceManager for EngineInterfaceManager {
     }
 
     fn consume(&mut self, input: Self::Input) -> Result<(), ShellError> {
+        log::trace!("from engine: {:?}", input);
+
         match input {
             PluginInput::Stream(message) => self.consume_stream_message(message),
             PluginInput::Call(id, call) => match call {
@@ -511,7 +513,8 @@ impl Interface for EngineInterface {
     type Output = PluginOutput;
     type Context = ();
 
-    fn write(&self, output: Self::Output) -> Result<(), ShellError> {
+    fn write(&self, output: PluginOutput) -> Result<(), ShellError> {
+        log::trace!("to engine: {:?}", output);
         self.state.writer.write_output(&output)?;
         self.state.writer.flush()
     }
