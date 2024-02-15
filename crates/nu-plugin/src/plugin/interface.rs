@@ -382,16 +382,17 @@ pub(crate) enum PipelineDataWriter<W: WriteStreamMessage> {
 
 impl<W> PipelineDataWriter<W>
 where
-    W: WriteStreamMessage + Send,
+    W: WriteStreamMessage + Send + 'static,
 {
-    /// Write all of the data in each of the streams.
+    /// Write all of the data in each of the streams. This method returns immediately; any necessary
+    /// write will happen in the background
     pub(crate) fn write(self) -> Result<(), ShellError> {
         match self {
             // If no stream was contained in the PipelineData, do nothing.
             PipelineDataWriter::NoStream => Ok(()),
             // Write a list stream.
             PipelineDataWriter::ListStream(mut writer, stream) => {
-                writer.write_all(stream)?;
+                std::thread::spawn(move || writer.write_all(stream));
                 Ok(())
             }
             // Write all three possible streams of an ExternalStream on separate threads.
@@ -399,26 +400,18 @@ where
                 stdout,
                 stderr,
                 exit_code,
-            } => std::thread::scope(|scope| {
-                for thread in [
-                    stdout.map(|(mut writer, stream)| {
-                        scope.spawn(move || writer.write_all(raw_stream_iter(stream)))
-                    }),
-                    stderr.map(|(mut writer, stream)| {
-                        scope.spawn(move || writer.write_all(raw_stream_iter(stream)))
-                    }),
-                    exit_code
-                        .map(|(mut writer, stream)| scope.spawn(move || writer.write_all(stream))),
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    thread.join().map_err(|_| ShellError::NushellFailed {
-                        msg: "a panic occured on an ExternalStream writer thread".into(),
-                    })??;
+            } => {
+                if let Some((mut writer, stream)) = stdout {
+                    std::thread::spawn(move || writer.write_all(raw_stream_iter(stream)));
+                }
+                if let Some((mut writer, stream)) = stderr {
+                    std::thread::spawn(move || writer.write_all(raw_stream_iter(stream)));
+                }
+                if let Some((mut writer, stream)) = exit_code {
+                    std::thread::spawn(move || writer.write_all(stream));
                 }
                 Ok(())
-            }),
+            },
         }
     }
 }
