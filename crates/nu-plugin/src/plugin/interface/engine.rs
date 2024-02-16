@@ -296,8 +296,8 @@ impl EngineInterface {
         })
     }
 
-    /// Write a call response of either [`PipelineData`] or an error. Writes the full stream
-    /// before returning.
+    /// Write a call response of either [`PipelineData`] or an error. Writes the stream in the
+    /// background
     pub(crate) fn write_response(
         &self,
         result: Result<PipelineData, impl Into<LabeledError>>,
@@ -314,7 +314,8 @@ impl EngineInterface {
                 let response = PluginCallResponse::PipelineData(header);
                 self.write(PluginOutput::CallResponse(self.context()?, response))?;
                 self.flush()?;
-                writer.write()
+                writer.write_background();
+                Ok(())
             }
             Err(err) => {
                 let response = PluginCallResponse::Error(err.into());
@@ -379,7 +380,7 @@ impl EngineInterface {
 
         // Finish writing stream, if present
         if let Some(writer) = writer {
-            writer.write()?;
+            writer.write_background();
         }
 
         // Wait on receiver to get the response

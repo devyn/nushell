@@ -403,7 +403,7 @@ impl PluginInterface {
 
         // If we have a stream to write, do it now
         if let Some(writer) = writer {
-            writer.write()?;
+            writer.write_background();
         }
 
         Ok(())
@@ -460,7 +460,7 @@ impl PluginInterface {
 
         // Finish writing stream, if present
         if let Some(writer) = writer {
-            writer.write()?;
+            writer.write_background();
         }
 
         // Handle messages from receiver
@@ -497,7 +497,7 @@ impl PluginInterface {
                     self.write(PluginInput::EngineCallResponse(engine_call_id, resp))?;
                     self.flush()?;
                     if let Some(writer) = writer {
-                        writer.write()?;
+                        writer.write_background();
                     }
                 }
             }

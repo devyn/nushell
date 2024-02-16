@@ -369,16 +369,14 @@ impl<W> PipelineDataWriter<W>
 where
     W: WriteStreamMessage + Send + 'static,
 {
-    /// Write all of the data in each of the streams. This method returns immediately; any necessary
-    /// write will happen in the background
+    /// Write all of the data in each of the streams. This method waits for completion.
     pub(crate) fn write(self) -> Result<(), ShellError> {
-        // TODO: errors should really go somewhere, but I'm not sure where
         match self {
             // If no stream was contained in the PipelineData, do nothing.
             PipelineDataWriter::NoStream => Ok(()),
             // Write a list stream.
             PipelineDataWriter::ListStream(mut writer, stream) => {
-                std::thread::spawn(move || writer.write_all(stream));
+                writer.write_all(stream)?;
                 Ok(())
             }
             // Write all three possible streams of an ExternalStream on separate threads.
@@ -387,17 +385,42 @@ where
                 stderr,
                 exit_code,
             } => {
-                if let Some((mut writer, stream)) = stdout {
-                    std::thread::spawn(move || writer.write_all(raw_stream_iter(stream)));
-                }
-                if let Some((mut writer, stream)) = stderr {
-                    std::thread::spawn(move || writer.write_all(raw_stream_iter(stream)));
-                }
-                if let Some((mut writer, stream)) = exit_code {
-                    std::thread::spawn(move || writer.write_all(stream));
-                }
-                Ok(())
+                std::thread::scope(|scope| {
+                    let stderr_thread = stderr.map(|(mut writer, stream)| {
+                        scope.spawn(move || writer.write_all(raw_stream_iter(stream)))
+                    });
+                    let exit_code_thread = exit_code.map(|(mut writer, stream)| {
+                        scope.spawn(move || writer.write_all(stream))
+                    });
+                    // Optimize for stdout: if only stdout is present, don't spawn any other
+                    // threads.
+                    if let Some((mut writer, stream)) = stdout {
+                        writer.write_all(raw_stream_iter(stream))?;
+                    }
+                    stderr_thread.map(|t| t.join().unwrap()).transpose()?;
+                    exit_code_thread.map(|t| t.join().unwrap()).transpose()?;
+                    Ok(())
+                })
             },
+        }
+    }
+
+    /// Write all of the data in each of the streams. This method returns immediately; any necessary
+    /// write will happen in the background. If a thread was spawned, its handle is returned.
+    pub(crate) fn write_background(self)
+        -> Option<std::thread::JoinHandle<Result<(), ShellError>>>
+    {
+        match self {
+            PipelineDataWriter::NoStream => None,
+            _ => Some(std::thread::spawn(move || {
+                let result = self.write();
+                if let Err(ref err) = result {
+                    // Assume that the background thread error probably won't be handled and log it
+                    // here just in case.
+                    log::warn!("Error while writing pipeline in background: {err}");
+                }
+                result
+            }))
         }
     }
 }
