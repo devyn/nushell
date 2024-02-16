@@ -50,12 +50,19 @@ mod sequence;
 mod serializers;
 
 pub use plugin::{
-    get_signature, serve_plugin, EngineInterface, Plugin, PluginDeclaration, PluginEncoder,
-    PluginEncoderName, StreamingPlugin,
+    serve_plugin, EngineInterface, Plugin, PluginEncoder, StreamingPlugin,
 };
 pub use protocol::{EvaluatedCall, LabeledError};
-pub use serializers::{json::JsonSerializer, msgpack::MsgPackSerializer, EncodingType};
+pub use serializers::{json::JsonSerializer, msgpack::MsgPackSerializer};
+
+// Used by other nu crates.
+#[doc(hidden)]
+pub use plugin::{get_signature, PluginDeclaration};
+#[doc(hidden)]
+pub use serializers::EncodingType;
 
 // Used by external benchmarks.
+#[doc(hidden)]
+pub use plugin::Encoder;
 #[doc(hidden)]
 pub use protocol::{PluginCallResponse, PluginOutput};

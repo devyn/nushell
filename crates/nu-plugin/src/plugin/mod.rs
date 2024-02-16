@@ -28,14 +28,9 @@ use super::EvaluatedCall;
 
 pub(crate) const OUTPUT_BUFFER_SIZE: usize = 8192;
 
-/// The name of a plugin encoder, which is unique to the type.
-pub trait PluginEncoderName {
-    /// The name of the encoder (e.g., `json`)
-    fn name(&self) -> &str;
-}
-
-/// Encoding scheme that defines a plugin's communication protocol with Nu
-pub trait PluginEncoder<T>: PluginEncoderName + Clone + Send + Sync {
+/// Encoder for a specific message type. Usually implemented on [`PluginInput`]
+/// and [`PluginOutput`].
+pub trait Encoder<T>: Clone + Send + Sync {
     /// Serialize a value in the [`PluginEncoder`]s format
     ///
     /// Returns [ShellError::IOError] if there was a problem writing, or
@@ -58,6 +53,12 @@ pub trait PluginEncoder<T>: PluginEncoderName + Clone + Send + Sync {
         &self,
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<T>, ShellError>;
+}
+
+/// Encoding scheme that defines a plugin's communication protocol with Nu
+pub trait PluginEncoder: Encoder<PluginInput> + Encoder<PluginOutput> {
+    /// The name of the encoder (e.g., `json`)
+    fn name(&self) -> &str;
 }
 
 pub(crate) fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
@@ -360,7 +361,7 @@ impl<T: Plugin> StreamingPlugin for T {
 /// ```
 pub fn serve_plugin(
     plugin: &mut impl StreamingPlugin,
-    encoder: impl PluginEncoder<PluginInput> + PluginEncoder<PluginOutput> + 'static,
+    encoder: impl PluginEncoder + 'static,
 ) {
     if env::args().any(|arg| (arg == "-h") || (arg == "--help")) {
         print_help(plugin, encoder);
@@ -482,7 +483,7 @@ pub fn serve_plugin(
 
 fn print_help(
     plugin: &mut impl StreamingPlugin,
-    encoder: impl PluginEncoder<PluginOutput>,
+    encoder: impl PluginEncoder,
 ) {
     println!("Nushell Plugin");
     println!("Encoder: {}", encoder.name());

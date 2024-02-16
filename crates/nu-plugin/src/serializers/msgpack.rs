@@ -1,7 +1,7 @@
 use std::io::ErrorKind;
 
 use crate::{
-    plugin::{PluginEncoderName, PluginEncoder},
+    plugin::{Encoder, PluginEncoder},
     protocol::{PluginInput, PluginOutput},
 };
 use nu_protocol::ShellError;
@@ -14,14 +14,13 @@ use serde::Deserialize;
 #[derive(Clone, Debug)]
 pub struct MsgPackSerializer;
 
-impl PluginEncoderName for MsgPackSerializer {
+impl PluginEncoder for MsgPackSerializer {
     fn name(&self) -> &str {
         "msgpack"
     }
-
 }
 
-impl PluginEncoder<PluginInput> for MsgPackSerializer {
+impl Encoder<PluginInput> for MsgPackSerializer {
     fn encode(
         &self,
         plugin_input: &PluginInput,
@@ -41,7 +40,7 @@ impl PluginEncoder<PluginInput> for MsgPackSerializer {
     }
 }
 
-impl PluginEncoder<PluginOutput> for MsgPackSerializer {
+impl Encoder<PluginOutput> for MsgPackSerializer {
     fn encode(
         &self,
         plugin_output: &PluginOutput,

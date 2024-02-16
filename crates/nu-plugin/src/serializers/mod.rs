@@ -1,4 +1,4 @@
-use crate::plugin::{PluginEncoderName, PluginEncoder};
+use crate::plugin::{PluginEncoder, Encoder};
 use nu_protocol::ShellError;
 
 pub mod json;
@@ -31,16 +31,16 @@ impl EncodingType {
     }
 }
 
-impl PluginEncoderName for EncodingType {
+impl PluginEncoder for EncodingType {
     fn name(&self) -> &str {
         self.to_str()
     }
 }
 
-impl<T> PluginEncoder<T> for EncodingType
+impl<T> Encoder<T> for EncodingType
 where
-    json::JsonSerializer: PluginEncoder<T>,
-    msgpack::MsgPackSerializer: PluginEncoder<T>,
+    json::JsonSerializer: Encoder<T>,
+    msgpack::MsgPackSerializer: Encoder<T>,
 {
     fn encode(
         &self,

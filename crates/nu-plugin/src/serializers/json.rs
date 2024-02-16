@@ -1,5 +1,5 @@
 use crate::{
-    plugin::{PluginEncoder, PluginEncoderName},
+    plugin::{PluginEncoder, Encoder},
     protocol::{PluginInput, PluginOutput},
 };
 use nu_protocol::ShellError;
@@ -14,13 +14,13 @@ use serde::Deserialize;
 #[derive(Clone, Debug)]
 pub struct JsonSerializer;
 
-impl PluginEncoderName for JsonSerializer {
+impl PluginEncoder for JsonSerializer {
     fn name(&self) -> &str {
         "json"
     }
 }
 
-impl PluginEncoder<PluginInput> for JsonSerializer {
+impl Encoder<PluginInput> for JsonSerializer {
     fn encode(
         &self,
         plugin_input: &PluginInput,
@@ -43,7 +43,7 @@ impl PluginEncoder<PluginInput> for JsonSerializer {
     }
 }
 
-impl PluginEncoder<PluginOutput> for JsonSerializer {
+impl Encoder<PluginOutput> for JsonSerializer {
     fn encode(
         &self,
         plugin_output: &PluginOutput,

@@ -30,7 +30,7 @@ macro_rules! generate_tests {
             }
             let encoder = $encoder;
             let mut buffered = std::io::BufReader::new(ErrorProducer);
-            match PluginEncoder::<PluginInput>::decode(&encoder, &mut buffered) {
+            match Encoder::<PluginInput>::decode(&encoder, &mut buffered) {
                 Ok(_) => panic!("decode: i/o error was not passed through"),
                 Err(ShellError::IOError { .. }) => (), // okay
                 Err(other) => panic!(
@@ -38,7 +38,7 @@ macro_rules! generate_tests {
                     ShellError::IOError: {other:?}"
                 ),
             }
-            match PluginEncoder::<PluginOutput>::decode(&encoder, &mut buffered) {
+            match Encoder::<PluginOutput>::decode(&encoder, &mut buffered) {
                 Ok(_) => panic!("decode: i/o error was not passed through"),
                 Err(ShellError::IOError { .. }) => (), // okay
                 Err(other) => panic!(
@@ -58,7 +58,7 @@ macro_rules! generate_tests {
             let encoder = $encoder;
 
             let mut buffered = std::io::BufReader::new(&gibberish[..]);
-            match PluginEncoder::<PluginInput>::decode(&encoder, &mut buffered) {
+            match Encoder::<PluginInput>::decode(&encoder, &mut buffered) {
                 Ok(value) => panic!("decode: parsed successfully => {value:?}"),
                 Err(ShellError::PluginFailedToDecode { .. }) => (), // okay
                 Err(other) => panic!(
@@ -68,7 +68,7 @@ macro_rules! generate_tests {
             }
 
             let mut buffered = std::io::BufReader::new(&gibberish[..]);
-            match PluginEncoder::<PluginOutput>::decode(&encoder, &mut buffered) {
+            match Encoder::<PluginOutput>::decode(&encoder, &mut buffered) {
                 Ok(value) => panic!("decode: parsed successfully => {value:?}"),
                 Err(ShellError::PluginFailedToDecode { .. }) => (), // okay
                 Err(other) => panic!(

@@ -11,7 +11,7 @@ use std::{
 use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Value};
 
 use crate::{
-    plugin::PluginEncoder,
+    plugin::Encoder,
     protocol::{
         ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginData,
         RawStreamInfo, StreamMessage,
@@ -53,7 +53,7 @@ pub(crate) trait PluginRead<T> {
 impl<R, E, T> PluginRead<T> for (R, E)
 where
     R: std::io::BufRead,
-    E: PluginEncoder<T>,
+    E: Encoder<T>,
 {
     fn read(&mut self) -> Result<Option<T>, ShellError> {
         self.1.decode(&mut self.0)
@@ -72,7 +72,7 @@ pub(crate) trait PluginWrite<T>: Send + Sync {
 
 impl<E, T> PluginWrite<T> for (std::io::Stdout, E)
 where
-    E: PluginEncoder<T>,
+    E: Encoder<T>,
 {
     fn write(&self, data: &T) -> Result<(), ShellError> {
         let mut lock = self.0.lock();
@@ -89,7 +89,7 @@ where
 impl<W, E, T> PluginWrite<T> for (Mutex<W>, E)
 where
     W: std::io::Write + Send,
-    E: PluginEncoder<T>,
+    E: Encoder<T>,
 {
     fn write(&self, data: &T) -> Result<(), ShellError> {
         let mut lock = self.0.lock().map_err(|_| ShellError::NushellFailed {
