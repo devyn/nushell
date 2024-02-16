@@ -23,3 +23,36 @@ impl Sequence {
             })
     }
 }
+
+#[test]
+fn output_is_sequential() {
+    let sequence = Sequence::default();
+
+    for (expected, generated) in (0..1000).zip(std::iter::repeat_with(|| sequence.next())) {
+        assert_eq!(expected, generated.unwrap());
+    }
+}
+
+#[test]
+fn output_is_unique_even_under_contention() {
+    let sequence = Sequence::default();
+
+    std::thread::scope(|scope| {
+        // Spawn four threads, all advancing the sequence simultaneously
+        let threads = (0..4).map(|_| {
+            scope.spawn(|| (0..100000).map(|_| sequence.next()).collect::<Result<Vec<_>, _>>())
+        }).collect::<Vec<_>>();
+
+        // Collect all of the results into a single flat vec
+        let mut results = threads.into_iter().map(|thread| {
+            thread.join().expect("panicked").expect("error")
+        }).flatten().collect::<Vec<usize>>();
+
+        // Check uniqueness
+        results.sort();
+        let initial_length = results.len();
+        results.dedup();
+        let deduplicated_length = results.len();
+        assert_eq!(initial_length, deduplicated_length);
+    })
+}
