@@ -10,14 +10,14 @@ macro_rules! generate_tests {
         fn decode_eof() {
             let mut buffer: &[u8] = &[];
             let encoder = $encoder;
-            let result = encoder
-                .decode_input(&mut buffer)
+            let result: Option<PluginInput> = encoder
+                .decode(&mut buffer)
                 .expect("eof should not result in an error");
-            assert!(result.is_none(), "decode_input result: {result:?}");
-            let result = encoder
-                .decode_output(&mut buffer)
+            assert!(result.is_none(), "decode result: {result:?}");
+            let result: Option<PluginOutput> = encoder
+                .decode(&mut buffer)
                 .expect("eof should not result in an error");
-            assert!(result.is_none(), "decode_output result: {result:?}");
+            assert!(result.is_none(), "decode result: {result:?}");
         }
 
         #[test]
@@ -30,19 +30,19 @@ macro_rules! generate_tests {
             }
             let encoder = $encoder;
             let mut buffered = std::io::BufReader::new(ErrorProducer);
-            match encoder.decode_input(&mut buffered) {
-                Ok(_) => panic!("decode_input: i/o error was not passed through"),
+            match PluginEncoder::<PluginInput>::decode(&encoder, &mut buffered) {
+                Ok(_) => panic!("decode: i/o error was not passed through"),
                 Err(ShellError::IOError { .. }) => (), // okay
                 Err(other) => panic!(
-                    "decode_input: got other error, should have been a \
+                    "decode: got other error, should have been a \
                     ShellError::IOError: {other:?}"
                 ),
             }
-            match encoder.decode_output(&mut buffered) {
-                Ok(_) => panic!("decode_output: i/o error was not passed through"),
+            match PluginEncoder::<PluginOutput>::decode(&encoder, &mut buffered) {
+                Ok(_) => panic!("decode: i/o error was not passed through"),
                 Err(ShellError::IOError { .. }) => (), // okay
                 Err(other) => panic!(
-                    "decode_output: got other error, should have been a \
+                    "decode: got other error, should have been a \
                     ShellError::IOError: {other:?}"
                 ),
             }
@@ -58,21 +58,21 @@ macro_rules! generate_tests {
             let encoder = $encoder;
 
             let mut buffered = std::io::BufReader::new(&gibberish[..]);
-            match encoder.decode_input(&mut buffered) {
-                Ok(value) => panic!("decode_input: parsed successfully => {value:?}"),
+            match PluginEncoder::<PluginInput>::decode(&encoder, &mut buffered) {
+                Ok(value) => panic!("decode: parsed successfully => {value:?}"),
                 Err(ShellError::PluginFailedToDecode { .. }) => (), // okay
                 Err(other) => panic!(
-                    "decode_input: got other error, should have been a \
+                    "decode: got other error, should have been a \
                     ShellError::PluginFailedToDecode: {other:?}"
                 ),
             }
 
             let mut buffered = std::io::BufReader::new(&gibberish[..]);
-            match encoder.decode_output(&mut buffered) {
-                Ok(value) => panic!("decode_output: parsed successfully => {value:?}"),
+            match PluginEncoder::<PluginOutput>::decode(&encoder, &mut buffered) {
+                Ok(value) => panic!("decode: parsed successfully => {value:?}"),
                 Err(ShellError::PluginFailedToDecode { .. }) => (), // okay
                 Err(other) => panic!(
-                    "decode_output: got other error, should have been a \
+                    "decode: got other error, should have been a \
                     ShellError::PluginFailedToDecode: {other:?}"
                 ),
             }
@@ -86,10 +86,10 @@ macro_rules! generate_tests {
 
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_input(&plugin_input, &mut buffer)
+                .encode(&plugin_input, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_input(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -132,10 +132,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_input(&plugin_input, &mut buffer)
+                .encode(&plugin_input, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_input(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -185,10 +185,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_input(&plugin_input, &mut buffer)
+                .encode(&plugin_input, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_input(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -222,10 +222,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_output(&output, &mut buffer)
+                .encode(&output, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_output(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -283,10 +283,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_output(&output, &mut buffer)
+                .encode(&output, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_output(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -319,10 +319,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_output(&output, &mut buffer)
+                .encode(&output, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_output(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -354,10 +354,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_output(&output, &mut buffer)
+                .encode(&output, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_output(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -382,10 +382,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_output(&output, &mut buffer)
+                .encode(&output, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_output(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -408,10 +408,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_input(&plugin_input, &mut buffer)
+                .encode(&plugin_input, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_input(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -434,10 +434,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_input(&plugin_input, &mut buffer)
+                .encode(&plugin_input, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_input(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -464,10 +464,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_output(&plugin_output, &mut buffer)
+                .encode(&plugin_output, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_output(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 
@@ -490,10 +490,10 @@ macro_rules! generate_tests {
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
             encoder
-                .encode_output(&plugin_output, &mut buffer)
+                .encode(&plugin_output, &mut buffer)
                 .expect("unable to serialize message");
             let returned = encoder
-                .decode_output(&mut buffer.as_slice())
+                .decode(&mut buffer.as_slice())
                 .expect("unable to deserialize message")
                 .expect("eof");
 

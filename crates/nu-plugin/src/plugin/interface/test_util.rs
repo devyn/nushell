@@ -5,8 +5,6 @@ use std::{
 
 use nu_protocol::ShellError;
 
-use crate::protocol::{PluginInput, PluginOutput};
-
 use super::{
     EngineInterface, EngineInterfaceManager, PluginInterface, PluginInterfaceManager, PluginRead,
     PluginWrite,
@@ -14,60 +12,48 @@ use super::{
 
 /// Mock read/write helper for the engine and plugin interfaces.
 #[derive(Debug, Clone)]
-pub(crate) struct TestCase {
-    pub r#in: Arc<Mutex<TestData>>,
-    pub out: Arc<Mutex<TestData>>,
+pub(crate) struct TestCase<I, O> {
+    pub r#in: Arc<Mutex<TestData<I>>>,
+    pub out: Arc<Mutex<TestData<O>>>,
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct TestData {
-    inputs: VecDeque<PluginInput>,
-    outputs: VecDeque<PluginOutput>,
+#[derive(Debug)]
+pub(crate) struct TestData<T> {
+    data: VecDeque<T>,
     error: Option<ShellError>,
     flushed: bool,
 }
 
-impl PluginRead for Arc<Mutex<TestData>> {
-    fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError> {
-        let mut lock = self.lock().unwrap();
-        if let Some(err) = lock.error.take() {
-            Err(err)
-        } else {
-            Ok(lock.inputs.pop_front())
-        }
-    }
-
-    fn read_output(&mut self) -> Result<Option<PluginOutput>, ShellError> {
-        let mut lock = self.lock().unwrap();
-        if let Some(err) = lock.error.take() {
-            Err(err)
-        } else {
-            Ok(lock.outputs.pop_front())
+impl<T> Default for TestData<T> {
+    fn default() -> Self {
+        TestData {
+            data: VecDeque::new(),
+            error: None,
+            flushed: false,
         }
     }
 }
 
-impl PluginWrite for Arc<Mutex<TestData>> {
-    fn write_input(&self, input: &PluginInput) -> Result<(), ShellError> {
+impl<T> PluginRead<T> for Arc<Mutex<TestData<T>>> {
+    fn read(&mut self) -> Result<Option<T>, ShellError> {
         let mut lock = self.lock().unwrap();
-        lock.flushed = false;
-
         if let Some(err) = lock.error.take() {
             Err(err)
         } else {
-            lock.inputs.push_back(input.clone());
-            Ok(())
+            Ok(lock.data.pop_front())
         }
     }
+}
 
-    fn write_output(&self, output: &PluginOutput) -> Result<(), ShellError> {
+impl<T: Send + Clone> PluginWrite<T> for Arc<Mutex<TestData<T>>> {
+    fn write(&self, data: &T) -> Result<(), ShellError> {
         let mut lock = self.lock().unwrap();
         lock.flushed = false;
 
         if let Some(err) = lock.error.take() {
             Err(err)
         } else {
-            lock.outputs.push_back(output.clone());
+            lock.data.push_back(data.clone());
             Ok(())
         }
     }
@@ -80,42 +66,27 @@ impl PluginWrite for Arc<Mutex<TestData>> {
 }
 
 #[allow(dead_code)]
-impl TestCase {
-    pub(crate) fn new() -> TestCase {
+impl<I, O> TestCase<I, O> {
+    pub(crate) fn new() -> TestCase<I, O> {
         TestCase {
             r#in: Default::default(),
             out: Default::default(),
         }
     }
 
-    /// Clear the input read buffer.
-    pub(crate) fn clear_input(&self) {
-        self.r#in.lock().unwrap().inputs.truncate(0);
-    }
-
-    /// Clear the output read buffer.
-    pub(crate) fn clear_output(&self) {
-        self.r#in.lock().unwrap().outputs.truncate(0);
+    /// Clear the read buffer.
+    pub(crate) fn clear(&self) {
+        self.r#in.lock().unwrap().data.truncate(0);
     }
 
     /// Add input that will be read by the interface.
-    pub(crate) fn add_input(&self, input: impl Into<PluginInput>) {
-        self.r#in.lock().unwrap().inputs.push_back(input.into());
-    }
-
-    /// Add output that will be read by the interface.
-    pub(crate) fn add_output(&self, output: impl Into<PluginOutput>) {
-        self.r#in.lock().unwrap().outputs.push_back(output.into());
+    pub(crate) fn add(&self, input: impl Into<I>) {
+        self.r#in.lock().unwrap().data.push_back(input.into());
     }
 
     /// Add multiple inputs that will be read by the interface.
-    pub(crate) fn extend_input(&self, inputs: impl IntoIterator<Item = PluginInput>) {
-        self.r#in.lock().unwrap().inputs.extend(inputs);
-    }
-
-    /// Add multiple outputs that will be read by the interface.
-    pub(crate) fn extend_output(&self, outputs: impl IntoIterator<Item = PluginOutput>) {
-        self.r#in.lock().unwrap().outputs.extend(outputs);
+    pub(crate) fn extend(&self, inputs: impl IntoIterator<Item = I>) {
+        self.r#in.lock().unwrap().data.extend(inputs);
     }
 
     /// Return an error from the next read operation.
@@ -128,24 +99,14 @@ impl TestCase {
         self.out.lock().unwrap().error = Some(err);
     }
 
-    /// Get the next input that was written.
-    pub(crate) fn next_written_input(&self) -> Option<PluginInput> {
-        self.out.lock().unwrap().inputs.pop_front()
-    }
-
     /// Get the next output that was written.
-    pub(crate) fn next_written_output(&self) -> Option<PluginOutput> {
-        self.out.lock().unwrap().outputs.pop_front()
+    pub(crate) fn next_written(&self) -> Option<O> {
+        self.out.lock().unwrap().data.pop_front()
     }
 
-    /// Iterator over written inputs.
-    pub(crate) fn written_inputs(&self) -> impl Iterator<Item = PluginInput> + '_ {
-        std::iter::from_fn(|| self.next_written_input())
-    }
-
-    /// Iterator over written outputs.
-    pub(crate) fn written_outputs(&self) -> impl Iterator<Item = PluginOutput> + '_ {
-        std::iter::from_fn(|| self.next_written_output())
+    /// Iterator over written data.
+    pub(crate) fn written(&self) -> impl Iterator<Item = O> + '_ {
+        std::iter::from_fn(|| self.next_written())
     }
 
     /// Returns true if the writer was flushed after the last write operation.
@@ -153,15 +114,13 @@ impl TestCase {
         self.out.lock().unwrap().flushed
     }
 
-    /// Returns true if the reader has unconsumed read input/output.
+    /// Returns true if the reader has unconsumed reads.
     pub(crate) fn has_unconsumed_read(&self) -> bool {
-        let lock = self.r#in.lock().unwrap();
-        !lock.inputs.is_empty() || !lock.outputs.is_empty()
+        !self.r#in.lock().unwrap().data.is_empty()
     }
 
-    /// Returns true if the writer has unconsumed write input/output.
+    /// Returns true if the writer has unconsumed writes.
     pub(crate) fn has_unconsumed_write(&self) -> bool {
-        let lock = self.out.lock().unwrap();
-        !lock.inputs.is_empty() || !lock.outputs.is_empty()
+        !self.out.lock().unwrap().data.is_empty()
     }
 }

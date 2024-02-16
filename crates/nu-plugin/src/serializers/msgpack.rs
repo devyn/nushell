@@ -1,7 +1,7 @@
 use std::io::ErrorKind;
 
 use crate::{
-    plugin::PluginEncoder,
+    plugin::{PluginEncoderName, PluginEncoder},
     protocol::{PluginInput, PluginOutput},
 };
 use nu_protocol::ShellError;
@@ -14,12 +14,15 @@ use serde::Deserialize;
 #[derive(Clone, Debug)]
 pub struct MsgPackSerializer;
 
-impl PluginEncoder for MsgPackSerializer {
+impl PluginEncoderName for MsgPackSerializer {
     fn name(&self) -> &str {
         "msgpack"
     }
 
-    fn encode_input(
+}
+
+impl PluginEncoder<PluginInput> for MsgPackSerializer {
+    fn encode(
         &self,
         plugin_input: &PluginInput,
         writer: &mut impl std::io::Write,
@@ -27,7 +30,7 @@ impl PluginEncoder for MsgPackSerializer {
         rmp_serde::encode::write(writer, plugin_input).map_err(rmp_encode_err)
     }
 
-    fn decode_input(
+    fn decode(
         &self,
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginInput>, ShellError> {
@@ -36,8 +39,10 @@ impl PluginEncoder for MsgPackSerializer {
             .map(Some)
             .or_else(rmp_decode_err)
     }
+}
 
-    fn encode_output(
+impl PluginEncoder<PluginOutput> for MsgPackSerializer {
+    fn encode(
         &self,
         plugin_output: &PluginOutput,
         writer: &mut impl std::io::Write,
@@ -45,7 +50,7 @@ impl PluginEncoder for MsgPackSerializer {
         rmp_serde::encode::write(writer, plugin_output).map_err(rmp_encode_err)
     }
 
-    fn decode_output(
+    fn decode(
         &self,
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginOutput>, ShellError> {

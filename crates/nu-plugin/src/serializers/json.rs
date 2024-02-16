@@ -1,5 +1,5 @@
 use crate::{
-    plugin::PluginEncoder,
+    plugin::{PluginEncoder, PluginEncoderName},
     protocol::{PluginInput, PluginOutput},
 };
 use nu_protocol::ShellError;
@@ -14,12 +14,14 @@ use serde::Deserialize;
 #[derive(Clone, Debug)]
 pub struct JsonSerializer;
 
-impl PluginEncoder for JsonSerializer {
+impl PluginEncoderName for JsonSerializer {
     fn name(&self) -> &str {
         "json"
     }
+}
 
-    fn encode_input(
+impl PluginEncoder<PluginInput> for JsonSerializer {
+    fn encode(
         &self,
         plugin_input: &PluginInput,
         writer: &mut impl std::io::Write,
@@ -30,7 +32,7 @@ impl PluginEncoder for JsonSerializer {
         })
     }
 
-    fn decode_input(
+    fn decode(
         &self,
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginInput>, nu_protocol::ShellError> {
@@ -39,8 +41,10 @@ impl PluginEncoder for JsonSerializer {
             .map(Some)
             .or_else(json_decode_err)
     }
+}
 
-    fn encode_output(
+impl PluginEncoder<PluginOutput> for JsonSerializer {
+    fn encode(
         &self,
         plugin_output: &PluginOutput,
         writer: &mut impl std::io::Write,
@@ -51,7 +55,7 @@ impl PluginEncoder for JsonSerializer {
         })
     }
 
-    fn decode_output(
+    fn decode(
         &self,
         reader: &mut impl std::io::BufRead,
     ) -> Result<Option<PluginOutput>, ShellError> {
@@ -99,7 +103,7 @@ mod tests {
     fn json_ends_in_newline() {
         let mut out = vec![];
         JsonSerializer {}
-            .encode_input(&PluginInput::Call(0, PluginCall::Signature), &mut out)
+            .encode(&PluginInput::Call(0, PluginCall::Signature), &mut out)
             .expect("serialization error");
         let string = std::str::from_utf8(&out).expect("utf-8 error");
         assert!(
@@ -122,7 +126,7 @@ mod tests {
             ])),
         ));
         JsonSerializer {}
-            .encode_output(&output, &mut out)
+            .encode(&output, &mut out)
             .expect("serialization error");
         let string = std::str::from_utf8(&out).expect("utf-8 error");
         assert_eq!(1, string.chars().filter(|ch| *ch == '\n').count());

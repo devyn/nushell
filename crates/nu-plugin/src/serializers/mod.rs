@@ -1,7 +1,4 @@
-use crate::{
-    plugin::PluginEncoder,
-    protocol::{PluginInput, PluginOutput},
-};
+use crate::plugin::{PluginEncoderName, PluginEncoder};
 use nu_protocol::ShellError;
 
 pub mod json;
@@ -34,50 +31,35 @@ impl EncodingType {
     }
 }
 
-impl PluginEncoder for EncodingType {
+impl PluginEncoderName for EncodingType {
     fn name(&self) -> &str {
         self.to_str()
     }
+}
 
-    fn encode_input(
+impl<T> PluginEncoder<T> for EncodingType
+where
+    json::JsonSerializer: PluginEncoder<T>,
+    msgpack::MsgPackSerializer: PluginEncoder<T>,
+{
+    fn encode(
         &self,
-        plugin_input: &PluginInput,
+        data: &T,
         writer: &mut impl std::io::Write,
     ) -> Result<(), ShellError> {
         match self {
-            EncodingType::Json(encoder) => encoder.encode_input(plugin_input, writer),
-            EncodingType::MsgPack(encoder) => encoder.encode_input(plugin_input, writer),
+            EncodingType::Json(encoder) => encoder.encode(data, writer),
+            EncodingType::MsgPack(encoder) => encoder.encode(data, writer),
         }
     }
 
-    fn decode_input(
+    fn decode(
         &self,
         reader: &mut impl std::io::BufRead,
-    ) -> Result<Option<PluginInput>, ShellError> {
+    ) -> Result<Option<T>, ShellError> {
         match self {
-            EncodingType::Json(encoder) => encoder.decode_input(reader),
-            EncodingType::MsgPack(encoder) => encoder.decode_input(reader),
-        }
-    }
-
-    fn encode_output(
-        &self,
-        plugin_output: &PluginOutput,
-        writer: &mut impl std::io::Write,
-    ) -> Result<(), ShellError> {
-        match self {
-            EncodingType::Json(encoder) => encoder.encode_output(plugin_output, writer),
-            EncodingType::MsgPack(encoder) => encoder.encode_output(plugin_output, writer),
-        }
-    }
-
-    fn decode_output(
-        &self,
-        reader: &mut impl std::io::BufRead,
-    ) -> Result<Option<PluginOutput>, ShellError> {
-        match self {
-            EncodingType::Json(encoder) => encoder.decode_output(reader),
-            EncodingType::MsgPack(encoder) => encoder.decode_output(reader),
+            EncodingType::Json(encoder) => encoder.decode(reader),
+            EncodingType::MsgPack(encoder) => encoder.decode(reader),
         }
     }
 }

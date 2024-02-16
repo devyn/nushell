@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::plugin::interface::{EngineInterfaceManager, ReceivedPluginCall};
-use crate::protocol::{CallInfo, LabeledError, PluginInput, PluginOutput};
+use crate::protocol::{CallInfo, LabeledError, PluginOutput, PluginInput};
 use crate::EncodingType;
 use std::env;
 use std::fmt::Write;
@@ -28,55 +28,36 @@ use super::EvaluatedCall;
 
 pub(crate) const OUTPUT_BUFFER_SIZE: usize = 8192;
 
-/// Encoding scheme that defines a plugin's communication protocol with Nu
-///
-/// Note: exported for internal use, but not public.
-#[doc(hidden)]
-pub trait PluginEncoder: Clone + Send + Sync {
+/// The name of a plugin encoder, which is unique to the type.
+pub trait PluginEncoderName {
     /// The name of the encoder (e.g., `json`)
     fn name(&self) -> &str;
+}
 
-    /// Serialize a `PluginInput` in the `PluginEncoder`s format
+/// Encoding scheme that defines a plugin's communication protocol with Nu
+pub trait PluginEncoder<T>: PluginEncoderName + Clone + Send + Sync {
+    /// Serialize a value in the [`PluginEncoder`]s format
     ///
     /// Returns [ShellError::IOError] if there was a problem writing, or
     /// [ShellError::PluginFailedToEncode] for a serialization error.
-    fn encode_input(
+    #[doc(hidden)]
+    fn encode(
         &self,
-        plugin_input: &PluginInput,
+        data: &T,
         writer: &mut impl std::io::Write,
     ) -> Result<(), ShellError>;
 
-    /// Deserialize a `PluginInput` from the `PluginEncoder`s format
-    ///
-    /// Returns `None` if there is no more input to receive, in which case the plugin should exit.
-    ///
-    /// Returns [ShellError::IOError] if there was a problem reading, or
-    /// [ShellError::PluginFailedToDecode] for a deserialization error.
-    fn decode_input(
-        &self,
-        reader: &mut impl std::io::BufRead,
-    ) -> Result<Option<PluginInput>, ShellError>;
-
-    /// Serialize a `PluginOutput` in this `PluginEncoder`'s format
-    ///
-    /// Returns [ShellError::IOError] if there was a problem writing, or
-    /// [ShellError::PluginFailedToEncode] for a serialization error.
-    fn encode_output(
-        &self,
-        plugin_output: &PluginOutput,
-        writer: &mut impl std::io::Write,
-    ) -> Result<(), ShellError>;
-
-    /// Deserialize a `PluginOutput` from the `PluginEncoder`'s format
+    /// Deserialize a value from the [`PluginEncoder`]'s format
     ///
     /// Returns `None` if there is no more output to receive.
     ///
     /// Returns [ShellError::IOError] if there was a problem reading, or
     /// [ShellError::PluginFailedToDecode] for a deserialization error.
-    fn decode_output(
+    #[doc(hidden)]
+    fn decode(
         &self,
         reader: &mut impl std::io::BufRead,
-    ) -> Result<Option<PluginOutput>, ShellError>;
+    ) -> Result<Option<T>, ShellError>;
 }
 
 pub(crate) fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
@@ -377,7 +358,10 @@ impl<T: Plugin> StreamingPlugin for T {
 ///    serve_plugin(&mut MyPlugin::new(), MsgPackSerializer)
 /// }
 /// ```
-pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncoder + 'static) {
+pub fn serve_plugin(
+    plugin: &mut impl StreamingPlugin,
+    encoder: impl PluginEncoder<PluginInput> + PluginEncoder<PluginOutput> + 'static,
+) {
     if env::args().any(|arg| (arg == "-h") || (arg == "--help")) {
         print_help(plugin, encoder);
         std::process::exit(0)
@@ -496,7 +480,10 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
     drop(interface);
 }
 
-fn print_help(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncoder) {
+fn print_help(
+    plugin: &mut impl StreamingPlugin,
+    encoder: impl PluginEncoder<PluginOutput>,
+) {
     println!("Nushell Plugin");
     println!("Encoder: {}", encoder.name());
 

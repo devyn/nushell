@@ -53,7 +53,7 @@ struct EngineInterfaceState {
     engine_call_response_senders:
         Mutex<Vec<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>>,
     /// The synchronized output writer
-    writer: Box<dyn PluginWrite>,
+    writer: Box<dyn PluginWrite<PluginOutput>>,
 }
 
 impl EngineInterfaceState {
@@ -95,7 +95,7 @@ pub(crate) struct EngineInterfaceManager {
 }
 
 impl EngineInterfaceManager {
-    pub(crate) fn new(writer: impl PluginWrite + 'static) -> EngineInterfaceManager {
+    pub(crate) fn new(writer: impl PluginWrite<PluginOutput> + 'static) -> EngineInterfaceManager {
         let (plug_tx, plug_rx) = mpsc::channel();
 
         EngineInterfaceManager {
@@ -168,8 +168,11 @@ impl EngineInterfaceManager {
     /// Loop on input from the given reader as long as `is_finished()` is false
     ///
     /// Any errors will be propagated to all read streams automatically.
-    pub(crate) fn consume_all<R: PluginRead>(&mut self, mut reader: R) -> Result<(), ShellError> {
-        while let Some(msg) = reader.read_input()? {
+    pub(crate) fn consume_all(
+        &mut self,
+        mut reader: impl PluginRead<PluginInput>,
+    ) -> Result<(), ShellError> {
+        while let Some(msg) = reader.read()? {
             if self.is_finished() {
                 break;
             }
@@ -486,10 +489,11 @@ impl EngineInterface {
     ///
     /// If the closure results in an external command, the return value will be a collected string
     /// or binary value of the standard output stream of that command, similar to calling
-    /// [`eval_closure_with_stream`] with `redirect_stdout` = `true` and `redirect_stderr` =
-    /// `false`.
+    /// [`eval_closure_with_stream()`](Self::eval_closure_with_stream) with `redirect_stdout` =
+    /// `true` and `redirect_stderr` = `false`.
     ///
-    /// Use [`eval_closure_with_stream`] if more control over the input and output is desired.
+    /// Use [`eval_closure_with_stream()`](Self::eval_closure_with_stream) if more control over the
+    /// input and output is desired.
     ///
     /// # Example
     ///
@@ -542,7 +546,7 @@ impl Interface for EngineInterface {
 
     fn write(&self, output: PluginOutput) -> Result<(), ShellError> {
         log::trace!("to engine: {:?}", output);
-        self.state.writer.write_output(&output)
+        self.state.writer.write(&output)
     }
 
     fn flush(&self) -> Result<(), ShellError> {

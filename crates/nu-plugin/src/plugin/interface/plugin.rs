@@ -66,7 +66,7 @@ struct PluginInterfaceState {
     /// Contexts for plugin calls
     contexts: Mutex<Vec<(PluginCallId, Context)>>,
     /// The synchronized output writer
-    writer: Box<dyn PluginWrite>,
+    writer: Box<dyn PluginWrite<PluginInput>>,
 }
 
 impl std::fmt::Debug for PluginInterfaceState {
@@ -135,7 +135,7 @@ pub(crate) struct PluginInterfaceManager {
 }
 
 impl PluginInterfaceManager {
-    pub(crate) fn new(writer: impl PluginWrite + 'static) -> PluginInterfaceManager {
+    pub(crate) fn new(writer: impl PluginWrite<PluginInput> + 'static) -> PluginInterfaceManager {
         PluginInterfaceManager {
             state: Arc::new(PluginInterfaceState {
                 plugin_call_id_sequence: Sequence::default(),
@@ -212,7 +212,7 @@ impl PluginInterfaceManager {
                 // don't block
                 self.state
                     .writer
-                    .write_input(&PluginInput::EngineCallResponse(
+                    .write(&PluginInput::EngineCallResponse(
                         engine_call_id,
                         EngineCallResponse::Error(ShellError::IOError {
                             msg: "Can't make engine call because the original caller hung up"
@@ -238,8 +238,11 @@ impl PluginInterfaceManager {
     /// Loop on input from the given reader as long as `is_finished()` is false
     ///
     /// Any errors will be propagated to all read streams automatically.
-    pub(crate) fn consume_all<R: PluginRead>(&mut self, mut reader: R) -> Result<(), ShellError> {
-        while let Some(msg) = reader.read_output()? {
+    pub(crate) fn consume_all(
+        &mut self,
+        mut reader: impl PluginRead<PluginOutput>,
+    ) -> Result<(), ShellError> {
+        while let Some(msg) = reader.read()? {
             if self.is_finished() {
                 break;
             }
@@ -556,7 +559,7 @@ impl Interface for PluginInterface {
 
     fn write(&self, input: PluginInput) -> Result<(), ShellError> {
         log::trace!("to plugin: {:?}", input);
-        self.state.writer.write_input(&input)
+        self.state.writer.write(&input)
     }
 
     fn flush(&self) -> Result<(), ShellError> {
