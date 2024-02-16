@@ -185,14 +185,15 @@ where
     }
 
     /// Check if the stream was dropped from the other end. Recommended to do this before calling
-    /// [`write()`], especially in a loop.
+    /// [`.write()`], especially in a loop.
     pub(crate) fn is_dropped(&self) -> Result<bool, ShellError> {
         self.signal.is_dropped()
     }
 
     /// Write a single piece of data to the stream.
     ///
-    /// Error if something failed with the write, or if [`end()`] was already called previously.
+    /// Error if something failed with the write, or if [`.end()`] was already called
+    /// previously.
     pub(crate) fn write(&mut self, data: impl Into<StreamData>) -> Result<(), ShellError> {
         if !self.ended {
             self.writer
@@ -220,7 +221,7 @@ where
     }
 
     /// Write a full iterator to the stream. Note that this doesn't end the stream, so you should
-    /// still call [`end()`].
+    /// still call [`.end()`].
     ///
     /// If the stream is dropped from the other end, the iterator will not be fully consumed, and
     /// writing will terminate.
@@ -336,7 +337,7 @@ impl StreamWriterSignal {
     }
 
     /// Track that a message has been sent. Returns `Ok(true)` if more messages can be sent,
-    /// or `Ok(false)` if the high pressure mark has been reached and [`wait_for_drain()`] should
+    /// or `Ok(false)` if the high pressure mark has been reached and [`.wait_for_drain()`] should
     /// be called to block.
     pub fn notify_sent(&self) -> Result<bool, ShellError> {
         let mut state = self.lock()?;

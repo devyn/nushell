@@ -121,9 +121,9 @@ pub(crate) trait InterfaceManager {
     /// The input message type.
     type Input;
 
-    /// The context type. This is fed through [`read_pipeline_data()`] to
-    /// [`value_from_plugin_data()`] and can be used if there is special context required to be
-    /// able to handle [`PluginData`]. Set to `()` if not needed.
+    /// The context type. This is fed through [`.read_pipeline_data()`] to
+    /// [`.value_from_plugin_data()`] and can be used if there is special context required to
+    /// be able to handle [`PluginData`]. Set to `()` if not needed.
     type Context;
 
     /// Make a new interface that communicates with this [`InterfaceManager`].
@@ -131,8 +131,8 @@ pub(crate) trait InterfaceManager {
 
     /// Consume an input message.
     ///
-    /// When implementing, call [`consume_stream_message()`] for any encapsulated [`StreamMessage`]s
-    /// received.
+    /// When implementing, call [`.consume_stream_message()`] for any encapsulated
+    /// [`StreamMessage`]s received.
     fn consume(&mut self, input: Self::Input) -> Result<(), ShellError>;
 
     /// Convert [`PluginData`] to a [`Value`]. This should support plugin custom values as
@@ -223,8 +223,8 @@ pub(crate) trait Interface: Clone + Send {
     /// The output message type, which must be capable of encapsulating a [`StreamMessage`].
     type Output: From<StreamMessage>;
 
-    /// The context type. This is fed through [`init_write_pipeline_data()`] to
-    /// [`value_to_plugin_data()`] and can be used if there is special context required to be
+    /// The context type. This is fed through [`.init_write_pipeline_data()`] to
+    /// [`.value_to_plugin_data()`] and can be used if there is special context required to be
     /// able to handle [`PluginData`]. Set to `()` if not needed.
     type Context;
 
@@ -234,7 +234,7 @@ pub(crate) trait Interface: Clone + Send {
     /// Flush the output buffer, so messages are visible to the other side.
     fn flush(&self) -> Result<(), ShellError>;
 
-    /// Get the sequence for generating new [`StreamId`]s.
+    /// Get the sequence for generating new [`StreamId`](crate::protocol::StreamId)s.
     fn stream_id_sequence(&self) -> &Sequence;
 
     /// Get the [`StreamManagerHandle`] for doing stream operations.

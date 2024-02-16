@@ -30,6 +30,7 @@ pub(crate) const OUTPUT_BUFFER_SIZE: usize = 8192;
 
 /// Encoder for a specific message type. Usually implemented on [`PluginInput`]
 /// and [`PluginOutput`].
+#[doc(hidden)]
 pub trait Encoder<T>: Clone + Send + Sync {
     /// Serialize a value in the [`PluginEncoder`]s format
     ///
