@@ -194,75 +194,45 @@ pub struct LabeledError {
 
 impl From<LabeledError> for ShellError {
     fn from(error: LabeledError) -> Self {
-        ShellError::GenericError {
-            error: error.label,
-            msg: error.msg,
-            span: error.span,
-            help: None,
-            inner: vec![],
+        if error.span.is_some() {
+            ShellError::GenericError {
+                error: error.label,
+                msg: error.msg,
+                span: error.span,
+                help: None,
+                inner: vec![],
+            }
+        } else {
+            ShellError::GenericError {
+                error: error.label,
+                msg: "".into(),
+                span: None,
+                help: (!error.msg.is_empty()).then(|| error.msg),
+                inner: vec![],
+            }
         }
     }
 }
 
 impl From<ShellError> for LabeledError {
     fn from(error: ShellError) -> Self {
-        match error {
-            ShellError::GenericError {
-                error: label,
-                msg,
-                span,
-                ..
-            } => LabeledError { label, msg, span },
-            ShellError::CantConvert {
-                to_type: expected,
-                from_type: input,
-                span,
-                help: _help,
-            } => LabeledError {
-                label: format!("Can't convert to {expected}"),
-                msg: format!("can't convert from {input} to {expected}"),
+        use miette::Diagnostic;
+        // This is not perfect - we can only take the first labeled span as that's all we have
+        // space for.
+        if let Some(labeled_span) = error.labels().and_then(|mut iter| iter.nth(0)) {
+            let offset = labeled_span.offset();
+            let span = Span::new(offset, offset + labeled_span.len());
+            LabeledError {
+                label: error.to_string(),
+                msg: labeled_span.label().map(|label| label.to_owned()).unwrap_or_else(|| "".into()),
                 span: Some(span),
-            },
-            ShellError::DidYouMean { suggestion, span } => LabeledError {
-                label: "Name not found".into(),
-                msg: format!("did you mean '{suggestion}'?"),
-                span: Some(span),
-            },
-            ShellError::PluginFailedToLoad { msg } => LabeledError {
-                label: format!("Plugin failed to load: {msg}"),
-                msg: "".into(),
+            }
+        } else {
+            LabeledError {
+                label: error.to_string(),
+                msg: error.help().map(|help| help.to_string()).unwrap_or_else(|| "".into()),
                 span: None,
-            },
-            ShellError::PluginFailedToEncode { msg } => LabeledError {
-                label: format!("Plugin failed to encode: {msg}"),
-                msg: "".into(),
-                span: None,
-            },
-            ShellError::PluginFailedToDecode { msg } => LabeledError {
-                label: format!("Plugin failed to decode: {msg}").into(),
-                msg: "".into(),
-                span: None,
-            },
-            ShellError::NushellFailed { msg } => LabeledError {
-                label: format!("Nushell failed: {msg}"),
-                msg: "This shouldn't happen. Please file an issue: https://github.com/nushell/nushell/issues".into(),
-                span: None,
-            },
-            ShellError::NushellFailedSpanned { msg, label, span } => LabeledError {
-                msg: label,
-                label: msg,
-                span: Some(span),
-            },
-            ShellError::NushellFailedHelp { msg, help } => LabeledError {
-                label: format!("Nushell failed: {msg}"),
-                msg: help,
-                span: None,
-            },
-            err => LabeledError {
-                label: format!("Error - Add to LabeledError From<ShellError>: {err:?}"),
-                msg: err.to_string(),
-                span: None,
-            },
+            }
         }
     }
 }
