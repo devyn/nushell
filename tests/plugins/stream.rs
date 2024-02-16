@@ -45,6 +45,18 @@ fn seq_stream_collects_to_correct_list() {
 }
 
 #[test]
+fn seq_big_stream() {
+    // Testing big streams helps to ensure there are no deadlocking bugs
+    let actual = nu_with_plugins!(
+        cwd: "tests/fixtures/formats",
+        plugin: ("nu_plugin_stream_example"),
+        "stream_example seq 1 100000 | length"
+    );
+
+    assert_eq!(actual.out, "100000");
+}
+
+#[test]
 fn sum_accepts_list_of_int() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
@@ -89,6 +101,18 @@ fn sum_accepts_stream_of_float() {
 }
 
 #[test]
+fn sum_big_stream() {
+    // Testing big streams helps to ensure there are no deadlocking bugs
+    let actual = nu_with_plugins!(
+        cwd: "tests/fixtures/formats",
+        plugin: ("nu_plugin_stream_example"),
+        "seq 1 100000 | stream_example sum"
+    );
+
+    assert_eq!(actual.out, "5000050000");
+}
+
+#[test]
 fn collect_external_accepts_list_of_string() {
     let actual = nu_with_plugins!(
         cwd: "tests/fixtures/formats",
@@ -119,6 +143,26 @@ fn collect_external_produces_raw_input() {
     );
 
     assert_eq!(actual.out, "raw input");
+}
+
+#[test]
+fn collect_external_big_stream() {
+    // This in particular helps to ensure that a big stream can be both read and written at the same
+    // time without deadlocking
+    let actual = nu_with_plugins!(
+        cwd: "tests/fixtures/formats",
+        plugin: ("nu_plugin_stream_example"),
+        r#"(
+            seq 1 10000 |
+                to text |
+                each { into string } |
+                stream_example collect-external |
+                lines |
+                length
+        )"#
+    );
+
+    assert_eq!(actual.out, "10000");
 }
 
 #[test]
