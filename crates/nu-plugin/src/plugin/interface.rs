@@ -13,8 +13,8 @@ use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Value};
 use crate::{
     plugin::PluginEncoder,
     protocol::{
-        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginData, PluginInput,
-        PluginOutput, RawStreamInfo, StreamMessage,
+        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginData,
+        RawStreamInfo, StreamMessage,
     },
     sequence::Sequence,
 };
@@ -44,52 +44,39 @@ const LIST_STREAM_HIGH_PRESSURE: i32 = 100;
 /// with consideration for memory usage.
 const RAW_STREAM_HIGH_PRESSURE: i32 = 50;
 
-/// Read [PluginInput] or [PluginOutput] from the stream.
-pub(crate) trait PluginRead {
+/// Read input/output from the stream.
+pub(crate) trait PluginRead<T> {
     /// Returns `Ok(None)` on end of stream.
-    fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError>;
-
-    /// Returns `Ok(None)` on end of stream.
-    fn read_output(&mut self) -> Result<Option<PluginOutput>, ShellError>;
+    fn read(&mut self) -> Result<Option<T>, ShellError>;
 }
 
-impl<R, E> PluginRead for (R, E)
+impl<R, E, T> PluginRead<T> for (R, E)
 where
     R: std::io::BufRead,
-    E: PluginEncoder,
+    E: PluginEncoder<T>,
 {
-    fn read_input(&mut self) -> Result<Option<PluginInput>, ShellError> {
-        self.1.decode_input(&mut self.0)
-    }
-
-    fn read_output(&mut self) -> Result<Option<PluginOutput>, ShellError> {
-        self.1.decode_output(&mut self.0)
+    fn read(&mut self) -> Result<Option<T>, ShellError> {
+        self.1.decode(&mut self.0)
     }
 }
 
-/// Write [PluginInput] or [PluginOutput] to the stream.
+/// Write input/output to the stream.
 ///
 /// The write should be atomic, without interference from other threads.
-pub(crate) trait PluginWrite: Send + Sync {
-    fn write_input(&self, input: &PluginInput) -> Result<(), ShellError>;
-    fn write_output(&self, output: &PluginOutput) -> Result<(), ShellError>;
+pub(crate) trait PluginWrite<T>: Send + Sync {
+    fn write(&self, data: &T) -> Result<(), ShellError>;
 
     /// Flush any internal buffers, if applicable.
     fn flush(&self) -> Result<(), ShellError>;
 }
 
-impl<E> PluginWrite for (std::io::Stdout, E)
+impl<E, T> PluginWrite<T> for (std::io::Stdout, E)
 where
-    E: PluginEncoder,
+    E: PluginEncoder<T>,
 {
-    fn write_input(&self, input: &PluginInput) -> Result<(), ShellError> {
+    fn write(&self, data: &T) -> Result<(), ShellError> {
         let mut lock = self.0.lock();
-        self.1.encode_input(input, &mut lock)
-    }
-
-    fn write_output(&self, output: &PluginOutput) -> Result<(), ShellError> {
-        let mut lock = self.0.lock();
-        self.1.encode_output(output, &mut lock)
+        self.1.encode(data, &mut lock)
     }
 
     fn flush(&self) -> Result<(), ShellError> {
@@ -99,23 +86,16 @@ where
     }
 }
 
-impl<W, E> PluginWrite for (Mutex<W>, E)
+impl<W, E, T> PluginWrite<T> for (Mutex<W>, E)
 where
     W: std::io::Write + Send,
-    E: PluginEncoder,
+    E: PluginEncoder<T>,
 {
-    fn write_input(&self, input: &PluginInput) -> Result<(), ShellError> {
+    fn write(&self, data: &T) -> Result<(), ShellError> {
         let mut lock = self.0.lock().map_err(|_| ShellError::NushellFailed {
             msg: "writer mutex poisoned".into(),
         })?;
-        self.1.encode_input(input, &mut *lock)
-    }
-
-    fn write_output(&self, output: &PluginOutput) -> Result<(), ShellError> {
-        let mut lock = self.0.lock().map_err(|_| ShellError::NushellFailed {
-            msg: "writer mutex poisoned".into(),
-        })?;
-        self.1.encode_output(output, &mut *lock)
+        self.1.encode(data, &mut *lock)
     }
 
     fn flush(&self) -> Result<(), ShellError> {
