@@ -314,7 +314,7 @@ fn signal_wait_for_drain_unblocks_on_dropped() -> Result<(), ShellError> {
 }
 
 #[test]
-fn stream_manager_read_scenario() -> Result<(), ShellError> {
+fn stream_manager_single_stream_read_scenario() -> Result<(), ShellError> {
     let manager = StreamManager::new();
     let handle = manager.get_handle();
     let (tx, rx) = mpsc::channel();
@@ -343,6 +343,63 @@ fn stream_manager_read_scenario() -> Result<(), ShellError> {
         StreamMessage::Drop(2) => (),
         other => panic!("should have been a Drop: {other:?}"),
     }
+
+    Ok(())
+}
+
+#[test]
+fn stream_manager_multi_stream_read_scenario() -> Result<(), ShellError> {
+    let manager = StreamManager::new();
+    let handle = manager.get_handle();
+    let (tx, rx) = mpsc::channel();
+    let readable_list = handle.read_stream::<Value, _>(2, tx.clone())?;
+    let readable_raw = handle.read_stream::<Result<Vec<u8>, _>, _>(3, tx)?;
+
+    let expected_values = (1..100).map(Value::test_int).collect::<Vec<_>>();
+    let expected_raw_buffers = (1..100).map(|n| vec![n]).collect::<Vec<Vec<u8>>>();
+
+    for (value, buf) in expected_values.iter().zip(&expected_raw_buffers) {
+        manager.handle_message(StreamMessage::Data(2, value.clone().into()))?;
+        manager.handle_message(StreamMessage::Data(3, StreamData::Raw(Ok(buf.clone()))))?;
+    }
+    manager.handle_message(StreamMessage::End(2))?;
+    manager.handle_message(StreamMessage::End(3))?;
+
+    let values = readable_list.collect::<Vec<Value>>();
+    let bufs = readable_raw.collect::<Result<Vec<Vec<u8>>, _>>()?;
+
+    for (expected_value, value) in expected_values.iter().zip(&values) {
+        assert_eq!(expected_value, value, "in List stream");
+    }
+    for (expected_buf, buf) in expected_raw_buffers.iter().zip(&bufs) {
+        assert_eq!(expected_buf, buf, "in Raw stream");
+    }
+
+    // Now check the sent messages on consumption
+    // Should be Ack for each message, then Drop
+    for _ in &expected_values {
+        match rx.try_recv().expect("failed to receive Ack") {
+            StreamMessage::Ack(2) => (),
+            other => panic!("should have been an Ack(2): {other:?}"),
+        }
+    }
+    match rx.try_recv().expect("failed to receive Drop") {
+        StreamMessage::Drop(2) => (),
+        other => panic!("should have been a Drop(2): {other:?}"),
+    }
+    for _ in &expected_values {
+        match rx.try_recv().expect("failed to receive Ack") {
+            StreamMessage::Ack(3) => (),
+            other => panic!("should have been an Ack(3): {other:?}"),
+        }
+    }
+    match rx.try_recv().expect("failed to receive Drop") {
+        StreamMessage::Drop(3) => (),
+        other => panic!("should have been a Drop(3): {other:?}"),
+    }
+
+    // Should be end of stream
+    assert!(rx.try_recv().is_err(), "more messages written to stream than expected");
 
     Ok(())
 }

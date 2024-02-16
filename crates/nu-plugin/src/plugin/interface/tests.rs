@@ -1,8 +1,8 @@
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
-use nu_protocol::{Value, ShellError, PipelineData, Span};
+use nu_protocol::{Value, ShellError, PipelineData, Span, ListStream, RawStream};
 
-use crate::{protocol::{PluginData, PluginInput, PluginOutput, PipelineDataHeader, StreamMessage, ListStreamInfo, ExternalStreamInfo, RawStreamInfo}, sequence::Sequence, plugin::interface::PluginRead};
+use crate::{protocol::{PluginData, PluginInput, PluginOutput, PipelineDataHeader, StreamMessage, ListStreamInfo, ExternalStreamInfo, RawStreamInfo, StreamData}, sequence::Sequence, plugin::interface::PluginRead};
 
 use super::{PluginWrite, stream::{StreamManager, StreamManagerHandle}, test_util::{TestCase, TestData}, InterfaceManager, Interface};
 
@@ -263,6 +263,265 @@ fn read_pipeline_data_external_stream() -> Result<(), ShellError> {
 
     // Don't need to check exactly what was written, just be sure that there is some output
     assert!(test.has_unconsumed_write());
+
+    Ok(())
+}
+
+#[test]
+fn write_pipeline_data_empty() -> Result<(), ShellError> {
+    let test = TestCase::new();
+    let manager = TestInterfaceManager::new(&test);
+    let interface = manager.get_interface();
+
+    let (header, writer) = interface.init_write_pipeline_data(PipelineData::Empty, &())?;
+
+    assert!(matches!(header, PipelineDataHeader::Empty));
+
+    writer.write()?;
+
+    assert!(
+        !test.has_unconsumed_write(),
+        "Empty shouldn't write any stream messages, test: {test:#?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn write_pipeline_data_value() -> Result<(), ShellError> {
+    let test = TestCase::new();
+    let manager = TestInterfaceManager::new(&test);
+    let interface = manager.get_interface();
+    let value = Value::test_int(7);
+
+    let (header, writer) = interface.init_write_pipeline_data(
+        PipelineData::Value(value.clone(), None),
+        &(),
+    )?;
+
+    match header {
+        PipelineDataHeader::Value(read_value) => assert_eq!(value, read_value),
+        _ => panic!("unexpected header: {header:?}")
+    }
+
+    writer.write()?;
+
+    assert!(
+        !test.has_unconsumed_write(),
+        "Value shouldn't write any stream messages, test: {test:#?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn write_pipeline_data_custom_value() -> Result<(), ShellError> {
+    let test = TestCase::new();
+    let manager = TestInterfaceManager::new(&test);
+    let interface = manager.get_interface();
+
+    // In our test scenario, binary stands in for actual custom values
+    let data = vec![7, 8];
+    let span = Span::new(900, 1000);
+    let value = Value::binary(data.clone(), span);
+    let expected_plugin_data = PluginData { name: None, data, span };
+
+    let (header, writer) = interface.init_write_pipeline_data(
+        PipelineData::Value(value, None),
+        &(),
+    )?;
+
+    match header {
+        PipelineDataHeader::PluginData(read_plugin_data) =>
+            assert_eq!(expected_plugin_data, read_plugin_data),
+        _ => panic!("unexpected header: {header:?}")
+    }
+
+    writer.write()?;
+
+    assert!(
+        !test.has_unconsumed_write(),
+        "PluginData shouldn't write any stream messages, test: {test:#?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn write_pipeline_data_list_stream() -> Result<(), ShellError> {
+    let test = TestCase::new();
+    let manager = TestInterfaceManager::new(&test);
+    let interface = manager.get_interface();
+
+    let values = vec![
+        Value::test_int(40),
+        Value::test_bool(false),
+        Value::test_string("this is a test"),
+    ];
+
+    // Set up pipeline data for a list stream
+    let pipe = PipelineData::ListStream(
+        ListStream::from_stream(values.clone().into_iter(), None),
+        None,
+    );
+
+    let (header, writer) = interface.init_write_pipeline_data(pipe, &())?;
+
+    let info = match header {
+        PipelineDataHeader::ListStream(info) => info,
+        _ => panic!("unexpected header: {header:?}")
+    };
+
+    writer.write()?;
+
+    // Now make sure the stream messages have been written
+    for value in values {
+        match test.next_written().expect("unexpected end of stream") {
+            PluginOutput::Stream(StreamMessage::Data(id, data)) => {
+                assert_eq!(info.id, id, "Data id");
+                match data {
+                    StreamData::List(read_value) => assert_eq!(value, read_value, "Data value"),
+                    _ => panic!("unexpected Data: {data:?}")
+                }
+            }
+            other => panic!("unexpected output: {other:?}")
+        }
+    }
+
+    match test.next_written().expect("unexpected end of stream") {
+        PluginOutput::Stream(StreamMessage::End(id)) => {
+            assert_eq!(info.id, id, "End id");
+        }
+        other => panic!("unexpected output: {other:?}")
+    }
+
+    assert!(!test.has_unconsumed_write());
+
+    Ok(())
+}
+
+#[test]
+fn write_pipeline_data_external_stream() -> Result<(), ShellError> {
+    let test = TestCase::new();
+    let manager = TestInterfaceManager::new(&test);
+    let interface = manager.get_interface();
+
+    let stdout_bufs = vec![
+        b"hello".to_vec(),
+        b"world".to_vec(),
+        b"these are tests".to_vec(),
+    ];
+    let stdout_len = stdout_bufs.iter().map(|b| b.len() as u64).sum::<u64>();
+    let stderr_bufs = vec![
+        b"error messages".to_vec(),
+        b"go here".to_vec(),
+    ];
+    let exit_code = Value::test_int(7);
+
+    let span = Span::new(400, 500);
+
+    // Set up pipeline data for an external stream
+    let pipe = PipelineData::ExternalStream {
+        stdout: Some(RawStream::new(
+            Box::new(stdout_bufs.clone().into_iter().map(Ok)),
+            None,
+            span,
+            Some(stdout_len),
+        )),
+        stderr: Some(RawStream::new(
+            Box::new(stderr_bufs.clone().into_iter().map(Ok)),
+            None,
+            span,
+            None,
+        )),
+        exit_code: Some(ListStream::from_stream(std::iter::once(exit_code.clone()), None)),
+        span,
+        metadata: None,
+        trim_end_newline: true,
+    };
+
+    let (header, writer) = interface.init_write_pipeline_data(pipe, &())?;
+
+    let info = match header {
+        PipelineDataHeader::ExternalStream(info) => info,
+        _ => panic!("unexpected header: {header:?}")
+    };
+
+    writer.write()?;
+
+    let stdout_info = info.stdout.as_ref().expect("stdout info is None");
+    let stderr_info = info.stderr.as_ref().expect("stderr info is None");
+    let exit_code_info = info.exit_code.as_ref().expect("exit code info is None");
+
+    assert_eq!(span, info.span);
+    assert!(info.trim_end_newline);
+
+    assert_eq!(Some(stdout_len), stdout_info.known_size);
+    assert_eq!(None, stderr_info.known_size);
+
+    // Now make sure the stream messages have been written
+    let mut stdout_iter = stdout_bufs.into_iter();
+    let mut stderr_iter = stderr_bufs.into_iter();
+    let mut exit_code_iter = std::iter::once(exit_code);
+
+    let mut stdout_ended = false;
+    let mut stderr_ended = false;
+    let mut exit_code_ended = false;
+
+    // There's no specific order these messages must come in with respect to how the streams are
+    // interleaved, but all of the data for each stream must be in its original order, and the
+    // End must come after all Data
+    for msg in test.written() {
+        match msg {
+            PluginOutput::Stream(StreamMessage::Data(id, data)) => {
+                if id == stdout_info.id {
+                    let result: Result<Vec<u8>, ShellError> = data.try_into()
+                        .expect("wrong data in stdout stream");
+                    assert_eq!(
+                        stdout_iter.next().expect("too much data in stdout"),
+                        result.expect("unexpected error in stdout stream")
+                    );
+                } else if id == stderr_info.id {
+                    let result: Result<Vec<u8>, ShellError> = data.try_into()
+                        .expect("wrong data in stderr stream");
+                    assert_eq!(
+                        stderr_iter.next().expect("too much data in stderr"),
+                        result.expect("unexpected error in stderr stream")
+                    );
+                } else if id == exit_code_info.id {
+                    let code: Value = data.try_into().expect("wrong data in stderr stream");
+                    assert_eq!(
+                        exit_code_iter.next().expect("too much data in stderr"),
+                        code
+                    );
+                } else {
+                    panic!("unrecognized stream id: {id}");
+                }
+            }
+            PluginOutput::Stream(StreamMessage::End(id)) => {
+                if id == stdout_info.id {
+                    assert!(!stdout_ended, "double End of stdout");
+                    assert!(stdout_iter.next().is_none(), "unexpected end of stdout");
+                    stdout_ended = true;
+                } else if id == stderr_info.id {
+                    assert!(!stderr_ended, "double End of stderr");
+                    assert!(stderr_iter.next().is_none(), "unexpected end of stderr");
+                    stderr_ended = true;
+                } else if id == exit_code_info.id {
+                    assert!(!exit_code_ended, "double End of exit_code");
+                    assert!(exit_code_iter.next().is_none(), "unexpected end of exit_code");
+                    exit_code_ended = true;
+                } else {
+                    panic!("unrecognized stream id: {id}");
+                }
+            }
+            other => panic!("unexpected output: {other:?}")
+        }
+    }
+
+    assert!(stdout_ended, "stdout did not End");
+    assert!(stderr_ended, "stderr did not End");
+    assert!(exit_code_ended, "exit_code did not End");
 
     Ok(())
 }
