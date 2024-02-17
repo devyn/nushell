@@ -19,33 +19,40 @@ pub type PluginCallId = usize;
 /// A sequential identifier for an [`EngineCall`]
 pub type EngineCallId = usize;
 
+/// Information about a plugin command invocation. This includes an [`EvaluatedCall`] as a
+/// serializable representation of [`nu_protocol::ast::Call`]. The type parameter determines
+/// the input type.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CallInfo<D> {
+    /// The name of the command to be run
     pub name: String,
+    /// Information about the invocation, including arguments
     pub call: EvaluatedCall,
+    /// Pipeline input. This is usually [`nu_protocol::PipelineData`] or [`PipelineDataHeader`]
     pub input: D,
+    /// Plugin configuration, if available
     pub config: Option<Value>,
 }
 
-/// The initial (and perhaps only) part of any [nu_protocol::PipelineData] sent over the wire.
+/// The initial (and perhaps only) part of any [`nu_protocol::PipelineData`] sent over the wire.
 ///
-/// This may contain a single value, or may initiate a stream with a [StreamId].
+/// This may contain a single value, or may initiate a stream with a [`StreamId`].
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum PipelineDataHeader {
     /// No input
     Empty,
     /// A single value
     Value(Value),
-    /// Represents a [nu_protocol::CustomValue] on the plugin side, which should be encapsulated in
-    /// [PluginCustomValue] on the engine side.
+    /// Represents a [`nu_protocol::CustomValue`] on the plugin side, which should be encapsulated
+    /// in [PluginCustomValue] on the engine side.
     PluginData(PluginData),
-    /// Initiate [nu_protocol::PipelineData::ListStream].
+    /// Initiate [`nu_protocol::PipelineData::ListStream`].
     ///
-    /// Items are sent via [StreamData]
+    /// Items are sent via [`StreamData`]
     ListStream(ListStreamInfo),
-    /// Initiate [nu_protocol::PipelineData::ExternalStream].
+    /// Initiate [`nu_protocol::PipelineData::ExternalStream`].
     ///
-    /// Items are sent via [StreamData]
+    /// Items are sent via [`StreamData`]
     ExternalStream(ExternalStreamInfo),
 }
 
@@ -83,7 +90,7 @@ impl RawStreamInfo {
     }
 }
 
-/// Initial message sent to the plugin
+/// Initial message sent to the plugin. The type parameter determines the input type.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PluginCall<D> {
     Signature,
@@ -237,7 +244,7 @@ impl From<ShellError> for LabeledError {
     }
 }
 
-/// Response to a [PluginCall]
+/// Response to a [PluginCall]. The type parameter determines the output type for pipeline data.
 ///
 /// Note: exported for internal use, not public.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -292,6 +299,8 @@ impl From<StreamMessage> for PluginOutput {
 }
 
 /// A remote call back to the engine during the plugin's execution.
+///
+/// The type parameter determines the input type, for calls that take pipeline data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EngineCall<D> {
     /// Get the full engine configuration
@@ -323,7 +332,8 @@ impl<D> EngineCall<D> {
     }
 }
 
-/// The response to an [EngineCall].
+/// The response to an [EngineCall]. The type parameter determines the output type for pipeline
+/// data.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EngineCallResponse<D> {
     Error(ShellError),
