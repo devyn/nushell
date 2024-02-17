@@ -127,6 +127,7 @@ pub(crate) fn make_plugin_interface(mut child: Child) -> Result<PluginInterface,
 
     let mut manager = PluginInterfaceManager::new((Mutex::new(stdin), encoder.clone()));
     let interface = manager.get_interface();
+    interface.hello()?;
 
     // Spawn the reader on a new thread
     std::thread::spawn(move || {
@@ -415,6 +416,9 @@ pub fn serve_plugin(
             }
         })
     }
+
+    // Send Hello message
+    try_or_report!(interface, interface.hello());
 
     // Spawn the reader thread
     std::thread::spawn(move || {

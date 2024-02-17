@@ -9,7 +9,7 @@ use nu_protocol::{
 use crate::{
     protocol::{
         CallInfo, EngineCall, EngineCallId, EngineCallResponse, PluginCall, PluginCallId,
-        PluginCallResponse, PluginData, PluginInput,
+        PluginCallResponse, PluginData, PluginInput, ProtocolInfo,
     },
     LabeledError, PluginOutput,
 };
@@ -92,6 +92,8 @@ pub(crate) struct EngineInterfaceManager {
     plugin_call_receiver: Option<mpsc::Receiver<ReceivedPluginCall>>,
     /// Manages stream messages and state
     stream_manager: StreamManager,
+    /// Protocol version info, set after `Hello` received
+    protocol_info: Option<ProtocolInfo>,
 }
 
 impl EngineInterfaceManager {
@@ -108,6 +110,7 @@ impl EngineInterfaceManager {
             plugin_call_sender: plug_tx,
             plugin_call_receiver: Some(plug_rx),
             stream_manager: StreamManager::new(),
+            protocol_info: None,
         }
     }
 
@@ -172,12 +175,12 @@ impl EngineInterfaceManager {
         &mut self,
         mut reader: impl PluginRead<PluginInput>,
     ) -> Result<(), ShellError> {
-        while let Some(msg) = reader.read()? {
+        while let Some(msg) = reader.read().transpose() {
             if self.is_finished() {
                 break;
             }
 
-            if let Err(err) = self.consume(msg) {
+            if let Err(err) = msg.and_then(|msg| self.consume(msg)) {
                 let _ = self.stream_manager.broadcast_read_error(err.clone());
                 return Err(err);
             }
@@ -203,6 +206,30 @@ impl InterfaceManager for EngineInterfaceManager {
         log::trace!("from engine: {:?}", input);
 
         match input {
+            PluginInput::Hello(info) => {
+                let local_info = ProtocolInfo::default();
+                if local_info.is_compatible_with(&info)? {
+                    self.protocol_info = Some(info);
+                    Ok(())
+                } else {
+                    self.protocol_info = None;
+                    Err(ShellError::PluginFailedToLoad {
+                        msg: format!(
+                            "Plugin is compiled for nushell version {}, \
+                                which is not compatible with version {}",
+                            local_info.version,
+                            info.version
+                        ),
+                    })
+                }
+            }
+            _ if self.protocol_info.is_none() => {
+                // Must send protocol info first
+                Err(ShellError::PluginFailedToLoad {
+                    msg: "Failed to receive initial Hello message. \
+                        This engine might be too old".into()
+                })
+            }
             PluginInput::Stream(message) => self.consume_stream_message(message),
             PluginInput::Call(id, call) => match call {
                 // We just let the receiver handle it rather than trying to store signature here
@@ -288,6 +315,12 @@ pub struct EngineInterface {
 }
 
 impl EngineInterface {
+    /// Write the protocol info. This should be done after initialization
+    pub(crate) fn hello(&self) -> Result<(), ShellError> {
+        self.write(PluginOutput::Hello(ProtocolInfo::default()))?;
+        self.flush()
+    }
+
     fn context(&self) -> Result<PluginCallId, ShellError> {
         self.context.ok_or_else(|| ShellError::NushellFailed {
             msg: "Tried to call an EngineInterface method that requires a call context \

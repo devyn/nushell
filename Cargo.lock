@@ -3166,6 +3166,7 @@ dependencies = [
  "nu-engine",
  "nu-protocol",
  "rmp-serde",
+ "semver",
  "serde",
  "serde_json",
  "typetag",

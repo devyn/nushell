@@ -8,7 +8,7 @@ use crate::{
     plugin::context::PluginExecutionContext,
     protocol::{
         CallInfo, EngineCall, EngineCallId, EngineCallResponse, PluginCall, PluginCallId,
-        PluginCallResponse, PluginCustomValue, PluginData, PluginInput, PluginOutput,
+        PluginCallResponse, PluginCustomValue, PluginData, PluginInput, PluginOutput, ProtocolInfo,
     },
     sequence::Sequence,
 };
@@ -132,6 +132,8 @@ pub(crate) struct PluginInterfaceManager {
     state: Arc<PluginInterfaceState>,
     /// Manages stream messages and state
     stream_manager: StreamManager,
+    /// Protocol version info, set after `Hello` received
+    protocol_info: Option<ProtocolInfo>,
 }
 
 impl PluginInterfaceManager {
@@ -145,6 +147,7 @@ impl PluginInterfaceManager {
                 writer: Box::new(writer),
             }),
             stream_manager: StreamManager::new(),
+            protocol_info: None,
         }
     }
 
@@ -242,12 +245,12 @@ impl PluginInterfaceManager {
         &mut self,
         mut reader: impl PluginRead<PluginOutput>,
     ) -> Result<(), ShellError> {
-        while let Some(msg) = reader.read()? {
+        while let Some(msg) = reader.read().transpose() {
             if self.is_finished() {
                 break;
             }
 
-            if let Err(err) = self.consume(msg) {
+            if let Err(err) = msg.and_then(|msg| self.consume(msg)) {
                 // Error to streams
                 let _ = self.stream_manager.broadcast_read_error(err.clone());
                 // Error to call waiters
@@ -279,6 +282,30 @@ impl InterfaceManager for PluginInterfaceManager {
         log::trace!("from plugin: {:?}", input);
 
         match input {
+            PluginOutput::Hello(info) => {
+                let local_info = ProtocolInfo::default();
+                if local_info.is_compatible_with(&info)? {
+                    self.protocol_info = Some(info);
+                    Ok(())
+                } else {
+                    self.protocol_info = None;
+                    Err(ShellError::PluginFailedToLoad {
+                        msg: format!(
+                            "Plugin is compiled for nushell version {}, \
+                                which is not compatible with version {}",
+                            info.version,
+                            local_info.version
+                        ),
+                    })
+                }
+            }
+            _ if self.protocol_info.is_none() => {
+                // Must send protocol info first
+                Err(ShellError::PluginFailedToLoad {
+                    msg: "Failed to receive initial Hello message. \
+                        This plugin might be too old".into()
+                })
+            }
             PluginOutput::Stream(message) => self.consume_stream_message(message),
             PluginOutput::CallResponse(id, response) => {
                 // Handle reading the pipeline data, if any
@@ -378,6 +405,12 @@ pub(crate) struct PluginInterface {
 }
 
 impl PluginInterface {
+    /// Write the protocol info. This should be done after initialization
+    pub(crate) fn hello(&self) -> Result<(), ShellError> {
+        self.write(PluginInput::Hello(ProtocolInfo::default()))?;
+        self.flush()
+    }
+
     /// Write an [`EngineCallResponse`]. Writes the full stream contained in any [`PipelineData`]
     /// before returning.
     pub(crate) fn write_engine_call_response(

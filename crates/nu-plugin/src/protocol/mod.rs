@@ -1,6 +1,10 @@
 mod evaluated_call;
 mod plugin_custom_value;
 mod plugin_data;
+mod protocol_info;
+
+#[cfg(test)]
+mod tests;
 
 pub use evaluated_call::EvaluatedCall;
 use nu_protocol::{
@@ -8,6 +12,7 @@ use nu_protocol::{
 };
 pub use plugin_custom_value::PluginCustomValue;
 pub use plugin_data::PluginData;
+pub use protocol_info::{ProtocolInfo, Protocol, Feature};
 use serde::{Deserialize, Serialize};
 
 /// A sequential identifier for a stream
@@ -90,7 +95,7 @@ impl RawStreamInfo {
     }
 }
 
-/// Initial message sent to the plugin. The type parameter determines the input type.
+/// Calls that a plugin can execute. The type parameter determines the input type.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PluginCall<D> {
     Signature,
@@ -101,8 +106,15 @@ pub enum PluginCall<D> {
 /// Any data sent to the plugin
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PluginInput {
+    /// This must be the first message. Indicates supported protocol
+    Hello(ProtocolInfo),
+    /// Execute a [`PluginCall`], such as `Run` or `Signature`. The ID should not have been used
+    /// before.
     Call(PluginCallId, PluginCall<PipelineDataHeader>),
+    /// Stream control or data message
     Stream(StreamMessage),
+    /// Response to an [`EngineCall`]. The ID should be the same one sent with the engine call this
+    /// is responding to
     EngineCallResponse(EngineCallId, EngineCallResponse<PipelineDataHeader>),
 }
 
@@ -244,7 +256,7 @@ impl From<ShellError> for LabeledError {
     }
 }
 
-/// Response to a [PluginCall]. The type parameter determines the output type for pipeline data.
+/// Response to a [`PluginCall`]. The type parameter determines the output type for pipeline data.
 ///
 /// Note: exported for internal use, not public.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -272,10 +284,19 @@ impl PluginCallResponse<PipelineDataHeader> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[doc(hidden)]
 pub enum PluginOutput {
+    /// This must be the first message. Indicates supported protocol
+    Hello(ProtocolInfo),
+    /// A response to a [`PluginCall`]. The ID should be the same sent with the plugin call this
+    /// is a response to
     CallResponse(PluginCallId, PluginCallResponse<PipelineDataHeader>),
+    /// Stream control or data message
     Stream(StreamMessage),
+    /// Execute an [`EngineCall`]. Engine calls must be executed within the `context` of a plugin
+    /// call, and the `id` should not have been used before
     EngineCall {
+        /// The plugin call (by ID) to execute in the context of
         context: PluginCallId,
+        /// A new identifier for this engine call. The response will reference this ID
         id: EngineCallId,
         call: EngineCall<PipelineDataHeader>,
     },
