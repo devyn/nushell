@@ -292,16 +292,16 @@ impl InterfaceManager for EngineInterfaceManager {
     }
 
     fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
-        // Serialize custom values in the pipeline data
+        // Deserialize custom values in the pipeline data
         match data {
             PipelineData::Value(value, meta) => {
-                let value = PluginCustomValue::serialize_custom_values_in(value)?;
+                let value = PluginCustomValue::deserialize_custom_values_in(value)?;
                 Ok(PipelineData::Value(value, meta))
             }
             PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
                 Ok(stream.map(|value| {
                     let span = value.span();
-                    match PluginCustomValue::serialize_custom_values_in(value) {
+                    match PluginCustomValue::deserialize_custom_values_in(value) {
                         Ok(value) => value,
                         Err(err) => Value::error(err, span)
                     }
@@ -605,16 +605,16 @@ impl Interface for EngineInterface {
     }
 
     fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
-        // Deserialize custom values in the pipeline data
+        // Serialize custom values in the pipeline data
         match data {
             PipelineData::Value(value, meta) => {
-                let value = PluginCustomValue::deserialize_custom_values_in(value)?;
+                let value = PluginCustomValue::serialize_custom_values_in(value)?;
                 Ok(PipelineData::Value(value, meta))
             }
             PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
                 Ok(stream.map(|value| {
                     let span = value.span();
-                    match PluginCustomValue::deserialize_custom_values_in(value) {
+                    match PluginCustomValue::serialize_custom_values_in(value) {
                         Ok(value) => value,
                         Err(err) => Value::error(err, span)
                     }
