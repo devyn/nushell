@@ -1,10 +1,16 @@
-use std::sync::{atomic::AtomicBool, Arc, Mutex};
+use std::{sync::{Arc, Mutex}, path::Path};
 
-use nu_protocol::{Value, ShellError, PipelineData, Span, ListStream, RawStream};
+use nu_protocol::{Value, ShellError, PipelineData, Span, ListStream, RawStream, PipelineMetadata, DataSource};
 
-use crate::{protocol::{PluginData, PluginInput, PluginOutput, PipelineDataHeader, StreamMessage, ListStreamInfo, ExternalStreamInfo, RawStreamInfo, StreamData}, sequence::Sequence, plugin::interface::PluginRead};
+use crate::{protocol::{PluginInput, PluginOutput, PipelineDataHeader, StreamMessage, ListStreamInfo, ExternalStreamInfo, RawStreamInfo, StreamData}, sequence::Sequence, plugin::interface::PluginRead};
 
 use super::{PluginWrite, stream::{StreamManager, StreamManagerHandle}, test_util::{TestCase, TestData}, InterfaceManager, Interface};
+
+fn test_metadata() -> PipelineMetadata {
+    PipelineMetadata {
+        data_source: DataSource::FilePath("/test/path".into()),
+    }
+}
 
 #[derive(Debug)]
 struct TestInterfaceManager {
@@ -33,7 +39,6 @@ impl TestInterfaceManager {
 impl InterfaceManager for TestInterfaceManager {
     type Interface = TestInterface;
     type Input = PluginInput;
-    type Context = ();
 
     fn get_interface(&self) -> Self::Interface {
         TestInterface {
@@ -50,26 +55,17 @@ impl InterfaceManager for TestInterfaceManager {
         }
     }
 
-    fn value_from_plugin_data(
-        &self,
-        data: PluginData,
-        _context: &(),
-    ) -> Result<Value, ShellError> {
-        Ok(Value::binary(data.data, data.span))
-    }
-
-    fn ctrlc(&self, _context: &Self::Context) -> Option<Arc<AtomicBool>> {
-        None
-    }
-
     fn stream_manager(&self) -> &StreamManager {
         &self.stream_manager
+    }
+
+    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+        Ok(data.set_metadata(Some(test_metadata())))
     }
 }
 
 impl Interface for TestInterface {
     type Output = PluginOutput;
-    type Context = ();
 
     fn write(&self, output: Self::Output) -> Result<(), ShellError> {
         self.writer.write(&output)
@@ -87,19 +83,14 @@ impl Interface for TestInterface {
         &self.stream_manager_handle
     }
 
-    fn value_to_plugin_data(
-        &self,
-        value: &Value,
-        _context: &(),
-    ) -> Result<Option<PluginData>, ShellError> {
-        Ok(match value {
-            Value::Binary { val, .. } => Some(PluginData {
-                name: None,
-                data: val.clone(),
-                span: value.span(),
+    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+        // Add an arbitrary check to the data to verify this is being called
+        match data {
+            PipelineData::Value(Value::Binary { .. }, None) => Err(ShellError::NushellFailed {
+                msg: "TEST can't send binary".into(),
             }),
-            _ => None,
-        })
+            _ => Ok(data)
+        }
     }
 }
 
@@ -108,7 +99,7 @@ fn read_pipeline_data_empty() -> Result<(), ShellError> {
     let manager = TestInterfaceManager::new(&TestCase::new());
     let header = PipelineDataHeader::Empty;
 
-    assert!(matches!(manager.read_pipeline_data(header, &())?, PipelineData::Empty));
+    assert!(matches!(manager.read_pipeline_data(header, None)?, PipelineData::Empty));
     Ok(())
 }
 
@@ -118,30 +109,8 @@ fn read_pipeline_data_value() -> Result<(), ShellError> {
     let value = Value::test_int(4);
     let header = PipelineDataHeader::Value(value.clone());
 
-    match manager.read_pipeline_data(header, &())? {
+    match manager.read_pipeline_data(header, None)? {
         PipelineData::Value(read_value, _) => assert_eq!(value, read_value),
-        PipelineData::ListStream(_, _) => panic!("unexpected ListStream"),
-        PipelineData::ExternalStream { .. } => panic!("unexpected ExternalStream"),
-        PipelineData::Empty => panic!("unexpected Empty"),
-    }
-
-    Ok(())
-}
-
-#[test]
-fn read_pipeline_data_plugin_data() -> Result<(), ShellError> {
-    let manager = TestInterfaceManager::new(&TestCase::new());
-    let data = PluginData {
-        name: None,
-        data: vec![4, 5, 6, 7],
-        span: Span::new(4, 10),
-    };
-    // Our implementation in TestInterfaceManager does this:
-    let expected_value = Value::binary(data.data.clone(), data.span);
-    let header = PipelineDataHeader::PluginData(data);
-
-    match manager.read_pipeline_data(header, &())? {
-        PipelineData::Value(read_value, _) => assert_eq!(expected_value, read_value),
         PipelineData::ListStream(_, _) => panic!("unexpected ListStream"),
         PipelineData::ExternalStream { .. } => panic!("unexpected ExternalStream"),
         PipelineData::Empty => panic!("unexpected Empty"),
@@ -164,7 +133,7 @@ fn read_pipeline_data_list_stream() -> Result<(), ShellError> {
 
     let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 7 });
 
-    let pipe = manager.read_pipeline_data(header, &())?;
+    let pipe = manager.read_pipeline_data(header, None)?;
     assert!(matches!(pipe, PipelineData::ListStream(..)), "unexpected PipelineData: {pipe:?}");
 
     // need to consume input
@@ -219,7 +188,7 @@ fn read_pipeline_data_external_stream() -> Result<(), ShellError> {
         trim_end_newline: true,
     });
 
-    let pipe = manager.read_pipeline_data(header, &())?;
+    let pipe = manager.read_pipeline_data(header, None)?;
 
     // need to consume input
     while let Some(msg) = test.r#in.read()? {
@@ -232,7 +201,10 @@ fn read_pipeline_data_external_stream() -> Result<(), ShellError> {
             let stderr = stderr.expect("stderr is None");
             let exit_code = exit_code.expect("exit_code is None");
             assert_eq!(test_span, span);
-            assert!(metadata.is_none());
+            assert!(
+                metadata.is_some(),
+                "expected metadata to be Some due to prepare_pipeline_data()"
+            );
             assert!(trim_end_newline);
 
             assert!(!stdout.is_binary);
@@ -268,12 +240,47 @@ fn read_pipeline_data_external_stream() -> Result<(), ShellError> {
 }
 
 #[test]
+fn read_pipeline_data_ctrlc() -> Result<(), ShellError> {
+    let manager = TestInterfaceManager::new(&TestCase::new());
+    let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 0 });
+    let ctrlc = Default::default();
+    match manager.read_pipeline_data(header, Some(&ctrlc))? {
+        PipelineData::ListStream(ListStream { ctrlc: stream_ctrlc, .. }, _) => {
+            assert!(Arc::ptr_eq(&ctrlc, &stream_ctrlc.expect("ctrlc not set")));
+            Ok(())
+        }
+        _ => panic!("Unexpected PipelineData, should have been ListStream")
+    }
+}
+
+#[test]
+fn read_pipeline_data_prepared_properly() -> Result<(), ShellError> {
+    let manager = TestInterfaceManager::new(&TestCase::new());
+    let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 0 });
+    match manager.read_pipeline_data(header, None)? {
+        PipelineData::ListStream(_, meta) => {
+            match meta {
+                Some(PipelineMetadata { data_source }) => match data_source {
+                    DataSource::FilePath(path) => {
+                        assert_eq!(Path::new("/test/path"), path);
+                        Ok(())
+                    }
+                    _ => panic!("wrong metadata: {data_source:?}"),
+                }
+                None => panic!("metadata not set"),
+            }
+        }
+        _ => panic!("Unexpected PipelineData, should have been ListStream")
+    }
+}
+
+#[test]
 fn write_pipeline_data_empty() -> Result<(), ShellError> {
     let test = TestCase::new();
     let manager = TestInterfaceManager::new(&test);
     let interface = manager.get_interface();
 
-    let (header, writer) = interface.init_write_pipeline_data(PipelineData::Empty, &())?;
+    let (header, writer) = interface.init_write_pipeline_data(PipelineData::Empty)?;
 
     assert!(matches!(header, PipelineDataHeader::Empty));
 
@@ -296,7 +303,6 @@ fn write_pipeline_data_value() -> Result<(), ShellError> {
 
     let (header, writer) = interface.init_write_pipeline_data(
         PipelineData::Value(value.clone(), None),
-        &(),
     )?;
 
     match header {
@@ -315,36 +321,24 @@ fn write_pipeline_data_value() -> Result<(), ShellError> {
 }
 
 #[test]
-fn write_pipeline_data_custom_value() -> Result<(), ShellError> {
-    let test = TestCase::new();
-    let manager = TestInterfaceManager::new(&test);
+fn write_pipeline_data_prepared_properly() {
+    let manager = TestInterfaceManager::new(&TestCase::new());
     let interface = manager.get_interface();
 
-    // In our test scenario, binary stands in for actual custom values
-    let data = vec![7, 8];
-    let span = Span::new(900, 1000);
-    let value = Value::binary(data.clone(), span);
-    let expected_plugin_data = PluginData { name: None, data, span };
+    // Sending a binary should be an error in our test scenario
+    let value = Value::test_binary(vec![7, 8]);
 
-    let (header, writer) = interface.init_write_pipeline_data(
-        PipelineData::Value(value, None),
-        &(),
-    )?;
-
-    match header {
-        PipelineDataHeader::PluginData(read_plugin_data) =>
-            assert_eq!(expected_plugin_data, read_plugin_data),
-        _ => panic!("unexpected header: {header:?}")
+    match interface.init_write_pipeline_data(PipelineData::Value(value, None)) {
+        Ok(_) => panic!("prepare_pipeline_data was not called"),
+        Err(err) => {
+            assert_eq!(
+                ShellError::NushellFailed {
+                    msg: "TEST can't send binary".into()
+                }.to_string(),
+                err.to_string()
+            );
+        }
     }
-
-    writer.write()?;
-
-    assert!(
-        !test.has_unconsumed_write(),
-        "PluginData shouldn't write any stream messages, test: {test:#?}"
-    );
-
-    Ok(())
 }
 
 #[test]
@@ -365,7 +359,7 @@ fn write_pipeline_data_list_stream() -> Result<(), ShellError> {
         None,
     );
 
-    let (header, writer) = interface.init_write_pipeline_data(pipe, &())?;
+    let (header, writer) = interface.init_write_pipeline_data(pipe)?;
 
     let info = match header {
         PipelineDataHeader::ListStream(info) => info,
@@ -440,7 +434,7 @@ fn write_pipeline_data_external_stream() -> Result<(), ShellError> {
         trim_end_newline: true,
     };
 
-    let (header, writer) = interface.init_write_pipeline_data(pipe, &())?;
+    let (header, writer) = interface.init_write_pipeline_data(pipe)?;
 
     let info = match header {
         PipelineDataHeader::ExternalStream(info) => info,

@@ -1,14 +1,14 @@
 //! Interface used by the engine to communicate with the plugin.
 
-use std::sync::{atomic::AtomicBool, mpsc, Arc, Mutex, MutexGuard};
+use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
-use nu_protocol::{PipelineData, PluginSignature, ShellError, Value};
+use nu_protocol::{PipelineData, PluginSignature, ShellError, Value, ListStream, IntoInterruptiblePipelineData, Spanned};
 
 use crate::{
-    plugin::context::PluginExecutionContext,
+    plugin::{context::PluginExecutionContext, PluginIdentity},
     protocol::{
         CallInfo, EngineCall, EngineCallId, EngineCallResponse, PluginCall, PluginCallId,
-        PluginCallResponse, PluginCustomValue, PluginData, PluginInput, PluginOutput, ProtocolInfo,
+        PluginCallResponse, PluginCustomValue, PluginInput, PluginOutput, ProtocolInfo, CustomValueOp,
     },
     sequence::Sequence,
 };
@@ -56,6 +56,8 @@ impl std::ops::Deref for Context {
 
 /// Internal shared state between the manager and each interface.
 struct PluginInterfaceState {
+    /// The identity of the plugin being interfaced with
+    identity: Arc<PluginIdentity>,
     /// Sequence for generating plugin call ids
     plugin_call_id_sequence: Sequence,
     /// Sequence for generating stream ids
@@ -72,6 +74,7 @@ struct PluginInterfaceState {
 impl std::fmt::Debug for PluginInterfaceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PluginInterfaceState")
+            .field("identity", &self.identity)
             .field("plugin_call_id_sequence", &self.plugin_call_id_sequence)
             .field("stream_id_sequence", &self.stream_id_sequence)
             .field(
@@ -137,9 +140,13 @@ pub(crate) struct PluginInterfaceManager {
 }
 
 impl PluginInterfaceManager {
-    pub(crate) fn new(writer: impl PluginWrite<PluginInput> + 'static) -> PluginInterfaceManager {
+    pub(crate) fn new(
+        identity: Arc<PluginIdentity>,
+        writer: impl PluginWrite<PluginInput> + 'static,
+    ) -> PluginInterfaceManager {
         PluginInterfaceManager {
             state: Arc::new(PluginInterfaceState {
+                identity,
                 plugin_call_id_sequence: Sequence::default(),
                 stream_id_sequence: Sequence::default(),
                 plugin_call_response_senders: Mutex::new(Vec::new()),
@@ -269,7 +276,6 @@ impl PluginInterfaceManager {
 impl InterfaceManager for PluginInterfaceManager {
     type Interface = PluginInterface;
     type Input = PluginOutput;
-    type Context = Option<Context>;
 
     fn get_interface(&self) -> Self::Interface {
         PluginInterface {
@@ -315,7 +321,9 @@ impl InterfaceManager for PluginInterfaceManager {
                     PluginCallResponse::PipelineData(data) => {
                         // If there's an error with initializing this stream, change it to a plugin
                         // error response, but send it anyway
-                        match self.read_pipeline_data(data, &self.state.get_context(id)?) {
+                        let exec_context = self.state.get_context(id)?;
+                        let ctrlc = exec_context.as_ref().and_then(|c| c.0.ctrlc());
+                        match self.read_pipeline_data(data, ctrlc) {
                             Ok(data) => PluginCallResponse::PipelineData(data),
                             Err(err) => PluginCallResponse::Error(err.into()),
                         }
@@ -325,7 +333,8 @@ impl InterfaceManager for PluginInterfaceManager {
             }
             PluginOutput::EngineCall { context, id, call } => {
                 // Handle reading the pipeline data, if any
-                let exec_context = self.state.get_context(context)?;
+                let exec_context = self.state.get_context(id)?;
+                let ctrlc = exec_context.as_ref().and_then(|c| c.0.ctrlc());
                 let call = match call {
                     EngineCall::GetConfig => Ok(EngineCall::GetConfig),
                     EngineCall::EvalClosure {
@@ -334,7 +343,7 @@ impl InterfaceManager for PluginInterfaceManager {
                         input,
                         redirect_stdout,
                         redirect_stderr,
-                    } => self.read_pipeline_data(input, &exec_context).map(|input| {
+                    } => self.read_pipeline_data(input, ctrlc).map(|input| {
                         EngineCall::EvalClosure {
                             closure,
                             positional,
@@ -350,49 +359,33 @@ impl InterfaceManager for PluginInterfaceManager {
                     Err(err) => self.get_interface().write_engine_call_response(
                         id,
                         EngineCallResponse::Error(err),
-                        &exec_context,
                     ),
                 }
             }
         }
     }
 
-    fn value_from_plugin_data(
-        &self,
-        plugin_data: PluginData,
-        context: &Option<Context>,
-    ) -> Result<Value, ShellError> {
-        let context = context
-            .as_ref()
-            .ok_or_else(|| ShellError::PluginFailedToDecode {
-                msg: "Can't handle custom value outside of call context".into(),
-            })?;
-
-        // Convert to PluginCustomData
-        Ok(Value::custom_value(
-            Box::new(PluginCustomValue {
-                name: plugin_data
-                    .name
-                    .ok_or_else(|| ShellError::PluginFailedToDecode {
-                        msg: "String representation of PluginData not provided".into(),
-                    })?,
-                data: plugin_data.data,
-                filename: context.filename().to_owned(),
-                shell: context.shell().map(|p| p.to_owned()),
-                source: context.command_name().to_owned(),
-            }),
-            plugin_data.span,
-        ))
-    }
-
-    fn ctrlc(&self, context: &Option<Context>) -> Option<Arc<AtomicBool>> {
-        context
-            .as_ref()
-            .and_then(|context| context.ctrlc().cloned())
-    }
-
     fn stream_manager(&self) -> &StreamManager {
         &self.stream_manager
+    }
+
+    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+        // Add source to any values
+        match data {
+            PipelineData::Value(value, meta) =>
+                Ok(PipelineData::Value(
+                    PluginCustomValue::add_source(value, &self.state.identity),
+                    meta,
+                )),
+            PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
+                let identity = self.state.identity.clone();
+                Ok(stream.map(move |value| {
+                    PluginCustomValue::add_source(value, &identity)
+                }).into_pipeline_data_with_metadata(meta, ctrlc))
+            },
+            PipelineData::Empty |
+                PipelineData::ExternalStream { .. } => Ok(data),
+        }
     }
 }
 
@@ -417,12 +410,11 @@ impl PluginInterface {
         &self,
         id: EngineCallId,
         response: EngineCallResponse<PipelineData>,
-        context: &Option<Context>,
     ) -> Result<(), ShellError> {
         // Set up any stream if necessary
         let (response, writer) = match response {
             EngineCallResponse::PipelineData(data) => {
-                let (header, writer) = self.init_write_pipeline_data(data, context)?;
+                let (header, writer) = self.init_write_pipeline_data(data)?;
                 (EngineCallResponse::PipelineData(header), Some(writer))
             }
             // No pipeline data:
@@ -460,8 +452,8 @@ impl PluginInterface {
         // Convert the call into one with a header and handle the stream, if necessary
         let (call, writer) = match call {
             PluginCall::Signature => (PluginCall::Signature, None),
-            PluginCall::CollapseCustomValue(value) => {
-                (PluginCall::CollapseCustomValue(value), None)
+            PluginCall::CustomValueOp(value, op) => {
+                (PluginCall::CustomValueOp(value, op), None)
             }
             PluginCall::Run(CallInfo {
                 name,
@@ -469,7 +461,7 @@ impl PluginInterface {
                 input,
                 config,
             }) => {
-                let (header, writer) = self.init_write_pipeline_data(input, context)?;
+                let (header, writer) = self.init_write_pipeline_data(input)?;
                 (
                     PluginCall::Run(CallInfo {
                         name,
@@ -517,7 +509,7 @@ impl PluginInterface {
                             (EngineCallResponse::Config(config), None)
                         }
                         EngineCallResponse::PipelineData(data) => {
-                            match self.init_write_pipeline_data(data, context) {
+                            match self.init_write_pipeline_data(data) {
                                 Ok((header, writer)) => {
                                     (EngineCallResponse::PipelineData(header), Some(writer))
                                 }
@@ -569,18 +561,17 @@ impl PluginInterface {
     }
 
     /// Collapse a custom value to its base value.
-    pub(crate) fn collapse_custom_value(
+    pub(crate) fn custom_value_to_base_value(
         &self,
-        data: PluginData,
-        context: Arc<impl PluginExecutionContext + 'static>,
+        value: Spanned<PluginCustomValue>,
     ) -> Result<Value, ShellError> {
-        let span = data.span;
-        let context = Some(Context(context));
-        match self.plugin_call(PluginCall::CollapseCustomValue(data), &context)? {
+        let span = value.span;
+        let call = PluginCall::CustomValueOp(value, CustomValueOp::ToBaseValue);
+        match self.plugin_call(call, &None)? {
             PluginCallResponse::PipelineData(out_data) => Ok(out_data.into_value(span)),
             PluginCallResponse::Error(err) => Err(err.into()),
             _ => Err(ShellError::PluginFailedToDecode {
-                msg: "Received unexpected response to plugin CollapseCustomValue call".into(),
+                msg: "Received unexpected response to plugin CustomValueOp::ToBaseValue call".into(),
             }),
         }
     }
@@ -588,7 +579,6 @@ impl PluginInterface {
 
 impl Interface for PluginInterface {
     type Output = PluginInput;
-    type Context = Option<Context>;
 
     fn write(&self, input: PluginInput) -> Result<(), ShellError> {
         log::trace!("to plugin: {:?}", input);
@@ -607,42 +597,25 @@ impl Interface for PluginInterface {
         &self.stream_manager_handle
     }
 
-    fn value_to_plugin_data(
-        &self,
-        value: &Value,
-        context: &Option<Context>,
-    ) -> Result<Option<PluginData>, ShellError> {
-        if let Value::CustomValue { val, .. } = value {
-            let context = context
-                .as_ref()
-                .ok_or_else(|| ShellError::PluginFailedToEncode {
-                    msg: "Can't handle PluginCustomValue without knowing the context".into(),
-                })?;
-            match val.as_any().downcast_ref::<PluginCustomValue>() {
-                Some(plugin_data) if plugin_data.filename == context.filename() => {
-                    Ok(Some(PluginData {
-                        name: None, // plugin doesn't need it.
-                        data: plugin_data.data.clone(),
-                        span: value.span(),
-                    }))
-                }
-                _ => {
-                    let custom_value_name = val.value_string();
-                    Err(ShellError::GenericError {
-                        error: format!(
-                            "Plugin {} can not handle the custom value {}",
-                            context.command_name(),
-                            custom_value_name
-                        ),
-                        msg: format!("custom value {custom_value_name}"),
-                        span: Some(value.span()),
-                        help: None,
-                        inner: vec![],
-                    })
-                }
+    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+        // Validate the destination of values in the pipeline data
+        match data {
+            PipelineData::Value(mut value, meta) => {
+                PluginCustomValue::verify_source(&mut value, &self.state.identity)?;
+                Ok(PipelineData::Value(value, meta))
             }
-        } else {
-            Ok(None)
+            PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
+                let identity = self.state.identity.clone();
+                Ok(stream.map(move |mut value| {
+                    match PluginCustomValue::verify_source(&mut value, &identity) {
+                        Ok(()) => value,
+                        // Put the error in the stream instead
+                        Err(err) => Value::error(err, value.span()),
+                    }
+                }).into_pipeline_data_with_metadata(meta, ctrlc))
+            }
+            PipelineData::Empty |
+                PipelineData::ExternalStream { .. } => Ok(data),
         }
     }
 }
@@ -668,7 +641,7 @@ pub(crate) fn handle_engine_call(
     match call {
         EngineCall::GetConfig => {
             let context = require_context()?;
-            let config = Box::new(context.get_config()?.clone());
+            let config = Box::new(context.get_config()?);
             Ok(EngineCallResponse::Config(config))
         }
         EngineCall::EvalClosure {

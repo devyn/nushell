@@ -2,25 +2,28 @@ mod declaration;
 pub use declaration::PluginDeclaration;
 use nu_engine::documentation::get_flags_section;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 
 use crate::plugin::interface::{EngineInterfaceManager, ReceivedPluginCall};
-use crate::protocol::{CallInfo, LabeledError, PluginOutput, PluginInput};
+use crate::protocol::{CallInfo, LabeledError, PluginOutput, PluginInput, CustomValueOp};
 use crate::EncodingType;
 use std::env;
 use std::fmt::Write;
-use std::io::{BufReader, ErrorKind, Read, Write as WriteTrait};
+use std::io::{BufReader, Read, Write as WriteTrait};
 use std::path::Path;
 use std::process::{Child, ChildStdout, Command as CommandSys, Stdio};
 
-use nu_protocol::{CustomValue, PipelineData, PluginSignature, ShellError, Value};
+use nu_protocol::{PipelineData, PluginSignature, ShellError, Value};
 
 mod interface;
 pub use interface::EngineInterface;
 pub(crate) use interface::PluginInterface;
 
 mod context;
-pub(crate) use context::{PluginExecutionCommandContext, PluginExecutionNonCommandContext};
+pub(crate) use context::PluginExecutionCommandContext;
+
+mod identity;
+pub(crate) use identity::PluginIdentity;
 
 use self::interface::{InterfaceManager, PluginInterfaceManager};
 
@@ -62,7 +65,7 @@ pub trait PluginEncoder: Encoder<PluginInput> + Encoder<PluginOutput> {
     fn name(&self) -> &str;
 }
 
-pub(crate) fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
+fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
     log::trace!("Starting plugin: {path:?}, shell = {shell:?}");
 
     let mut process = match (path.extension(), shell) {
@@ -106,7 +109,10 @@ pub(crate) fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
     process
 }
 
-pub(crate) fn make_plugin_interface(mut child: Child) -> Result<PluginInterface, ShellError> {
+fn make_plugin_interface(
+    mut child: Child,
+    identity: Arc<PluginIdentity>,
+) -> Result<PluginInterface, ShellError> {
     let stdin = child
         .stdin
         .take()
@@ -125,7 +131,7 @@ pub(crate) fn make_plugin_interface(mut child: Child) -> Result<PluginInterface,
 
     let reader = BufReader::with_capacity(OUTPUT_BUFFER_SIZE, stdout);
 
-    let mut manager = PluginInterfaceManager::new((Mutex::new(stdin), encoder.clone()));
+    let mut manager = PluginInterfaceManager::new(identity, (Mutex::new(stdin), encoder.clone()));
     let interface = manager.get_interface();
     interface.hello()?;
 
@@ -149,30 +155,7 @@ pub fn get_signature(
     shell: Option<&Path>,
     current_envs: &HashMap<String, String>,
 ) -> Result<Vec<PluginSignature>, ShellError> {
-    let mut plugin_cmd = create_command(path, shell);
-    let program_name = plugin_cmd.get_program().to_os_string().into_string();
-
-    plugin_cmd.envs(current_envs);
-    let child = plugin_cmd.spawn().map_err(|err| {
-        let error_msg = match err.kind() {
-            ErrorKind::NotFound => match program_name {
-                Ok(prog_name) => {
-                    format!("Can't find {prog_name}, please make sure that {prog_name} is in PATH.")
-                }
-                _ => {
-                    format!("Error spawning child process: {err}")
-                }
-            },
-            _ => {
-                format!("Error spawning child process: {err}")
-            }
-        };
-
-        ShellError::PluginFailedToLoad { msg: error_msg }
-    })?;
-
-    // Communicate with the plugin to get the signature
-    make_plugin_interface(child)?.get_signature()
+    Arc::new(PluginIdentity::new(path, shell)).spawn(current_envs)?.get_signature()
 }
 
 /// The basic API for a Nushell plugin
@@ -464,20 +447,23 @@ pub fn serve_plugin(
                 let result = plugin.run(&name, &config, &engine, &call, input);
                 try_or_report!(engine, engine.write_response(result));
             }
-            // Collapse a custom value into plain nushell data
-            ReceivedPluginCall::CollapseCustomValue {
+            // Do an operation on a custom value
+            ReceivedPluginCall::CustomValueOp {
                 engine,
-                plugin_data,
+                custom_value,
+                op,
             } => {
-                let result = bincode::deserialize::<Box<dyn CustomValue>>(&plugin_data.data)
-                    .map_err(|err| ShellError::PluginFailedToDecode {
-                        msg: err.to_string(),
-                    })
-                    // If deserialize succeeded, call to_base_value() and then make PipelineData
-                    // to send the response.
-                    .and_then(|value| value.to_base_value(plugin_data.span))
-                    .map(|value| PipelineData::Value(value, None));
-                try_or_report!(engine, engine.write_response(result));
+                let local_value = try_or_report!(
+                    engine,
+                    custom_value.item.deserialize_to_custom_value(custom_value.span)
+                );
+                match op {
+                    CustomValueOp::ToBaseValue => {
+                        let result = local_value.to_base_value(custom_value.span)
+                            .map(|value| PipelineData::Value(value, None));
+                        try_or_report!(engine, engine.write_response(result));
+                    }
+                }
             }
         }
     }

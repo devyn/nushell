@@ -2,7 +2,8 @@ macro_rules! generate_tests {
     ($encoder:expr) => {
         use crate::protocol::{
             CallInfo, EvaluatedCall, LabeledError, PipelineDataHeader, PluginCall,
-            PluginCallResponse, PluginData, PluginInput, PluginOutput, StreamData, StreamMessage,
+            PluginCallResponse, PluginInput, PluginOutput, StreamData, StreamMessage,
+            CustomValueOp, PluginCustomValue,
         };
         use nu_protocol::{PluginSignature, Span, Spanned, SyntaxShape, Value};
 
@@ -170,17 +171,23 @@ macro_rules! generate_tests {
         }
 
         #[test]
-        fn call_round_trip_collapsecustomvalue() {
+        fn call_round_trip_customvalueop() {
             let data = vec![1, 2, 3, 4, 5, 6, 7];
             let span = Span::new(0, 20);
 
-            let collapse_custom_value = PluginCall::CollapseCustomValue(PluginData {
-                name: None,
-                data: data.clone(),
-                span,
-            });
+            let custom_value_op = PluginCall::CustomValueOp(
+                Spanned {
+                    item: PluginCustomValue {
+                        name: "Foo".into(),
+                        data: data.clone(),
+                        source: None,
+                    },
+                    span,
+                },
+                CustomValueOp::ToBaseValue,
+            );
 
-            let plugin_input = PluginInput::Call(2, collapse_custom_value);
+            let plugin_input = PluginInput::Call(2, custom_value_op);
 
             let encoder = $encoder;
             let mut buffer: Vec<u8> = Vec::new();
@@ -193,10 +200,15 @@ macro_rules! generate_tests {
                 .expect("eof");
 
             match returned {
-                PluginInput::Call(2, PluginCall::CollapseCustomValue(plugin_data)) => {
-                    assert!(plugin_data.name.is_none());
-                    assert_eq!(data, plugin_data.data);
-                    assert_eq!(span, plugin_data.span);
+                PluginInput::Call(2, PluginCall::CustomValueOp(val, op)) => {
+                    assert_eq!("Foo", val.item.name);
+                    assert_eq!(data, val.item.data);
+                    assert_eq!(span, val.span);
+                    #[allow(unreachable_patterns)]
+                    match op {
+                        CustomValueOp::ToBaseValue => (),
+                        _ => panic!("wrong op: {op:?}")
+                    }
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }
@@ -302,18 +314,20 @@ macro_rules! generate_tests {
         }
 
         #[test]
-        fn response_round_trip_plugin_data() {
-            let name = Some("test".to_string());
+        fn response_round_trip_plugin_custom_value() {
+            let name = "test";
 
             let data = vec![1, 2, 3, 4, 5];
             let span = Span::new(2, 30);
 
+            let value = Value::custom_value(Box::new(PluginCustomValue {
+                name: name.into(),
+                data: data.clone(),
+                source: None
+            }), span);
+
             let response =
-                PluginCallResponse::PipelineData(PipelineDataHeader::PluginData(PluginData {
-                    name: name.clone(),
-                    data: data.clone(),
-                    span,
-                }));
+                PluginCallResponse::PipelineData(PipelineDataHeader::Value(value));
             let output = PluginOutput::CallResponse(5, response);
 
             let encoder = $encoder;
@@ -329,13 +343,23 @@ macro_rules! generate_tests {
             match returned {
                 PluginOutput::CallResponse(
                     5,
-                    PluginCallResponse::PipelineData(PipelineDataHeader::PluginData(
-                        returned_plugin_data,
+                    PluginCallResponse::PipelineData(PipelineDataHeader::Value(
+                        returned_value,
                     )),
                 ) => {
-                    assert_eq!(name, returned_plugin_data.name);
-                    assert_eq!(data, returned_plugin_data.data);
-                    assert_eq!(span, returned_plugin_data.span);
+                    assert_eq!(span, returned_value.span());
+
+                    if let Some(plugin_val) = returned_value
+                        .as_custom_value()
+                        .unwrap()
+                        .as_any()
+                        .downcast_ref::<PluginCustomValue>()
+                    {
+                        assert_eq!(name, plugin_val.name);
+                        assert_eq!(data, plugin_val.data);
+                    } else {
+                        panic!("returned CustomValue is not a PluginCustomValue");
+                    }
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
             }

@@ -1,15 +1,15 @@
 //! Interface used by the plugin to communicate with the engine.
 
-use std::sync::{atomic::AtomicBool, mpsc, Arc, Mutex, MutexGuard};
+use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
 use nu_protocol::{
-    engine::Closure, Config, CustomValue, PipelineData, PluginSignature, ShellError, Spanned, Value,
+    engine::Closure, Config, PipelineData, PluginSignature, ShellError, Spanned, Value, ListStream, IntoInterruptiblePipelineData,
 };
 
 use crate::{
     protocol::{
         CallInfo, EngineCall, EngineCallId, EngineCallResponse, PluginCall, PluginCallId,
-        PluginCallResponse, PluginData, PluginInput, ProtocolInfo,
+        PluginCallResponse, PluginInput, ProtocolInfo, CustomValueOp, PluginCustomValue,
     },
     LabeledError, PluginOutput,
 };
@@ -34,9 +34,10 @@ pub(crate) enum ReceivedPluginCall {
         engine: EngineInterface,
         call: CallInfo<PipelineData>,
     },
-    CollapseCustomValue {
+    CustomValueOp {
         engine: EngineInterface,
-        plugin_data: PluginData,
+        custom_value: Spanned<PluginCustomValue>,
+        op: CustomValueOp,
     },
 }
 
@@ -192,7 +193,6 @@ impl EngineInterfaceManager {
 impl InterfaceManager for EngineInterfaceManager {
     type Interface = EngineInterface;
     type Input = PluginInput;
-    type Context = ();
 
     fn get_interface(&self) -> Self::Interface {
         EngineInterface {
@@ -247,7 +247,7 @@ impl InterfaceManager for EngineInterfaceManager {
                     let interface = self.interface_for_context(id);
                     // If there's an error with initialization of the input stream, just send
                     // the error response rather than failing here
-                    match self.read_pipeline_data(input, &()) {
+                    match self.read_pipeline_data(input, None) {
                         Ok(input) => self.send_plugin_call(ReceivedPluginCall::Run {
                             engine: interface,
                             call: CallInfo {
@@ -260,11 +260,12 @@ impl InterfaceManager for EngineInterfaceManager {
                         err @ Err(_) => interface.write_response(err),
                     }
                 }
-                // Send request with the plugin data
-                PluginCall::CollapseCustomValue(plugin_data) => {
-                    self.send_plugin_call(ReceivedPluginCall::CollapseCustomValue {
+                // Send request with the custom value
+                PluginCall::CustomValueOp(custom_value, op) => {
+                    self.send_plugin_call(ReceivedPluginCall::CustomValueOp {
                         engine: self.interface_for_context(id),
-                        plugin_data,
+                        custom_value,
+                        op,
                     })
                 }
             },
@@ -275,7 +276,7 @@ impl InterfaceManager for EngineInterfaceManager {
                     EngineCallResponse::PipelineData(header) => {
                         // If there's an error with initializing this stream, change it to an engine
                         // call error response, but send it anyway
-                        match self.read_pipeline_data(header, &()) {
+                        match self.read_pipeline_data(header, None) {
                             Ok(data) => EngineCallResponse::PipelineData(data),
                             Err(err) => EngineCallResponse::Error(err),
                         }
@@ -286,20 +287,29 @@ impl InterfaceManager for EngineInterfaceManager {
         }
     }
 
-    fn value_from_plugin_data(&self, data: PluginData, _context: &()) -> Result<Value, ShellError> {
-        bincode::deserialize::<Box<dyn CustomValue>>(&data.data)
-            .map(|custom_value| Value::custom_value(custom_value, data.span))
-            .map_err(|err| ShellError::PluginFailedToDecode {
-                msg: err.to_string(),
-            })
-    }
-
-    fn ctrlc(&self, _context: &()) -> Option<Arc<AtomicBool>> {
-        None
-    }
-
     fn stream_manager(&self) -> &StreamManager {
         &self.stream_manager
+    }
+
+    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+        // Serialize custom values in the pipeline data
+        match data {
+            PipelineData::Value(value, meta) => {
+                let value = PluginCustomValue::serialize_custom_values_in(value)?;
+                Ok(PipelineData::Value(value, meta))
+            }
+            PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
+                Ok(stream.map(|value| {
+                    let span = value.span();
+                    match PluginCustomValue::serialize_custom_values_in(value) {
+                        Ok(value) => value,
+                        Err(err) => Value::error(err, span)
+                    }
+                }).into_pipeline_data_with_metadata(meta, ctrlc))
+            }
+            PipelineData::Empty |
+                PipelineData::ExternalStream { .. } => Ok(data),
+        }
     }
 }
 
@@ -337,7 +347,7 @@ impl EngineInterface {
     ) -> Result<(), ShellError> {
         match result {
             Ok(data) => {
-                let (header, writer) = match self.init_write_pipeline_data(data, &()) {
+                let (header, writer) = match self.init_write_pipeline_data(data) {
                     Ok(tup) => tup,
                     // If we get an error while trying to construct the pipeline data, send that
                     // instead
@@ -386,7 +396,7 @@ impl EngineInterface {
                 redirect_stdout,
                 redirect_stderr,
             } => {
-                let (header, writer) = self.init_write_pipeline_data(input, &())?;
+                let (header, writer) = self.init_write_pipeline_data(input)?;
                 (
                     EngineCall::EvalClosure {
                         closure,
@@ -576,7 +586,6 @@ impl EngineInterface {
 
 impl Interface for EngineInterface {
     type Output = PluginOutput;
-    type Context = ();
 
     fn write(&self, output: PluginOutput) -> Result<(), ShellError> {
         log::trace!("to engine: {:?}", output);
@@ -595,26 +604,24 @@ impl Interface for EngineInterface {
         &self.stream_manager_handle
     }
 
-    fn value_to_plugin_data(
-        &self,
-        value: &Value,
-        _context: &(),
-    ) -> Result<Option<PluginData>, ShellError> {
-        let span = value.span();
-        if let Value::CustomValue { val, .. } = value {
-            bincode::serialize(&val)
-                .map(|data| {
-                    Some(PluginData {
-                        name: Some(val.value_string()),
-                        data,
-                        span,
-                    })
-                })
-                .map_err(|err| ShellError::PluginFailedToEncode {
-                    msg: err.to_string(),
-                })
-        } else {
-            Ok(None)
+    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+        // Deserialize custom values in the pipeline data
+        match data {
+            PipelineData::Value(value, meta) => {
+                let value = PluginCustomValue::deserialize_custom_values_in(value)?;
+                Ok(PipelineData::Value(value, meta))
+            }
+            PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
+                Ok(stream.map(|value| {
+                    let span = value.span();
+                    match PluginCustomValue::deserialize_custom_values_in(value) {
+                        Ok(value) => value,
+                        Err(err) => Value::error(err, span)
+                    }
+                }).into_pipeline_data_with_metadata(meta, ctrlc))
+            }
+            PipelineData::Empty |
+                PipelineData::ExternalStream { .. } => Ok(data),
         }
     }
 }

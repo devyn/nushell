@@ -1,4 +1,4 @@
-use super::{create_command, make_plugin_interface, PluginExecutionCommandContext};
+use super::{PluginExecutionCommandContext, PluginIdentity};
 use crate::protocol::{CallInfo, EvaluatedCall};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,8 +13,7 @@ use nu_protocol::{Example, PipelineData, ShellError, Value};
 pub struct PluginDeclaration {
     name: String,
     signature: PluginSignature,
-    filename: PathBuf,
-    shell: Option<PathBuf>,
+    identity: Arc<PluginIdentity>,
 }
 
 impl PluginDeclaration {
@@ -22,8 +21,7 @@ impl PluginDeclaration {
         Self {
             name: signature.sig.name.clone(),
             signature,
-            filename,
-            shell,
+            identity: Arc::new(PluginIdentity::new(filename, shell)),
         }
     }
 }
@@ -81,21 +79,10 @@ impl Command for PluginDeclaration {
         //
         // The `plugin` must match the registered name of a plugin.  For
         // `register nu_plugin_example` the plugin config lookup uses `"example"`
-        let config = self
-            .filename
-            .file_stem()
-            .and_then(|file| {
-                file.to_string_lossy()
-                    .clone()
-                    .strip_prefix("nu_plugin_")
-                    .map(|name| {
-                        nu_engine::get_config(engine_state, stack)
-                            .plugins
-                            .get(name)
-                            .cloned()
-                    })
-            })
-            .flatten()
+        let config = nu_engine::get_config(engine_state, stack)
+            .plugins
+            .get(&self.identity.plugin_name)
+            .cloned()
             .map(|value| {
                 let span = value.span();
                 match value {
@@ -114,20 +101,16 @@ impl Command for PluginDeclaration {
                 }
             });
 
-        // Set up the plugin command to execute
-        let source_file = Path::new(&self.filename);
-        let mut plugin_cmd = create_command(source_file, self.shell.as_deref());
         // We need the current environment variables for `python` based plugins
         // Or we'll likely have a problem when a plugin is implemented in a virtual Python environment.
         let current_envs = nu_engine::env::env_to_strings(engine_state, stack).unwrap_or_default();
-        plugin_cmd.envs(current_envs);
 
-        // Run the plugin command
-        let child = plugin_cmd.spawn().map_err(|err| {
+        // Start the plugin
+        let plugin = self.identity.clone().spawn(current_envs).map_err(|err| {
             let decl = engine_state.get_decl(call.decl_id);
             ShellError::GenericError {
-                error: format!("Unable to spawn plugin for {}", decl.name()),
-                msg: format!("{err}"),
+                error: format!("Unable to spawn plugin for `{}`", decl.name()),
+                msg: err.to_string(),
                 span: Some(call.head),
                 help: None,
                 inner: vec![],
@@ -136,14 +119,10 @@ impl Command for PluginDeclaration {
 
         // Create the context to execute in - this supports engine calls and custom values
         let context = Arc::new(PluginExecutionCommandContext::new(
-            self.filename.clone(),
-            self.shell.clone(),
             engine_state,
             stack,
             call,
         ));
-
-        let plugin = make_plugin_interface(child)?;
 
         plugin.run(
             CallInfo {
@@ -157,6 +136,6 @@ impl Command for PluginDeclaration {
     }
 
     fn is_plugin(&self) -> Option<(&Path, Option<&Path>)> {
-        Some((&self.filename, self.shell.as_deref()))
+        Some((&self.identity.filename, self.identity.shell.as_deref()))
     }
 }

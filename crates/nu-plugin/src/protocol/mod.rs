@@ -1,6 +1,5 @@
 mod evaluated_call;
 mod plugin_custom_value;
-mod plugin_data;
 mod protocol_info;
 
 #[cfg(test)]
@@ -11,7 +10,6 @@ use nu_protocol::{
     engine::Closure, Config, PluginSignature, RawStream, ShellError, Span, Spanned, Value,
 };
 pub use plugin_custom_value::PluginCustomValue;
-pub use plugin_data::PluginData;
 pub use protocol_info::{ProtocolInfo, Protocol, Feature};
 use serde::{Deserialize, Serialize};
 
@@ -48,9 +46,6 @@ pub enum PipelineDataHeader {
     Empty,
     /// A single value
     Value(Value),
-    /// Represents a [`nu_protocol::CustomValue`] on the plugin side, which should be encapsulated
-    /// in [PluginCustomValue] on the engine side.
-    PluginData(PluginData),
     /// Initiate [`nu_protocol::PipelineData::ListStream`].
     ///
     /// Items are sent via [`StreamData`]
@@ -100,7 +95,14 @@ impl RawStreamInfo {
 pub enum PluginCall<D> {
     Signature,
     Run(CallInfo<D>),
-    CollapseCustomValue(PluginData),
+    CustomValueOp(Spanned<PluginCustomValue>, CustomValueOp),
+}
+
+/// Operations supported for custom values.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum CustomValueOp {
+    /// [`to_base_value()`](nu_protocol::CustomValue::to_base_value)
+    ToBaseValue,
 }
 
 /// Any data sent to the plugin

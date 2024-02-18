@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::{atomic::AtomicBool, Arc},
-};
+use std::sync::{atomic::AtomicBool, Arc};
 
 use nu_engine::eval_block_with_early_return;
 use nu_protocol::{
@@ -12,10 +9,6 @@ use nu_protocol::{
 
 /// Object safe trait for abstracting operations required of the plugin context.
 pub(crate) trait PluginExecutionContext: Send + Sync {
-    /// The plugin's filename
-    fn filename(&self) -> &Path;
-    /// The shell used to execute the plugin
-    fn shell(&self) -> Option<&Path>;
     /// The [Span] for the command execution (`call.head`)
     fn command_span(&self) -> Span;
     /// The name of the command being executed
@@ -23,7 +16,7 @@ pub(crate) trait PluginExecutionContext: Send + Sync {
     /// The interrupt signal, if present
     fn ctrlc(&self) -> Option<&Arc<AtomicBool>>;
     /// Get engine configuration
-    fn get_config(&self) -> Result<&Config, ShellError>;
+    fn get_config(&self) -> Result<Config, ShellError>;
     /// Evaluate a closure passed to the plugin
     fn eval_closure(
         &self,
@@ -35,80 +28,8 @@ pub(crate) trait PluginExecutionContext: Send + Sync {
     ) -> Result<PipelineData, ShellError>;
 }
 
-/// The execution context of a non-command plugin call.
-pub(crate) struct PluginExecutionNonCommandContext {
-    filename: PathBuf,
-    shell: Option<PathBuf>,
-    command_name: String,
-    span: Span,
-}
-
-impl PluginExecutionNonCommandContext {
-    pub(crate) fn new(
-        filename: impl Into<PathBuf>,
-        shell: Option<impl Into<PathBuf>>,
-        command_name: impl Into<String>,
-        span: Span,
-    ) -> PluginExecutionNonCommandContext {
-        PluginExecutionNonCommandContext {
-            filename: filename.into(),
-            shell: shell.map(|s| s.into()),
-            command_name: command_name.into(),
-            span,
-        }
-    }
-    fn not_supported(&self, name: &str) -> ShellError {
-        ShellError::GenericError {
-            error: format!("Operation `{name}` not supported outside of plugin command context"),
-            msg: "error occurred here".into(),
-            span: Some(self.span),
-            help: None,
-            inner: vec![],
-        }
-    }
-}
-
-impl PluginExecutionContext for PluginExecutionNonCommandContext {
-    fn filename(&self) -> &Path {
-        &self.filename
-    }
-
-    fn shell(&self) -> Option<&Path> {
-        self.shell.as_deref()
-    }
-
-    fn command_span(&self) -> Span {
-        self.span
-    }
-
-    fn command_name(&self) -> &str {
-        &self.command_name
-    }
-
-    fn ctrlc(&self) -> Option<&Arc<AtomicBool>> {
-        None
-    }
-
-    fn get_config(&self) -> Result<&Config, ShellError> {
-        Err(self.not_supported("get_config"))
-    }
-
-    fn eval_closure(
-        &self,
-        _closure: Spanned<Closure>,
-        _positional: Vec<Value>,
-        _input: PipelineData,
-        _redirect_stdout: bool,
-        _redirect_stderr: bool,
-    ) -> Result<PipelineData, ShellError> {
-        Err(self.not_supported("eval_closure"))
-    }
-}
-
 /// The execution context of a plugin command.
 pub(crate) struct PluginExecutionCommandContext {
-    filename: PathBuf,
-    shell: Option<PathBuf>,
     engine_state: EngineState,
     stack: Stack,
     call: Call,
@@ -116,15 +37,11 @@ pub(crate) struct PluginExecutionCommandContext {
 
 impl PluginExecutionCommandContext {
     pub fn new(
-        filename: impl Into<PathBuf>,
-        shell: Option<impl Into<PathBuf>>,
         engine_state: &EngineState,
         stack: &Stack,
         call: &Call,
     ) -> PluginExecutionCommandContext {
         PluginExecutionCommandContext {
-            filename: filename.into(),
-            shell: shell.map(Into::into),
             engine_state: engine_state.clone(),
             stack: stack.clone(),
             call: call.clone(),
@@ -133,14 +50,6 @@ impl PluginExecutionCommandContext {
 }
 
 impl PluginExecutionContext for PluginExecutionCommandContext {
-    fn filename(&self) -> &Path {
-        &self.filename
-    }
-
-    fn shell(&self) -> Option<&Path> {
-        self.shell.as_deref()
-    }
-
     fn command_span(&self) -> Span {
         self.call.head
     }
@@ -153,8 +62,8 @@ impl PluginExecutionContext for PluginExecutionCommandContext {
         self.engine_state.ctrlc.as_ref()
     }
 
-    fn get_config(&self) -> Result<&Config, ShellError> {
-        Ok(self.engine_state.get_config())
+    fn get_config(&self) -> Result<Config, ShellError> {
+        Ok(nu_engine::get_config(&self.engine_state, &self.stack))
     }
 
     fn eval_closure(

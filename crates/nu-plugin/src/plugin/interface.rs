@@ -8,12 +8,12 @@ use std::{
     },
 };
 
-use nu_protocol::{ListStream, PipelineData, RawStream, ShellError, Value};
+use nu_protocol::{ListStream, PipelineData, RawStream, ShellError};
 
 use crate::{
     plugin::Encoder,
     protocol::{
-        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginData,
+        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader,
         RawStreamInfo, StreamMessage,
     },
     sequence::Sequence,
@@ -121,11 +121,6 @@ pub(crate) trait InterfaceManager {
     /// The input message type.
     type Input;
 
-    /// The context type. This is fed through [`.read_pipeline_data()`] to
-    /// [`.value_from_plugin_data()`] and can be used if there is special context required to
-    /// be able to handle [`PluginData`]. Set to `()` if not needed.
-    type Context;
-
     /// Make a new interface that communicates with this [`InterfaceManager`].
     fn get_interface(&self) -> Self::Interface;
 
@@ -135,19 +130,12 @@ pub(crate) trait InterfaceManager {
     /// [`StreamMessage`]s received.
     fn consume(&mut self, input: Self::Input) -> Result<(), ShellError>;
 
-    /// Convert [`PluginData`] to a [`Value`]. This should support plugin custom values as
-    /// appropriate to the interface.
-    fn value_from_plugin_data(
-        &self,
-        data: PluginData,
-        context: &Self::Context,
-    ) -> Result<Value, ShellError>;
-
-    /// Get the interrupt signal from the given context.
-    fn ctrlc(&self, context: &Self::Context) -> Option<Arc<AtomicBool>>;
-
     /// Get the [`StreamManager`] for handling operations related to stream messages.
     fn stream_manager(&self) -> &StreamManager;
+
+    /// Prepare [`PipelineData`] after reading. This is called by `read_pipeline_data()` as
+    /// a hook so that values that need special handling can be taken care of.
+    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError>;
 
     /// Consume an input stream message.
     ///
@@ -163,22 +151,18 @@ pub(crate) trait InterfaceManager {
     fn read_pipeline_data(
         &self,
         header: PipelineDataHeader,
-        context: &Self::Context,
+        ctrlc: Option<&Arc<AtomicBool>>,
     ) -> Result<PipelineData, ShellError> {
-        match header {
-            PipelineDataHeader::Empty => Ok(PipelineData::Empty),
-            PipelineDataHeader::Value(value) => Ok(PipelineData::Value(value, None)),
-            PipelineDataHeader::PluginData(data) => {
-                let value = self.value_from_plugin_data(data, context)?;
-                Ok(PipelineData::Value(value, None))
-            }
+        self.prepare_pipeline_data(match header {
+            PipelineDataHeader::Empty => PipelineData::Empty,
+            PipelineDataHeader::Value(value) => PipelineData::Value(value, None),
             PipelineDataHeader::ListStream(info) => {
                 let handle = self.stream_manager().get_handle();
                 let reader = handle.read_stream(info.id, self.get_interface())?;
-                Ok(PipelineData::ListStream(
-                    ListStream::from_stream(reader, self.ctrlc(context)),
+                PipelineData::ListStream(
+                    ListStream::from_stream(reader, ctrlc.cloned()),
                     None,
-                ))
+                )
             }
             PipelineDataHeader::ExternalStream(info) => {
                 let handle = self.stream_manager().get_handle();
@@ -187,14 +171,14 @@ pub(crate) trait InterfaceManager {
                     let reader = handle.read_stream(raw_info.id, self.get_interface())?;
                     let mut stream = RawStream::new(
                         Box::new(reader),
-                        self.ctrlc(context),
+                        ctrlc.cloned(),
                         span,
                         raw_info.known_size,
                     );
                     stream.is_binary = raw_info.is_binary;
                     Ok::<_, ShellError>(stream)
                 };
-                Ok(PipelineData::ExternalStream {
+                PipelineData::ExternalStream {
                     stdout: info.stdout.map(&new_raw_stream).transpose()?,
                     stderr: info.stderr.map(&new_raw_stream).transpose()?,
                     exit_code: info
@@ -202,15 +186,15 @@ pub(crate) trait InterfaceManager {
                         .map(|list_info| {
                             handle
                                 .read_stream(list_info.id, self.get_interface())
-                                .map(|reader| ListStream::from_stream(reader, self.ctrlc(context)))
+                                .map(|reader| ListStream::from_stream(reader, ctrlc.cloned()))
                         })
                         .transpose()?,
                     span: info.span,
                     metadata: None,
                     trim_end_newline: info.trim_end_newline,
-                })
+                }
             }
-        }
+        })
     }
 }
 
@@ -222,11 +206,6 @@ pub(crate) trait InterfaceManager {
 pub(crate) trait Interface: Clone + Send {
     /// The output message type, which must be capable of encapsulating a [`StreamMessage`].
     type Output: From<StreamMessage>;
-
-    /// The context type. This is fed through [`.init_write_pipeline_data()`] to
-    /// [`.value_to_plugin_data()`] and can be used if there is special context required to be
-    /// able to handle [`PluginData`]. Set to `()` if not needed.
-    type Context;
 
     /// Write an output message.
     fn write(&self, output: Self::Output) -> Result<(), ShellError>;
@@ -240,14 +219,9 @@ pub(crate) trait Interface: Clone + Send {
     /// Get the [`StreamManagerHandle`] for doing stream operations.
     fn stream_manager_handle(&self) -> &StreamManagerHandle;
 
-    /// Convert a [`Value`] to [`PluginData`] if applicable. This should support plugin custom
-    /// values as appropriate for the interface. Return `Ok(None)` if the `Value` does not need
-    /// to be converted, or an `Err` if it is necessary but an error occurred.
-    fn value_to_plugin_data(
-        &self,
-        value: &Value,
-        context: &Self::Context,
-    ) -> Result<Option<PluginData>, ShellError>;
+    /// Prepare [`PipelineData`] to be written. This is called by `init_write_pipeline_data()` as
+    /// a hook so that values that need special handling can be taken care of.
+    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError>;
 
     /// Initialize a write for [`PipelineData`]. This returns two parts: the header, which can be
     /// embedded in the particular message that references the stream, and a writer, which will
@@ -260,7 +234,6 @@ pub(crate) trait Interface: Clone + Send {
     fn init_write_pipeline_data(
         &self,
         data: PipelineData,
-        context: &Self::Context,
     ) -> Result<(PipelineDataHeader, PipelineDataWriter<Self>), ShellError> {
         // Allocate a stream id and a writer
         let new_stream = |high_pressure_mark: i32| {
@@ -272,14 +245,9 @@ pub(crate) trait Interface: Clone + Send {
                     .write_stream(id, self.clone(), high_pressure_mark)?;
             Ok::<_, ShellError>((id, writer))
         };
-        match data {
+        match self.prepare_pipeline_data(data)? {
             PipelineData::Value(value, _) => Ok((
-                // CustomValues may be representable as PluginData, but the specific way they're
-                // converted is interface-specific.
-                match self.value_to_plugin_data(&value, context)? {
-                    Some(plugin_data) => PipelineDataHeader::PluginData(plugin_data),
-                    None => PipelineDataHeader::Value(value),
-                },
+                PipelineDataHeader::Value(value),
                 PipelineDataWriter::NoStream,
             )),
             PipelineData::Empty => Ok((PipelineDataHeader::Empty, PipelineDataWriter::NoStream)),
