@@ -240,7 +240,7 @@ impl InterfaceManager for EngineInterfaceManager {
                 // Set up the streams from the input and reformat to a ReceivedPluginCall
                 PluginCall::Run(CallInfo {
                     name,
-                    call,
+                    mut call,
                     input,
                     config,
                 }) => {
@@ -248,15 +248,22 @@ impl InterfaceManager for EngineInterfaceManager {
                     // If there's an error with initialization of the input stream, just send
                     // the error response rather than failing here
                     match self.read_pipeline_data(input, None) {
-                        Ok(input) => self.send_plugin_call(ReceivedPluginCall::Run {
-                            engine: interface,
-                            call: CallInfo {
-                                name,
-                                call,
-                                input,
-                                config,
-                            },
-                        }),
+                        Ok(input) => {
+                            // Deserialize custom values in the arguments
+                            if let Err(err) = deserialize_call_args(&mut call) {
+                                return interface.write_response(Err(err));
+                            }
+                            // Send the plugin call to the receiver
+                            self.send_plugin_call(ReceivedPluginCall::Run {
+                                engine: interface,
+                                call: CallInfo {
+                                    name,
+                                    call,
+                                    input,
+                                    config,
+                                },
+                            })
+                        },
                         err @ Err(_) => interface.write_response(err),
                     }
                 }
@@ -311,6 +318,26 @@ impl InterfaceManager for EngineInterfaceManager {
                 PipelineData::ExternalStream { .. } => Ok(data),
         }
     }
+}
+
+/// Deserialize custom values in call arguments
+fn deserialize_call_args(call: &mut crate::EvaluatedCall) -> Result<(), ShellError> {
+    for value in call.positional.iter_mut() {
+        let taken_value =
+            std::mem::replace(value, Value::nothing(value.span()));
+
+        *value = PluginCustomValue::deserialize_custom_values_in(taken_value)?;
+    }
+
+    for (_, value) in call.named.iter_mut() {
+        if let Some(value) = value {
+            let taken_value =
+                std::mem::replace(value, Value::nothing(value.span()));
+
+            *value = PluginCustomValue::deserialize_custom_values_in(taken_value)?;
+        }
+    }
+    Ok(())
 }
 
 /// A reference through which the nushell engine can be interacted with during execution.
