@@ -79,7 +79,10 @@ fn fails_if_passing_engine_custom_values_to_plugins() {
 
     assert!(actual
         .err
-        .contains("Plugin custom-value update can not handle the custom value SQLiteDatabase"));
+        .contains("`SQLiteDatabase` cannot be sent to plugin"));
+    assert!(actual
+        .err
+        .contains("the `custom_values` plugin does not support this kind of value"));
 }
 
 #[test]
@@ -95,5 +98,8 @@ fn fails_if_passing_custom_values_across_plugins() {
 
     assert!(actual
         .err
-        .contains("Plugin inc can not handle the custom value CoolCustomValue"));
+        .contains("`CoolCustomValue` cannot be sent to plugin"));
+    assert!(actual
+        .err
+        .contains("the `inc` plugin does not support this kind of value"));
 }
