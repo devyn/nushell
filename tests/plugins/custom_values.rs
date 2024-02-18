@@ -27,6 +27,20 @@ fn can_get_custom_value_from_plugin_and_pass_it_over() {
 }
 
 #[test]
+fn can_get_custom_value_from_plugin_and_pass_it_over_as_an_argument() {
+    let actual = nu_with_plugins!(
+        cwd: "tests",
+        plugin: ("nu_plugin_custom_values"),
+        "custom-value update-arg (custom-value generate)"
+    );
+
+    assert_eq!(
+        actual.out,
+        "I used to be a custom value! My data was (abcxyz)"
+    );
+}
+
+#[test]
 fn can_generate_and_updated_multiple_types_of_custom_values() {
     let actual = nu_with_plugins!(
         cwd: "tests",
