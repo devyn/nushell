@@ -1,5 +1,5 @@
 use crate::{
-    plugin::{PluginEncoder, Encoder},
+    plugin::{Encoder, PluginEncoder},
     protocol::{PluginInput, PluginOutput},
 };
 use nu_protocol::ShellError;

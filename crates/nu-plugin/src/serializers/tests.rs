@@ -1,9 +1,9 @@
 macro_rules! generate_tests {
     ($encoder:expr) => {
         use crate::protocol::{
-            CallInfo, EvaluatedCall, LabeledError, PipelineDataHeader, PluginCall,
-            PluginCallResponse, PluginInput, PluginOutput, StreamData, StreamMessage,
-            CustomValueOp, PluginCustomValue,
+            CallInfo, CustomValueOp, EvaluatedCall, LabeledError, PipelineDataHeader, PluginCall,
+            PluginCallResponse, PluginCustomValue, PluginInput, PluginOutput, StreamData,
+            StreamMessage,
         };
         use nu_protocol::{PluginSignature, Span, Spanned, SyntaxShape, Value};
 
@@ -207,7 +207,7 @@ macro_rules! generate_tests {
                     #[allow(unreachable_patterns)]
                     match op {
                         CustomValueOp::ToBaseValue => (),
-                        _ => panic!("wrong op: {op:?}")
+                        _ => panic!("wrong op: {op:?}"),
                     }
                 }
                 _ => panic!("decoded into wrong value: {returned:?}"),
@@ -320,14 +320,16 @@ macro_rules! generate_tests {
             let data = vec![1, 2, 3, 4, 5];
             let span = Span::new(2, 30);
 
-            let value = Value::custom_value(Box::new(PluginCustomValue {
-                name: name.into(),
-                data: data.clone(),
-                source: None
-            }), span);
+            let value = Value::custom_value(
+                Box::new(PluginCustomValue {
+                    name: name.into(),
+                    data: data.clone(),
+                    source: None,
+                }),
+                span,
+            );
 
-            let response =
-                PluginCallResponse::PipelineData(PipelineDataHeader::Value(value));
+            let response = PluginCallResponse::PipelineData(PipelineDataHeader::Value(value));
             let output = PluginOutput::CallResponse(5, response);
 
             let encoder = $encoder;
@@ -343,9 +345,7 @@ macro_rules! generate_tests {
             match returned {
                 PluginOutput::CallResponse(
                     5,
-                    PluginCallResponse::PipelineData(PipelineDataHeader::Value(
-                        returned_value,
-                    )),
+                    PluginCallResponse::PipelineData(PipelineDataHeader::Value(returned_value)),
                 ) => {
                     assert_eq!(span, returned_value.span());
 

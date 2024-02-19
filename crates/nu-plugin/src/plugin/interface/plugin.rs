@@ -2,13 +2,17 @@
 
 use std::sync::{mpsc, Arc};
 
-use nu_protocol::{PipelineData, PluginSignature, ShellError, Value, ListStream, IntoInterruptiblePipelineData, Spanned};
+use nu_protocol::{
+    IntoInterruptiblePipelineData, ListStream, PipelineData, PluginSignature, ShellError, Spanned,
+    Value,
+};
 
 use crate::{
     plugin::{context::PluginExecutionContext, PluginIdentity},
     protocol::{
-        CallInfo, EngineCall, EngineCallId, EngineCallResponse, PluginCall, PluginCallId,
-        PluginCallResponse, PluginCustomValue, PluginInput, PluginOutput, ProtocolInfo, CustomValueOp,
+        CallInfo, CustomValueOp, EngineCall, EngineCallId, EngineCallResponse, PluginCall,
+        PluginCallId, PluginCallResponse, PluginCustomValue, PluginInput, PluginOutput,
+        ProtocolInfo,
     },
     sequence::Sequence,
 };
@@ -74,7 +78,10 @@ impl std::fmt::Debug for PluginInterfaceState {
             .field("identity", &self.identity)
             .field("plugin_call_id_sequence", &self.plugin_call_id_sequence)
             .field("stream_id_sequence", &self.stream_id_sequence)
-            .field("plugin_call_subscription_sender", &self.plugin_call_subscription_sender)
+            .field(
+                "plugin_call_subscription_sender",
+                &self.plugin_call_subscription_sender,
+            )
             .finish_non_exhaustive()
     }
 }
@@ -140,13 +147,12 @@ impl PluginInterfaceManager {
         // Make sure we're up to date
         self.receive_plugin_call_subscriptions();
         // Find the subscription and return the context
-        self
-            .plugin_call_subscriptions
+        self.plugin_call_subscriptions
             .iter()
             .find(|sub| sub.id == id)
             .map(|sub| sub.context.clone())
             .ok_or_else(|| ShellError::PluginFailedToDecode {
-                msg: format!("Unknown plugin call ID: {id}")
+                msg: format!("Unknown plugin call ID: {id}"),
             })
     }
 
@@ -160,7 +166,11 @@ impl PluginInterfaceManager {
         self.receive_plugin_call_subscriptions();
 
         // Remove the subscription, since this would be the last message
-        if let Some(index) = self.plugin_call_subscriptions.iter().position(|sub| sub.id == id) {
+        if let Some(index) = self
+            .plugin_call_subscriptions
+            .iter()
+            .position(|sub| sub.id == id)
+        {
             let subscription = self.plugin_call_subscriptions.swap_remove(index);
 
             if subscription
@@ -205,15 +215,12 @@ impl PluginInterfaceManager {
                 );
                 // We really have no choice here but to send the response ourselves and hope we
                 // don't block
-                self.state
-                    .writer
-                    .write(&PluginInput::EngineCallResponse(
-                        engine_call_id,
-                        EngineCallResponse::Error(ShellError::IOError {
-                            msg: "Can't make engine call because the original caller hung up"
-                                .into(),
-                        }),
-                    ))?;
+                self.state.writer.write(&PluginInput::EngineCallResponse(
+                    engine_call_id,
+                    EngineCallResponse::Error(ShellError::IOError {
+                        msg: "Can't make engine call because the original caller hung up".into(),
+                    }),
+                ))?;
                 self.state.writer.flush()?;
             }
             Ok(())
@@ -248,7 +255,9 @@ impl PluginInterfaceManager {
                 // Error to call waiters
                 self.receive_plugin_call_subscriptions();
                 for subscription in self.plugin_call_subscriptions.drain(..) {
-                    let _ = subscription.sender.send(ReceivedPluginCallMessage::Error(err.clone()));
+                    let _ = subscription
+                        .sender
+                        .send(ReceivedPluginCallMessage::Error(err.clone()));
                 }
                 return Err(err);
             }
@@ -283,8 +292,7 @@ impl InterfaceManager for PluginInterfaceManager {
                         msg: format!(
                             "Plugin is compiled for nushell version {}, \
                                 which is not compatible with version {}",
-                            info.version,
-                            local_info.version
+                            info.version, local_info.version
                         ),
                     })
                 }
@@ -293,7 +301,8 @@ impl InterfaceManager for PluginInterfaceManager {
                 // Must send protocol info first
                 Err(ShellError::PluginFailedToLoad {
                     msg: "Failed to receive initial Hello message. \
-                        This plugin might be too old".into()
+                        This plugin might be too old"
+                        .into(),
                 })
             }
             PluginOutput::Stream(message) => self.consume_stream_message(message),
@@ -327,23 +336,23 @@ impl InterfaceManager for PluginInterfaceManager {
                         input,
                         redirect_stdout,
                         redirect_stderr,
-                    } => self.read_pipeline_data(input, ctrlc).map(|input| {
-                        EngineCall::EvalClosure {
-                            closure,
-                            positional,
-                            input,
-                            redirect_stdout,
-                            redirect_stderr,
-                        }
-                    }),
+                    } => {
+                        self.read_pipeline_data(input, ctrlc)
+                            .map(|input| EngineCall::EvalClosure {
+                                closure,
+                                positional,
+                                input,
+                                redirect_stdout,
+                                redirect_stderr,
+                            })
+                    }
                 };
                 match call {
                     Ok(call) => self.send_engine_call(context, id, call),
                     // If there was an error with setting up the call, just write the error
-                    Err(err) => self.get_interface().write_engine_call_response(
-                        id,
-                        EngineCallResponse::Error(err),
-                    ),
+                    Err(err) => self
+                        .get_interface()
+                        .write_engine_call_response(id, EngineCallResponse::Error(err)),
                 }
             }
         }
@@ -356,19 +365,17 @@ impl InterfaceManager for PluginInterfaceManager {
     fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
         // Add source to any values
         match data {
-            PipelineData::Value(value, meta) =>
-                Ok(PipelineData::Value(
-                    PluginCustomValue::add_source(value, &self.state.identity),
-                    meta,
-                )),
+            PipelineData::Value(value, meta) => Ok(PipelineData::Value(
+                PluginCustomValue::add_source(value, &self.state.identity),
+                meta,
+            )),
             PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
                 let identity = self.state.identity.clone();
-                Ok(stream.map(move |value| {
-                    PluginCustomValue::add_source(value, &identity)
-                }).into_pipeline_data_with_metadata(meta, ctrlc))
-            },
-            PipelineData::Empty |
-                PipelineData::ExternalStream { .. } => Ok(data),
+                Ok(stream
+                    .map(move |value| PluginCustomValue::add_source(value, &identity))
+                    .into_pipeline_data_with_metadata(meta, ctrlc))
+            }
+            PipelineData::Empty | PipelineData::ExternalStream { .. } => Ok(data),
         }
     }
 }
@@ -432,9 +439,7 @@ impl PluginInterface {
         // Convert the call into one with a header and handle the stream, if necessary
         let (call, writer) = match call {
             PluginCall::Signature => (PluginCall::Signature, None),
-            PluginCall::CustomValueOp(value, op) => {
-                (PluginCall::CustomValueOp(value, op), None)
-            }
+            PluginCall::CustomValueOp(value, op) => (PluginCall::CustomValueOp(value, op), None),
             PluginCall::Run(CallInfo {
                 name,
                 call,
@@ -455,13 +460,17 @@ impl PluginInterface {
         };
 
         // Register the subscription to the response, and the context
-        self.state.plugin_call_subscription_sender.send(PluginCallSubscription {
-            id,
-            sender: tx,
-            context: context.clone(),
-        }).map_err(|_| ShellError::NushellFailed {
-            msg: "PluginInterfaceManager hung up and is no longer accepting plugin calls".into(),
-        })?;
+        self.state
+            .plugin_call_subscription_sender
+            .send(PluginCallSubscription {
+                id,
+                sender: tx,
+                context: context.clone(),
+            })
+            .map_err(|_| ShellError::NushellFailed {
+                msg: "PluginInterfaceManager hung up and is no longer accepting plugin calls"
+                    .into(),
+            })?;
 
         // Write request
         self.write(PluginInput::Call(id, call))?;
@@ -555,7 +564,8 @@ impl PluginInterface {
             PluginCallResponse::PipelineData(out_data) => Ok(out_data.into_value(span)),
             PluginCallResponse::Error(err) => Err(err.into()),
             _ => Err(ShellError::PluginFailedToDecode {
-                msg: "Received unexpected response to plugin CustomValueOp::ToBaseValue call".into(),
+                msg: "Received unexpected response to plugin CustomValueOp::ToBaseValue call"
+                    .into(),
             }),
         }
     }
@@ -590,16 +600,17 @@ impl Interface for PluginInterface {
             }
             PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
                 let identity = self.state.identity.clone();
-                Ok(stream.map(move |mut value| {
-                    match PluginCustomValue::verify_source(&mut value, &identity) {
-                        Ok(()) => value,
-                        // Put the error in the stream instead
-                        Err(err) => Value::error(err, value.span()),
-                    }
-                }).into_pipeline_data_with_metadata(meta, ctrlc))
+                Ok(stream
+                    .map(move |mut value| {
+                        match PluginCustomValue::verify_source(&mut value, &identity) {
+                            Ok(()) => value,
+                            // Put the error in the stream instead
+                            Err(err) => Value::error(err, value.span()),
+                        }
+                    })
+                    .into_pipeline_data_with_metadata(meta, ctrlc))
             }
-            PipelineData::Empty |
-                PipelineData::ExternalStream { .. } => Ok(data),
+            PipelineData::Empty | PipelineData::ExternalStream { .. } => Ok(data),
         }
     }
 }

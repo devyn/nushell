@@ -39,14 +39,22 @@ fn output_is_unique_even_under_contention() {
 
     std::thread::scope(|scope| {
         // Spawn four threads, all advancing the sequence simultaneously
-        let threads = (0..4).map(|_| {
-            scope.spawn(|| (0..100000).map(|_| sequence.next()).collect::<Result<Vec<_>, _>>())
-        }).collect::<Vec<_>>();
+        let threads = (0..4)
+            .map(|_| {
+                scope.spawn(|| {
+                    (0..100000)
+                        .map(|_| sequence.next())
+                        .collect::<Result<Vec<_>, _>>()
+                })
+            })
+            .collect::<Vec<_>>();
 
         // Collect all of the results into a single flat vec
-        let mut results = threads.into_iter().map(|thread| {
-            thread.join().expect("panicked").expect("error")
-        }).flatten().collect::<Vec<usize>>();
+        let mut results = threads
+            .into_iter()
+            .map(|thread| thread.join().expect("panicked").expect("error"))
+            .flatten()
+            .collect::<Vec<usize>>();
 
         // Check uniqueness
         results.sort();

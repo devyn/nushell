@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
 use nu_protocol::ShellError;
+use serde::{Deserialize, Serialize};
 
 /// Protocol information, sent as a `Hello` message on initialization. This determines the
 /// compatibility of the plugin and engine. They are considered to be compatible if the lower
@@ -49,7 +49,8 @@ impl ProtocolInfo {
             minor: Some(versions[0].minor),
             patch: Some(versions[0].patch),
             pre: versions[0].pre.clone(),
-        }.matches(&versions[1]))
+        }
+        .matches(&versions[1]))
     }
 }
 

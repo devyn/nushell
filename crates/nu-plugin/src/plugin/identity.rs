@@ -1,8 +1,12 @@
-use std::{path::{Path, PathBuf}, ffi::OsStr, sync::Arc};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use nu_protocol::ShellError;
 
-use super::{PluginInterface, create_command, make_plugin_interface};
+use super::{create_command, make_plugin_interface, PluginInterface};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginIdentity {
@@ -15,17 +19,25 @@ pub struct PluginIdentity {
 }
 
 impl PluginIdentity {
-    pub(crate) fn new(filename: impl Into<PathBuf>, shell: Option<impl Into<PathBuf>>) -> PluginIdentity {
+    pub(crate) fn new(
+        filename: impl Into<PathBuf>,
+        shell: Option<impl Into<PathBuf>>,
+    ) -> PluginIdentity {
         let filename = filename.into();
         let shell = shell.map(|s| s.into());
         // `C:\nu_plugin_inc.exe` becomes `inc`
         // `/home/nu/.cargo/bin/nu_plugin_inc` becomes `inc`
         // `/home/nu/other_inc` becomes `other_inc` as a fallback
         // a path not having a file stem, like an empty path, becomes `<unknown>`
-        let plugin_name = filename.file_stem()
-                .map(|stem| stem.to_string_lossy().into_owned())
-                .map(|stem| stem.strip_prefix("nu_plugin_").map(|s| s.to_owned()).unwrap_or(stem))
-                .unwrap_or_else(|| "<unknown>".into());
+        let plugin_name = filename
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .map(|stem| {
+                stem.strip_prefix("nu_plugin_")
+                    .map(|s| s.to_owned())
+                    .unwrap_or(stem)
+            })
+            .unwrap_or_else(|| "<unknown>".into());
         PluginIdentity {
             filename,
             shell,
@@ -35,7 +47,7 @@ impl PluginIdentity {
 
     pub(crate) fn spawn(
         self: Arc<Self>,
-        envs: impl IntoIterator<Item=(impl AsRef<OsStr>, impl AsRef<OsStr>)>,
+        envs: impl IntoIterator<Item = (impl AsRef<OsStr>, impl AsRef<OsStr>)>,
     ) -> Result<PluginInterface, ShellError> {
         let source_file = Path::new(&self.filename);
         let mut plugin_cmd = create_command(source_file, self.shell.as_deref());

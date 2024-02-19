@@ -1,10 +1,26 @@
-use std::{sync::{Arc, Mutex}, path::Path};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
-use nu_protocol::{Value, ShellError, PipelineData, Span, ListStream, RawStream, PipelineMetadata, DataSource};
+use nu_protocol::{
+    DataSource, ListStream, PipelineData, PipelineMetadata, RawStream, ShellError, Span, Value,
+};
 
-use crate::{protocol::{PluginInput, PluginOutput, PipelineDataHeader, StreamMessage, ListStreamInfo, ExternalStreamInfo, RawStreamInfo, StreamData}, sequence::Sequence, plugin::interface::PluginRead};
+use crate::{
+    plugin::interface::PluginRead,
+    protocol::{
+        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginInput, PluginOutput,
+        RawStreamInfo, StreamData, StreamMessage,
+    },
+    sequence::Sequence,
+};
 
-use super::{PluginWrite, stream::{StreamManager, StreamManagerHandle}, test_util::{TestCase, TestData}, InterfaceManager, Interface};
+use super::{
+    stream::{StreamManager, StreamManagerHandle},
+    test_util::{TestCase, TestData},
+    Interface, InterfaceManager, PluginWrite,
+};
 
 fn test_metadata() -> PipelineMetadata {
     PipelineMetadata {
@@ -51,7 +67,7 @@ impl InterfaceManager for TestInterfaceManager {
     fn consume(&mut self, input: Self::Input) -> Result<(), ShellError> {
         match input {
             PluginInput::Stream(msg) => self.consume_stream_message(msg),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
@@ -89,7 +105,7 @@ impl Interface for TestInterface {
             PipelineData::Value(Value::Binary { .. }, None) => Err(ShellError::NushellFailed {
                 msg: "TEST can't send binary".into(),
             }),
-            _ => Ok(data)
+            _ => Ok(data),
         }
     }
 }
@@ -99,7 +115,10 @@ fn read_pipeline_data_empty() -> Result<(), ShellError> {
     let manager = TestInterfaceManager::new(&TestCase::new());
     let header = PipelineDataHeader::Empty;
 
-    assert!(matches!(manager.read_pipeline_data(header, None)?, PipelineData::Empty));
+    assert!(matches!(
+        manager.read_pipeline_data(header, None)?,
+        PipelineData::Empty
+    ));
     Ok(())
 }
 
@@ -134,7 +153,10 @@ fn read_pipeline_data_list_stream() -> Result<(), ShellError> {
     let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 7 });
 
     let pipe = manager.read_pipeline_data(header, None)?;
-    assert!(matches!(pipe, PipelineData::ListStream(..)), "unexpected PipelineData: {pipe:?}");
+    assert!(
+        matches!(pipe, PipelineData::ListStream(..)),
+        "unexpected PipelineData: {pipe:?}"
+    );
 
     // need to consume input
     while let Some(msg) = test.r#in.read()? {
@@ -196,7 +218,14 @@ fn read_pipeline_data_external_stream() -> Result<(), ShellError> {
     }
 
     match pipe {
-        PipelineData::ExternalStream { stdout, stderr, exit_code, span, metadata, trim_end_newline } => {
+        PipelineData::ExternalStream {
+            stdout,
+            stderr,
+            exit_code,
+            span,
+            metadata,
+            trim_end_newline,
+        } => {
             let stdout = stdout.expect("stdout is None");
             let stderr = stderr.expect("stderr is None");
             let exit_code = exit_code.expect("exit_code is None");
@@ -210,7 +239,10 @@ fn read_pipeline_data_external_stream() -> Result<(), ShellError> {
             assert!(!stdout.is_binary);
             assert!(stderr.is_binary);
 
-            assert_eq!(Some((out_pattern.len() * iterations) as u64), stdout.known_size);
+            assert_eq!(
+                Some((out_pattern.len() * iterations) as u64),
+                stdout.known_size
+            );
             assert_eq!(None, stderr.known_size);
 
             // check the streams
@@ -245,11 +277,17 @@ fn read_pipeline_data_ctrlc() -> Result<(), ShellError> {
     let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 0 });
     let ctrlc = Default::default();
     match manager.read_pipeline_data(header, Some(&ctrlc))? {
-        PipelineData::ListStream(ListStream { ctrlc: stream_ctrlc, .. }, _) => {
+        PipelineData::ListStream(
+            ListStream {
+                ctrlc: stream_ctrlc,
+                ..
+            },
+            _,
+        ) => {
             assert!(Arc::ptr_eq(&ctrlc, &stream_ctrlc.expect("ctrlc not set")));
             Ok(())
         }
-        _ => panic!("Unexpected PipelineData, should have been ListStream")
+        _ => panic!("Unexpected PipelineData, should have been ListStream"),
     }
 }
 
@@ -258,19 +296,17 @@ fn read_pipeline_data_prepared_properly() -> Result<(), ShellError> {
     let manager = TestInterfaceManager::new(&TestCase::new());
     let header = PipelineDataHeader::ListStream(ListStreamInfo { id: 0 });
     match manager.read_pipeline_data(header, None)? {
-        PipelineData::ListStream(_, meta) => {
-            match meta {
-                Some(PipelineMetadata { data_source }) => match data_source {
-                    DataSource::FilePath(path) => {
-                        assert_eq!(Path::new("/test/path"), path);
-                        Ok(())
-                    }
-                    _ => panic!("wrong metadata: {data_source:?}"),
+        PipelineData::ListStream(_, meta) => match meta {
+            Some(PipelineMetadata { data_source }) => match data_source {
+                DataSource::FilePath(path) => {
+                    assert_eq!(Path::new("/test/path"), path);
+                    Ok(())
                 }
-                None => panic!("metadata not set"),
-            }
-        }
-        _ => panic!("Unexpected PipelineData, should have been ListStream")
+                _ => panic!("wrong metadata: {data_source:?}"),
+            },
+            None => panic!("metadata not set"),
+        },
+        _ => panic!("Unexpected PipelineData, should have been ListStream"),
     }
 }
 
@@ -301,13 +337,12 @@ fn write_pipeline_data_value() -> Result<(), ShellError> {
     let interface = manager.get_interface();
     let value = Value::test_int(7);
 
-    let (header, writer) = interface.init_write_pipeline_data(
-        PipelineData::Value(value.clone(), None),
-    )?;
+    let (header, writer) =
+        interface.init_write_pipeline_data(PipelineData::Value(value.clone(), None))?;
 
     match header {
         PipelineDataHeader::Value(read_value) => assert_eq!(value, read_value),
-        _ => panic!("unexpected header: {header:?}")
+        _ => panic!("unexpected header: {header:?}"),
     }
 
     writer.write()?;
@@ -334,7 +369,8 @@ fn write_pipeline_data_prepared_properly() {
             assert_eq!(
                 ShellError::NushellFailed {
                     msg: "TEST can't send binary".into()
-                }.to_string(),
+                }
+                .to_string(),
                 err.to_string()
             );
         }
@@ -363,7 +399,7 @@ fn write_pipeline_data_list_stream() -> Result<(), ShellError> {
 
     let info = match header {
         PipelineDataHeader::ListStream(info) => info,
-        _ => panic!("unexpected header: {header:?}")
+        _ => panic!("unexpected header: {header:?}"),
     };
 
     writer.write()?;
@@ -375,10 +411,10 @@ fn write_pipeline_data_list_stream() -> Result<(), ShellError> {
                 assert_eq!(info.id, id, "Data id");
                 match data {
                     StreamData::List(read_value) => assert_eq!(value, read_value, "Data value"),
-                    _ => panic!("unexpected Data: {data:?}")
+                    _ => panic!("unexpected Data: {data:?}"),
                 }
             }
-            other => panic!("unexpected output: {other:?}")
+            other => panic!("unexpected output: {other:?}"),
         }
     }
 
@@ -386,7 +422,7 @@ fn write_pipeline_data_list_stream() -> Result<(), ShellError> {
         PluginOutput::Stream(StreamMessage::End(id)) => {
             assert_eq!(info.id, id, "End id");
         }
-        other => panic!("unexpected output: {other:?}")
+        other => panic!("unexpected output: {other:?}"),
     }
 
     assert!(!test.has_unconsumed_write());
@@ -406,10 +442,7 @@ fn write_pipeline_data_external_stream() -> Result<(), ShellError> {
         b"these are tests".to_vec(),
     ];
     let stdout_len = stdout_bufs.iter().map(|b| b.len() as u64).sum::<u64>();
-    let stderr_bufs = vec![
-        b"error messages".to_vec(),
-        b"go here".to_vec(),
-    ];
+    let stderr_bufs = vec![b"error messages".to_vec(), b"go here".to_vec()];
     let exit_code = Value::test_int(7);
 
     let span = Span::new(400, 500);
@@ -428,7 +461,10 @@ fn write_pipeline_data_external_stream() -> Result<(), ShellError> {
             span,
             None,
         )),
-        exit_code: Some(ListStream::from_stream(std::iter::once(exit_code.clone()), None)),
+        exit_code: Some(ListStream::from_stream(
+            std::iter::once(exit_code.clone()),
+            None,
+        )),
         span,
         metadata: None,
         trim_end_newline: true,
@@ -438,7 +474,7 @@ fn write_pipeline_data_external_stream() -> Result<(), ShellError> {
 
     let info = match header {
         PipelineDataHeader::ExternalStream(info) => info,
-        _ => panic!("unexpected header: {header:?}")
+        _ => panic!("unexpected header: {header:?}"),
     };
 
     writer.write()?;
@@ -469,15 +505,15 @@ fn write_pipeline_data_external_stream() -> Result<(), ShellError> {
         match msg {
             PluginOutput::Stream(StreamMessage::Data(id, data)) => {
                 if id == stdout_info.id {
-                    let result: Result<Vec<u8>, ShellError> = data.try_into()
-                        .expect("wrong data in stdout stream");
+                    let result: Result<Vec<u8>, ShellError> =
+                        data.try_into().expect("wrong data in stdout stream");
                     assert_eq!(
                         stdout_iter.next().expect("too much data in stdout"),
                         result.expect("unexpected error in stdout stream")
                     );
                 } else if id == stderr_info.id {
-                    let result: Result<Vec<u8>, ShellError> = data.try_into()
-                        .expect("wrong data in stderr stream");
+                    let result: Result<Vec<u8>, ShellError> =
+                        data.try_into().expect("wrong data in stderr stream");
                     assert_eq!(
                         stderr_iter.next().expect("too much data in stderr"),
                         result.expect("unexpected error in stderr stream")
@@ -503,13 +539,16 @@ fn write_pipeline_data_external_stream() -> Result<(), ShellError> {
                     stderr_ended = true;
                 } else if id == exit_code_info.id {
                     assert!(!exit_code_ended, "double End of exit_code");
-                    assert!(exit_code_iter.next().is_none(), "unexpected end of exit_code");
+                    assert!(
+                        exit_code_iter.next().is_none(),
+                        "unexpected end of exit_code"
+                    );
                     exit_code_ended = true;
                 } else {
                     panic!("unrecognized stream id: {id}");
                 }
             }
-            other => panic!("unexpected output: {other:?}")
+            other => panic!("unexpected output: {other:?}"),
         }
     }
 

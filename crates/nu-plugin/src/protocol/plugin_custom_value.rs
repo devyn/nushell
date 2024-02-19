@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use nu_protocol::{CustomValue, ShellError, Value, Span, Spanned};
-use serde::{Serialize, Deserialize};
+use nu_protocol::{CustomValue, ShellError, Span, Spanned, Value};
+use serde::{Deserialize, Serialize};
 
 use crate::plugin::PluginIdentity;
 
@@ -47,7 +47,10 @@ impl CustomValue for PluginCustomValue {
         let wrap_err = |err: ShellError| ShellError::GenericError {
             error: format!(
                 "Unable to spawn plugin `{}` to get base value",
-                self.source.as_ref().map(|s| s.plugin_name.as_str()).unwrap_or("<unknown>")
+                self.source
+                    .as_ref()
+                    .map(|s| s.plugin_name.as_str())
+                    .unwrap_or("<unknown>")
             ),
             msg: err.to_string(),
             span: Some(span),
@@ -55,18 +58,21 @@ impl CustomValue for PluginCustomValue {
             inner: vec![err],
         };
 
-        let identity = self.source.clone()
-            .ok_or_else(|| wrap_err(ShellError::NushellFailed {
-                msg: "The plugin source for the custom value was not set".into()
-            }))?;
+        let identity = self.source.clone().ok_or_else(|| {
+            wrap_err(ShellError::NushellFailed {
+                msg: "The plugin source for the custom value was not set".into(),
+            })
+        })?;
 
         let empty_env: Option<(String, String)> = None;
         let plugin = identity.spawn(empty_env).map_err(&wrap_err)?;
 
-        plugin.custom_value_to_base_value(Spanned {
-            item: self.clone(),
-            span,
-        }).map_err(&wrap_err)
+        plugin
+            .custom_value_to_base_value(Spanned {
+                item: self.clone(),
+                span,
+            })
+            .map_err(&wrap_err)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -100,11 +106,12 @@ impl PluginCustomValue {
         &self,
         span: Span,
     ) -> Result<Box<dyn CustomValue>, ShellError> {
-        bincode::deserialize::<Box<dyn CustomValue>>(&self.data)
-            .map_err(|err| ShellError::CustomValueFailedToDecode {
+        bincode::deserialize::<Box<dyn CustomValue>>(&self.data).map_err(|err| {
+            ShellError::CustomValueFailedToDecode {
                 msg: err.to_string(),
-                span
-            })
+                span,
+            }
+        })
     }
 
     /// Add a [`PluginIdentity`] to all [`PluginCustomValue`]s within a value, recursively.
@@ -142,20 +149,20 @@ impl PluginCustomValue {
                 value
             }
             // All of these don't contain other values
-            Value::Bool { .. } |
-                Value::Int { .. } |
-                Value::Float { .. } |
-                Value::Filesize { .. } |
-                Value::Duration { .. } |
-                Value::Date { .. } |
-                Value::String { .. } |
-                Value::QuotedString { .. } |
-                Value::Block { .. } |
-                Value::Closure { .. } |
-                Value::Nothing { .. } |
-                Value::Error { .. } |
-                Value::Binary { .. } |
-                Value::CellPath { .. } => value,
+            Value::Bool { .. }
+            | Value::Int { .. }
+            | Value::Float { .. }
+            | Value::Filesize { .. }
+            | Value::Duration { .. }
+            | Value::Date { .. }
+            | Value::String { .. }
+            | Value::QuotedString { .. }
+            | Value::Block { .. }
+            | Value::Closure { .. }
+            | Value::Nothing { .. }
+            | Value::Error { .. }
+            | Value::Binary { .. }
+            | Value::CellPath { .. } => value,
             // LazyRecord could generate other values, but we shouldn't be receiving it anyway
             //
             // It's better to handle this as a bug
@@ -168,7 +175,10 @@ impl PluginCustomValue {
     ///
     /// This method will collapse `LazyRecord` in-place as necessary to make the guarantee,
     /// since `LazyRecord` could return something different the next time it is called.
-    pub(crate) fn verify_source(value: &mut Value, source: &PluginIdentity) -> Result<(), ShellError> {
+    pub(crate) fn verify_source(
+        value: &mut Value,
+        source: &PluginIdentity,
+    ) -> Result<(), ShellError> {
         let span = value.span();
         match value {
             // Set source on custom value
@@ -181,7 +191,7 @@ impl PluginCustomValue {
                             name: custom_value.name.clone(),
                             span,
                             dest_plugin: source.plugin_name.clone(),
-                            src_plugin: custom_value.source.as_ref().map(|s| s.plugin_name.clone())
+                            src_plugin: custom_value.source.as_ref().map(|s| s.plugin_name.clone()),
                         })
                     }
                 } else {
@@ -213,20 +223,20 @@ impl PluginCustomValue {
                 Ok(())
             }
             // All of these don't contain other values
-            Value::Bool { .. } |
-                Value::Int { .. } |
-                Value::Float { .. } |
-                Value::Filesize { .. } |
-                Value::Duration { .. } |
-                Value::Date { .. } |
-                Value::String { .. } |
-                Value::QuotedString { .. } |
-                Value::Block { .. } |
-                Value::Closure { .. } |
-                Value::Nothing { .. } |
-                Value::Error { .. } |
-                Value::Binary { .. } |
-                Value::CellPath { .. } => Ok(()),
+            Value::Bool { .. }
+            | Value::Int { .. }
+            | Value::Float { .. }
+            | Value::Filesize { .. }
+            | Value::Duration { .. }
+            | Value::Date { .. }
+            | Value::String { .. }
+            | Value::QuotedString { .. }
+            | Value::Block { .. }
+            | Value::Closure { .. }
+            | Value::Nothing { .. }
+            | Value::Error { .. }
+            | Value::Binary { .. }
+            | Value::CellPath { .. } => Ok(()),
             // LazyRecord would be a problem for us, since it could return something else the next
             // time, and we have to collect it anyway to serialize it. Collect it in place, and then
             // verify the source of the result
@@ -271,20 +281,20 @@ impl PluginCustomValue {
                 Ok(value)
             }
             // All of these don't contain other values
-            Value::Bool { .. } |
-                Value::Int { .. } |
-                Value::Float { .. } |
-                Value::Filesize { .. } |
-                Value::Duration { .. } |
-                Value::Date { .. } |
-                Value::String { .. } |
-                Value::QuotedString { .. } |
-                Value::Block { .. } |
-                Value::Closure { .. } |
-                Value::Nothing { .. } |
-                Value::Error { .. } |
-                Value::Binary { .. } |
-                Value::CellPath { .. } => Ok(value),
+            Value::Bool { .. }
+            | Value::Int { .. }
+            | Value::Float { .. }
+            | Value::Filesize { .. }
+            | Value::Duration { .. }
+            | Value::Date { .. }
+            | Value::String { .. }
+            | Value::QuotedString { .. }
+            | Value::Block { .. }
+            | Value::Closure { .. }
+            | Value::Nothing { .. }
+            | Value::Error { .. }
+            | Value::Binary { .. }
+            | Value::CellPath { .. } => Ok(value),
             // Collect any lazy records that exist and try again
             Value::LazyRecord { val, .. } => {
                 value = val.collect()?;
@@ -327,20 +337,20 @@ impl PluginCustomValue {
                 Ok(value)
             }
             // All of these don't contain other values
-            Value::Bool { .. } |
-                Value::Int { .. } |
-                Value::Float { .. } |
-                Value::Filesize { .. } |
-                Value::Duration { .. } |
-                Value::Date { .. } |
-                Value::String { .. } |
-                Value::QuotedString { .. } |
-                Value::Block { .. } |
-                Value::Closure { .. } |
-                Value::Nothing { .. } |
-                Value::Error { .. } |
-                Value::Binary { .. } |
-                Value::CellPath { .. } => Ok(value),
+            Value::Bool { .. }
+            | Value::Int { .. }
+            | Value::Float { .. }
+            | Value::Filesize { .. }
+            | Value::Duration { .. }
+            | Value::Date { .. }
+            | Value::String { .. }
+            | Value::QuotedString { .. }
+            | Value::Block { .. }
+            | Value::Closure { .. }
+            | Value::Nothing { .. }
+            | Value::Error { .. }
+            | Value::Binary { .. }
+            | Value::CellPath { .. } => Ok(value),
             // Collect any lazy records that exist and try again
             Value::LazyRecord { val, .. } => {
                 value = val.collect()?;

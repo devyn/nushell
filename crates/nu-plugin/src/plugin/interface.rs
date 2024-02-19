@@ -13,8 +13,7 @@ use nu_protocol::{ListStream, PipelineData, RawStream, ShellError};
 use crate::{
     plugin::Encoder,
     protocol::{
-        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader,
-        RawStreamInfo, StreamMessage,
+        ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, RawStreamInfo, StreamMessage,
     },
     sequence::Sequence,
 };
@@ -34,7 +33,7 @@ use self::stream::{StreamManager, StreamManagerHandle, StreamWriter, WriteStream
 mod test_util;
 
 #[cfg(test)]
-mod tests;    
+mod tests;
 
 /// The maximum number of list stream values to send without acknowledgement. This should be tuned
 /// with consideration for memory usage.
@@ -159,22 +158,15 @@ pub(crate) trait InterfaceManager {
             PipelineDataHeader::ListStream(info) => {
                 let handle = self.stream_manager().get_handle();
                 let reader = handle.read_stream(info.id, self.get_interface())?;
-                PipelineData::ListStream(
-                    ListStream::from_stream(reader, ctrlc.cloned()),
-                    None,
-                )
+                PipelineData::ListStream(ListStream::from_stream(reader, ctrlc.cloned()), None)
             }
             PipelineDataHeader::ExternalStream(info) => {
                 let handle = self.stream_manager().get_handle();
                 let span = info.span;
                 let new_raw_stream = |raw_info: RawStreamInfo| {
                     let reader = handle.read_stream(raw_info.id, self.get_interface())?;
-                    let mut stream = RawStream::new(
-                        Box::new(reader),
-                        ctrlc.cloned(),
-                        span,
-                        raw_info.known_size,
-                    );
+                    let mut stream =
+                        RawStream::new(Box::new(reader), ctrlc.cloned(), span, raw_info.known_size);
                     stream.is_binary = raw_info.is_binary;
                     Ok::<_, ShellError>(stream)
                 };
@@ -357,9 +349,8 @@ where
                     let stderr_thread = stderr.map(|(mut writer, stream)| {
                         scope.spawn(move || writer.write_all(raw_stream_iter(stream)))
                     });
-                    let exit_code_thread = exit_code.map(|(mut writer, stream)| {
-                        scope.spawn(move || writer.write_all(stream))
-                    });
+                    let exit_code_thread = exit_code
+                        .map(|(mut writer, stream)| scope.spawn(move || writer.write_all(stream)));
                     // Optimize for stdout: if only stdout is present, don't spawn any other
                     // threads.
                     if let Some((mut writer, stream)) = stdout {
@@ -369,15 +360,15 @@ where
                     exit_code_thread.map(|t| t.join().unwrap()).transpose()?;
                     Ok(())
                 })
-            },
+            }
         }
     }
 
     /// Write all of the data in each of the streams. This method returns immediately; any necessary
     /// write will happen in the background. If a thread was spawned, its handle is returned.
-    pub(crate) fn write_background(self)
-        -> Option<std::thread::JoinHandle<Result<(), ShellError>>>
-    {
+    pub(crate) fn write_background(
+        self,
+    ) -> Option<std::thread::JoinHandle<Result<(), ShellError>>> {
         match self {
             PipelineDataWriter::NoStream => None,
             _ => Some(std::thread::spawn(move || {
@@ -388,7 +379,7 @@ where
                     log::warn!("Error while writing pipeline in background: {err}");
                 }
                 result
-            }))
+            })),
         }
     }
 }

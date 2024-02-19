@@ -399,7 +399,10 @@ fn stream_manager_multi_stream_read_scenario() -> Result<(), ShellError> {
     }
 
     // Should be end of stream
-    assert!(rx.try_recv().is_err(), "more messages written to stream than expected");
+    assert!(
+        rx.try_recv().is_err(),
+        "more messages written to stream than expected"
+    );
 
     Ok(())
 }

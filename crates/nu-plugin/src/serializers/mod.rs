@@ -1,4 +1,4 @@
-use crate::plugin::{PluginEncoder, Encoder};
+use crate::plugin::{Encoder, PluginEncoder};
 use nu_protocol::ShellError;
 
 pub mod json;
@@ -42,21 +42,14 @@ where
     json::JsonSerializer: Encoder<T>,
     msgpack::MsgPackSerializer: Encoder<T>,
 {
-    fn encode(
-        &self,
-        data: &T,
-        writer: &mut impl std::io::Write,
-    ) -> Result<(), ShellError> {
+    fn encode(&self, data: &T, writer: &mut impl std::io::Write) -> Result<(), ShellError> {
         match self {
             EncodingType::Json(encoder) => encoder.encode(data, writer),
             EncodingType::MsgPack(encoder) => encoder.encode(data, writer),
         }
     }
 
-    fn decode(
-        &self,
-        reader: &mut impl std::io::BufRead,
-    ) -> Result<Option<T>, ShellError> {
+    fn decode(&self, reader: &mut impl std::io::BufRead) -> Result<Option<T>, ShellError> {
         match self {
             EncodingType::Json(encoder) => encoder.decode(reader),
             EncodingType::MsgPack(encoder) => encoder.decode(reader),

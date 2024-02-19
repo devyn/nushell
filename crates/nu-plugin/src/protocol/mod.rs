@@ -10,7 +10,7 @@ use nu_protocol::{
     engine::Closure, Config, PluginSignature, RawStream, ShellError, Span, Spanned, Value,
 };
 pub use plugin_custom_value::PluginCustomValue;
-pub use protocol_info::{ProtocolInfo, Protocol, Feature};
+pub use protocol_info::{Feature, Protocol, ProtocolInfo};
 use serde::{Deserialize, Serialize};
 
 /// A sequential identifier for a stream
@@ -245,13 +245,19 @@ impl From<ShellError> for LabeledError {
             let span = Span::new(offset, offset + labeled_span.len());
             LabeledError {
                 label: error.to_string(),
-                msg: labeled_span.label().map(|label| label.to_owned()).unwrap_or_else(|| "".into()),
+                msg: labeled_span
+                    .label()
+                    .map(|label| label.to_owned())
+                    .unwrap_or_else(|| "".into()),
                 span: Some(span),
             }
         } else {
             LabeledError {
                 label: error.to_string(),
-                msg: error.help().map(|help| help.to_string()).unwrap_or_else(|| "".into()),
+                msg: error
+                    .help()
+                    .map(|help| help.to_string())
+                    .unwrap_or_else(|| "".into()),
                 span: None,
             }
         }

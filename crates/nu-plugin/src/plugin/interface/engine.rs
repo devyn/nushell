@@ -3,13 +3,14 @@
 use std::sync::{mpsc, Arc};
 
 use nu_protocol::{
-    engine::Closure, Config, PipelineData, PluginSignature, ShellError, Spanned, Value, ListStream, IntoInterruptiblePipelineData,
+    engine::Closure, Config, IntoInterruptiblePipelineData, ListStream, PipelineData,
+    PluginSignature, ShellError, Spanned, Value,
 };
 
 use crate::{
     protocol::{
-        CallInfo, EngineCall, EngineCallId, EngineCallResponse, PluginCall, PluginCallId,
-        PluginCallResponse, PluginInput, ProtocolInfo, CustomValueOp, PluginCustomValue,
+        CallInfo, CustomValueOp, EngineCall, EngineCallId, EngineCallResponse, PluginCall,
+        PluginCallId, PluginCallResponse, PluginCustomValue, PluginInput, ProtocolInfo,
     },
     LabeledError, PluginOutput,
 };
@@ -62,7 +63,10 @@ impl std::fmt::Debug for EngineInterfaceState {
         f.debug_struct("EngineInterfaceState")
             .field("engine_call_id_sequence", &self.engine_call_id_sequence)
             .field("stream_id_sequence", &self.stream_id_sequence)
-            .field("engine_call_subscription_sender", &self.engine_call_subscription_sender)
+            .field(
+                "engine_call_subscription_sender",
+                &self.engine_call_subscription_sender,
+            )
             .finish_non_exhaustive()
     }
 }
@@ -213,8 +217,7 @@ impl InterfaceManager for EngineInterfaceManager {
                         msg: format!(
                             "Plugin is compiled for nushell version {}, \
                                 which is not compatible with version {}",
-                            local_info.version,
-                            info.version
+                            local_info.version, info.version
                         ),
                     })
                 }
@@ -223,7 +226,8 @@ impl InterfaceManager for EngineInterfaceManager {
                 // Must send protocol info first
                 Err(ShellError::PluginFailedToLoad {
                     msg: "Failed to receive initial Hello message. \
-                        This engine might be too old".into()
+                        This engine might be too old"
+                        .into(),
                 })
             }
             PluginInput::Stream(message) => self.consume_stream_message(message),
@@ -259,7 +263,7 @@ impl InterfaceManager for EngineInterfaceManager {
                                     config,
                                 },
                             })
-                        },
+                        }
                         err @ Err(_) => interface.write_response(err),
                     }
                 }
@@ -301,17 +305,16 @@ impl InterfaceManager for EngineInterfaceManager {
                 let value = PluginCustomValue::deserialize_custom_values_in(value)?;
                 Ok(PipelineData::Value(value, meta))
             }
-            PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
-                Ok(stream.map(|value| {
+            PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => Ok(stream
+                .map(|value| {
                     let span = value.span();
                     match PluginCustomValue::deserialize_custom_values_in(value) {
                         Ok(value) => value,
-                        Err(err) => Value::error(err, span)
+                        Err(err) => Value::error(err, span),
                     }
-                }).into_pipeline_data_with_metadata(meta, ctrlc))
-            }
-            PipelineData::Empty |
-                PipelineData::ExternalStream { .. } => Ok(data),
+                })
+                .into_pipeline_data_with_metadata(meta, ctrlc)),
+            PipelineData::Empty | PipelineData::ExternalStream { .. } => Ok(data),
         }
     }
 }
@@ -319,16 +322,14 @@ impl InterfaceManager for EngineInterfaceManager {
 /// Deserialize custom values in call arguments
 fn deserialize_call_args(call: &mut crate::EvaluatedCall) -> Result<(), ShellError> {
     for value in call.positional.iter_mut() {
-        let taken_value =
-            std::mem::replace(value, Value::nothing(value.span()));
+        let taken_value = std::mem::replace(value, Value::nothing(value.span()));
 
         *value = PluginCustomValue::deserialize_custom_values_in(taken_value)?;
     }
 
     for (_, value) in call.named.iter_mut() {
         if let Some(value) = value {
-            let taken_value =
-                std::mem::replace(value, Value::nothing(value.span()));
+            let taken_value = std::mem::replace(value, Value::nothing(value.span()));
 
             *value = PluginCustomValue::deserialize_custom_values_in(taken_value)?;
         }
@@ -436,11 +437,13 @@ impl EngineInterface {
         };
 
         // Register the channel
-        self.state.engine_call_subscription_sender.send((id, tx)).map_err(|_| {
-            ShellError::NushellFailed {
-                msg: "EngineInterfaceManager hung up and is no longer accepting engine calls".into(),
-            }
-        })?;
+        self.state
+            .engine_call_subscription_sender
+            .send((id, tx))
+            .map_err(|_| ShellError::NushellFailed {
+                msg: "EngineInterfaceManager hung up and is no longer accepting engine calls"
+                    .into(),
+            })?;
 
         // Write request
         self.write(PluginOutput::EngineCall { context, id, call })?;
@@ -636,17 +639,16 @@ impl Interface for EngineInterface {
                 let value = PluginCustomValue::serialize_custom_values_in(value)?;
                 Ok(PipelineData::Value(value, meta))
             }
-            PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
-                Ok(stream.map(|value| {
+            PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => Ok(stream
+                .map(|value| {
                     let span = value.span();
                     match PluginCustomValue::serialize_custom_values_in(value) {
                         Ok(value) => value,
-                        Err(err) => Value::error(err, span)
+                        Err(err) => Value::error(err, span),
                     }
-                }).into_pipeline_data_with_metadata(meta, ctrlc))
-            }
-            PipelineData::Empty |
-                PipelineData::ExternalStream { .. } => Ok(data),
+                })
+                .into_pipeline_data_with_metadata(meta, ctrlc)),
+            PipelineData::Empty | PipelineData::ExternalStream { .. } => Ok(data),
         }
     }
 }

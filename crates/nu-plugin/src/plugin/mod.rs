@@ -3,10 +3,10 @@ pub use declaration::PluginDeclaration;
 use nu_engine::documentation::get_flags_section;
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 use crate::plugin::interface::{EngineInterfaceManager, ReceivedPluginCall};
-use crate::protocol::{CallInfo, LabeledError, PluginOutput, PluginInput, CustomValueOp};
+use crate::protocol::{CallInfo, CustomValueOp, LabeledError, PluginInput, PluginOutput};
 use crate::EncodingType;
 use std::env;
 use std::fmt::Write;
@@ -41,11 +41,7 @@ pub trait Encoder<T>: Clone + Send + Sync {
     /// Returns [ShellError::IOError] if there was a problem writing, or
     /// [ShellError::PluginFailedToEncode] for a serialization error.
     #[doc(hidden)]
-    fn encode(
-        &self,
-        data: &T,
-        writer: &mut impl std::io::Write,
-    ) -> Result<(), ShellError>;
+    fn encode(&self, data: &T, writer: &mut impl std::io::Write) -> Result<(), ShellError>;
 
     /// Deserialize a value from the [`PluginEncoder`]'s format
     ///
@@ -54,10 +50,7 @@ pub trait Encoder<T>: Clone + Send + Sync {
     /// Returns [ShellError::IOError] if there was a problem reading, or
     /// [ShellError::PluginFailedToDecode] for a deserialization error.
     #[doc(hidden)]
-    fn decode(
-        &self,
-        reader: &mut impl std::io::BufRead,
-    ) -> Result<Option<T>, ShellError>;
+    fn decode(&self, reader: &mut impl std::io::BufRead) -> Result<Option<T>, ShellError>;
 }
 
 /// Encoding scheme that defines a plugin's communication protocol with Nu
@@ -170,7 +163,9 @@ pub fn get_signature(
     shell: Option<&Path>,
     current_envs: &HashMap<String, String>,
 ) -> Result<Vec<PluginSignature>, ShellError> {
-    Arc::new(PluginIdentity::new(path, shell)).spawn(current_envs)?.get_signature()
+    Arc::new(PluginIdentity::new(path, shell))
+        .spawn(current_envs)?
+        .get_signature()
 }
 
 /// The basic API for a Nushell plugin
@@ -359,15 +354,16 @@ impl<T: Plugin> StreamingPlugin for T {
 ///    serve_plugin(&mut MyPlugin::new(), MsgPackSerializer)
 /// }
 /// ```
-pub fn serve_plugin(
-    plugin: &mut impl StreamingPlugin,
-    encoder: impl PluginEncoder + 'static,
-) {
+pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncoder + 'static) {
     let mut args = env::args().skip(1);
     let number_of_args = args.len();
     let first_arg = args.nth(0);
 
-    if number_of_args == 0 || first_arg.as_ref().is_some_and(|arg| arg == "-h" || arg == "--help") {
+    if number_of_args == 0
+        || first_arg
+            .as_ref()
+            .is_some_and(|arg| arg == "-h" || arg == "--help")
+    {
         print_help(plugin, encoder);
         std::process::exit(0)
     }
@@ -381,8 +377,10 @@ pub fn serve_plugin(
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|_| "plugin".into())
         );
-        eprintln!("If you are running from Nushell, this plugin may be incompatible with the \
-            version of nushell you are using.");
+        eprintln!(
+            "If you are running from Nushell, this plugin may be incompatible with the \
+            version of nushell you are using."
+        );
         std::process::exit(1)
     }
 
@@ -488,11 +486,14 @@ pub fn serve_plugin(
             } => {
                 let local_value = try_or_report!(
                     engine,
-                    custom_value.item.deserialize_to_custom_value(custom_value.span)
+                    custom_value
+                        .item
+                        .deserialize_to_custom_value(custom_value.span)
                 );
                 match op {
                     CustomValueOp::ToBaseValue => {
-                        let result = local_value.to_base_value(custom_value.span)
+                        let result = local_value
+                            .to_base_value(custom_value.span)
                             .map(|value| PipelineData::Value(value, None));
                         try_or_report!(engine, engine.write_response(result));
                     }
@@ -505,10 +506,7 @@ pub fn serve_plugin(
     drop(interface);
 }
 
-fn print_help(
-    plugin: &mut impl StreamingPlugin,
-    encoder: impl PluginEncoder,
-) {
+fn print_help(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncoder) {
     println!("Nushell Plugin");
     println!("Encoder: {}", encoder.name());
 

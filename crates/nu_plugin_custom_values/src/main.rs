@@ -4,7 +4,7 @@ mod second_custom_value;
 use cool_custom_value::CoolCustomValue;
 use nu_plugin::{serve_plugin, MsgPackSerializer, Plugin};
 use nu_plugin::{EvaluatedCall, LabeledError};
-use nu_protocol::{Category, PluginSignature, ShellError, Value, SyntaxShape};
+use nu_protocol::{Category, PluginSignature, ShellError, SyntaxShape, Value};
 use second_custom_value::SecondCustomValue;
 
 struct CustomValuePlugin;
@@ -23,7 +23,11 @@ impl Plugin for CustomValuePlugin {
                 .category(Category::Experimental),
             PluginSignature::build("custom-value update-arg")
                 .usage("PluginSignature for a plugin that updates a custom value as an argument")
-                .required("custom_value", SyntaxShape::Any, "the custom value to update")
+                .required(
+                    "custom_value",
+                    SyntaxShape::Any,
+                    "the custom value to update",
+                )
                 .category(Category::Experimental),
         ]
     }

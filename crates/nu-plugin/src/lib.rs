@@ -49,9 +49,7 @@ mod protocol;
 mod sequence;
 mod serializers;
 
-pub use plugin::{
-    serve_plugin, EngineInterface, Plugin, PluginEncoder, StreamingPlugin,
-};
+pub use plugin::{serve_plugin, EngineInterface, Plugin, PluginEncoder, StreamingPlugin};
 pub use protocol::{EvaluatedCall, LabeledError};
 pub use serializers::{json::JsonSerializer, msgpack::MsgPackSerializer};
 
