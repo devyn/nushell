@@ -238,10 +238,9 @@ pub(crate) trait Interface: Clone + Send {
             Ok::<_, ShellError>((id, writer))
         };
         match self.prepare_pipeline_data(data)? {
-            PipelineData::Value(value, _) => Ok((
-                PipelineDataHeader::Value(value),
-                PipelineDataWriter::None,
-            )),
+            PipelineData::Value(value, _) => {
+                Ok((PipelineDataHeader::Value(value), PipelineDataWriter::None))
+            }
             PipelineData::Empty => Ok((PipelineDataHeader::Empty, PipelineDataWriter::None)),
             PipelineData::ListStream(stream, _) => {
                 let (id, writer) = new_stream(LIST_STREAM_HIGH_PRESSURE)?;
@@ -356,9 +355,13 @@ where
                     if let Some((mut writer, stream)) = stdout {
                         writer.write_all(raw_stream_iter(stream))?;
                     }
-                    let panicked = |thread_name: &str| Err(ShellError::NushellFailed {
-                        msg: format!("{thread_name} thread panicked in PipelineDataWriter::write"),
-                    });
+                    let panicked = |thread_name: &str| {
+                        Err(ShellError::NushellFailed {
+                            msg: format!(
+                                "{thread_name} thread panicked in PipelineDataWriter::write"
+                            ),
+                        })
+                    };
                     stderr_thread
                         .map(|t| t.join().unwrap_or_else(|_| panicked("stderr")))
                         .transpose()?;

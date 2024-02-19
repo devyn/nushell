@@ -15,7 +15,7 @@
 //! function, which will handle all of the input and output serialization when
 //! invoked by Nushell.
 //!
-//! ```
+//! ```rust,no_run
 //! use nu_plugin::{EvaluatedCall, LabeledError, MsgPackSerializer, Plugin, serve_plugin};
 //! use nu_protocol::{PluginSignature, Value};
 //!

@@ -203,6 +203,10 @@ pub fn get_signature(
 ///         Ok(Value::string("Hello, World!".to_owned(), call.head))
 ///     }
 /// }
+///
+/// # fn main() {
+/// #     serve_plugin(&mut HelloPlugin{}, MsgPackSerializer)
+/// # }
 /// ```
 pub trait Plugin {
     /// The signature of the plugin
@@ -276,6 +280,10 @@ pub trait Plugin {
 ///         }, None)?)
 ///     }
 /// }
+///
+/// # fn main() {
+/// #     serve_plugin(&mut LowercasePlugin{}, MsgPackSerializer)
+/// # }
 /// ```
 pub trait StreamingPlugin {
     /// The signature of the plugin
@@ -342,7 +350,7 @@ impl<T: Plugin> StreamingPlugin for T {
 /// When creating a new plugin this function is typically used as the main entry
 /// point for the plugin, e.g.
 ///
-/// ```
+/// ```rust,no_run
 /// # use nu_plugin::*;
 /// # use nu_protocol::{PluginSignature, Value};
 /// # struct MyPlugin;

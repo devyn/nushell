@@ -1,6 +1,9 @@
 //! Interface used by the plugin to communicate with the engine.
 
-use std::sync::{mpsc, Arc};
+use std::{
+    collections::{btree_map, BTreeMap},
+    sync::{mpsc, Arc},
+};
 
 use nu_protocol::{
     engine::Closure, Config, IntoInterruptiblePipelineData, ListStream, PipelineData,
@@ -81,7 +84,8 @@ pub(crate) struct EngineInterfaceManager {
     /// Receiver for PluginCalls. This is usually taken after initialization
     plugin_call_receiver: Option<mpsc::Receiver<ReceivedPluginCall>>,
     /// Subscriptions for engine call responses
-    engine_call_subscriptions: Vec<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>,
+    engine_call_subscriptions:
+        BTreeMap<EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>>,
     /// Receiver for engine call subscriptions
     engine_call_subscription_receiver:
         mpsc::Receiver<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>,
@@ -105,7 +109,7 @@ impl EngineInterfaceManager {
             }),
             plugin_call_sender: plug_tx,
             plugin_call_receiver: Some(plug_rx),
-            engine_call_subscriptions: vec![],
+            engine_call_subscriptions: BTreeMap::new(),
             engine_call_subscription_receiver: subscription_rx,
             stream_manager: StreamManager::new(),
             protocol_info: None,
@@ -145,13 +149,15 @@ impl EngineInterfaceManager {
         response: EngineCallResponse<PipelineData>,
     ) -> Result<(), ShellError> {
         // Ensure all of the subscriptions have been flushed out of the receiver
-        while let Ok(subscription) = self.engine_call_subscription_receiver.try_recv() {
-            self.engine_call_subscriptions.push(subscription);
+        while let Ok((id, subscription)) = self.engine_call_subscription_receiver.try_recv() {
+            if let btree_map::Entry::Vacant(e) = self.engine_call_subscriptions.entry(id) {
+                e.insert(subscription);
+            } else {
+                log::warn!("Duplicate engine call ID ignored: {id}")
+            }
         }
-        let senders = &mut self.engine_call_subscriptions;
         // Remove the sender - there is only one response per engine call
-        if let Some(index) = senders.iter().position(|(sender_id, _)| *sender_id == id) {
-            let (_, sender) = senders.swap_remove(index);
+        if let Some(sender) = self.engine_call_subscriptions.remove(&id) {
             if sender.send(response).is_err() {
                 log::warn!("Received an engine call response for id={id}, but the caller hung up");
             }

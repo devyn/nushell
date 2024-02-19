@@ -1,6 +1,9 @@
 //! Interface used by the engine to communicate with the plugin.
 
-use std::sync::{mpsc, Arc};
+use std::{
+    collections::{btree_map, BTreeMap},
+    sync::{mpsc, Arc},
+};
 
 use nu_protocol::{
     IntoInterruptiblePipelineData, ListStream, PipelineData, PluginSignature, ShellError, Spanned,
@@ -67,7 +70,7 @@ struct PluginInterfaceState {
     /// Sequence for generating stream ids
     stream_id_sequence: Sequence,
     /// Sender to subscribe to a plugin call response
-    plugin_call_subscription_sender: mpsc::Sender<PluginCallSubscription>,
+    plugin_call_subscription_sender: mpsc::Sender<(PluginCallId, PluginCallSubscription)>,
     /// The synchronized output writer
     writer: Box<dyn PluginWrite<PluginInput>>,
 }
@@ -90,8 +93,6 @@ impl std::fmt::Debug for PluginInterfaceState {
 /// response.
 #[derive(Debug)]
 struct PluginCallSubscription {
-    /// The ID of the plugin call being subscribed to
-    id: PluginCallId,
     /// The sender back to the thread that is waiting for the plugin call response
     sender: mpsc::Sender<ReceivedPluginCallMessage>,
     /// Optional context for the environment of a plugin call for servicing engine calls
@@ -108,9 +109,9 @@ pub(crate) struct PluginInterfaceManager {
     /// Protocol version info, set after `Hello` received
     protocol_info: Option<ProtocolInfo>,
     /// Subscriptions for messages related to plugin calls
-    plugin_call_subscriptions: Vec<PluginCallSubscription>,
+    plugin_call_subscriptions: BTreeMap<PluginCallId, PluginCallSubscription>,
     /// Receiver for plugin call subscriptions
-    plugin_call_subscription_receiver: mpsc::Receiver<PluginCallSubscription>,
+    plugin_call_subscription_receiver: mpsc::Receiver<(PluginCallId, PluginCallSubscription)>,
 }
 
 impl PluginInterfaceManager {
@@ -130,15 +131,19 @@ impl PluginInterfaceManager {
             }),
             stream_manager: StreamManager::new(),
             protocol_info: None,
-            plugin_call_subscriptions: vec![],
+            plugin_call_subscriptions: BTreeMap::new(),
             plugin_call_subscription_receiver: subscription_rx,
         }
     }
 
     /// Consume pending messages in the `plugin_call_subscription_receiver`
     fn receive_plugin_call_subscriptions(&mut self) {
-        while let Ok(subscription) = self.plugin_call_subscription_receiver.try_recv() {
-            self.plugin_call_subscriptions.push(subscription);
+        while let Ok((id, subscription)) = self.plugin_call_subscription_receiver.try_recv() {
+            if let btree_map::Entry::Vacant(e) = self.plugin_call_subscriptions.entry(id) {
+                e.insert(subscription);
+            } else {
+                log::warn!("Duplicate plugin call ID ignored: {id}");
+            }
         }
     }
 
@@ -148,8 +153,7 @@ impl PluginInterfaceManager {
         self.receive_plugin_call_subscriptions();
         // Find the subscription and return the context
         self.plugin_call_subscriptions
-            .iter()
-            .find(|sub| sub.id == id)
+            .get(&id)
             .map(|sub| sub.context.clone())
             .ok_or_else(|| ShellError::PluginFailedToDecode {
                 msg: format!("Unknown plugin call ID: {id}"),
@@ -166,13 +170,7 @@ impl PluginInterfaceManager {
         self.receive_plugin_call_subscriptions();
 
         // Remove the subscription, since this would be the last message
-        if let Some(index) = self
-            .plugin_call_subscriptions
-            .iter()
-            .position(|sub| sub.id == id)
-        {
-            let subscription = self.plugin_call_subscriptions.swap_remove(index);
-
+        if let Some(subscription) = self.plugin_call_subscriptions.remove(&id) {
             if subscription
                 .sender
                 .send(ReceivedPluginCallMessage::Response(response))
@@ -199,11 +197,7 @@ impl PluginInterfaceManager {
         self.receive_plugin_call_subscriptions();
 
         // Don't remove the sender, as there could be more calls or responses
-        if let Some(subscription) = self
-            .plugin_call_subscriptions
-            .iter()
-            .find(|sub| sub.id == plugin_call_id)
-        {
+        if let Some(subscription) = self.plugin_call_subscriptions.get(&plugin_call_id) {
             if subscription
                 .sender
                 .send(ReceivedPluginCallMessage::EngineCall(engine_call_id, call))
@@ -254,7 +248,9 @@ impl PluginInterfaceManager {
                 let _ = self.stream_manager.broadcast_read_error(err.clone());
                 // Error to call waiters
                 self.receive_plugin_call_subscriptions();
-                for subscription in self.plugin_call_subscriptions.drain(..) {
+                for subscription in
+                    std::mem::take(&mut self.plugin_call_subscriptions).into_values()
+                {
                     let _ = subscription
                         .sender
                         .send(ReceivedPluginCallMessage::Error(err.clone()));
@@ -462,11 +458,13 @@ impl PluginInterface {
         // Register the subscription to the response, and the context
         self.state
             .plugin_call_subscription_sender
-            .send(PluginCallSubscription {
+            .send((
                 id,
-                sender: tx,
-                context: context.clone(),
-            })
+                PluginCallSubscription {
+                    sender: tx,
+                    context: context.clone(),
+                },
+            ))
             .map_err(|_| ShellError::NushellFailed {
                 msg: "PluginInterfaceManager hung up and is no longer accepting plugin calls"
                     .into(),
