@@ -88,8 +88,10 @@ fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
                     // If `command_switch` is set, we need to pass the path + arg as one argument
                     // e.g. sh -c "nu_plugin_inc --stdio"
                     let mut combined = path.as_os_str().to_owned();
-                    combined.push(OsStr::new(" "));
-                    combined.push(OsStr::new(&input_arg.take().unwrap()));
+                    if let Some(arg) = input_arg.take() {
+                        combined.push(OsStr::new(" "));
+                        combined.push(OsStr::new(arg));
+                    }
                     process.arg(combined);
 
                     process
@@ -357,7 +359,7 @@ impl<T: Plugin> StreamingPlugin for T {
 pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncoder + 'static) {
     let mut args = env::args().skip(1);
     let number_of_args = args.len();
-    let first_arg = args.nth(0);
+    let first_arg = args.next();
 
     if number_of_args == 0
         || first_arg

@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, btree_map},
     iter::FusedIterator,
     marker::PhantomData,
     sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, Weak},
@@ -490,7 +490,7 @@ impl StreamManager {
     /// Broadcast an error to all stream readers. This is useful for error propagation.
     pub(crate) fn broadcast_read_error(&self, error: ShellError) -> Result<(), ShellError> {
         let state = self.lock()?;
-        for (_, channel) in &state.reading_streams {
+        for channel in state.reading_streams.values() {
             // Ignore send errors.
             let _ = channel.send(Err(error.clone()));
         }
@@ -502,7 +502,7 @@ impl StreamManager {
     // because they'll know when the `Sender` is dropped automatically
     fn drop_all_writers(&self) -> Result<(), ShellError> {
         let mut state = self.lock()?;
-        let writers = std::mem::replace(&mut state.writing_streams, BTreeMap::new());
+        let writers = std::mem::take(&mut state.writing_streams);
         for (_, signal) in writers {
             if let Some(signal) = signal.upgrade() {
                 // more important that we send to all than handling an error
@@ -565,8 +565,8 @@ impl StreamManagerHandle {
         let (tx, rx) = mpsc::channel();
         self.with_lock(|mut state| {
             // Must be exclusive
-            if !state.reading_streams.contains_key(&id) {
-                state.reading_streams.insert(id, tx);
+            if let btree_map::Entry::Vacant(e) = state.reading_streams.entry(id) {
+                e.insert(tx);
                 Ok(())
             } else {
                 Err(ShellError::GenericError {
@@ -603,8 +603,8 @@ impl StreamManagerHandle {
                 .writing_streams
                 .retain(|_, signal| signal.strong_count() > 0);
             // Must be exclusive
-            if !state.writing_streams.contains_key(&id) {
-                state.writing_streams.insert(id, Arc::downgrade(&signal));
+            if let btree_map::Entry::Vacant(e) = state.writing_streams.entry(id) {
+                e.insert(Arc::downgrade(&signal));
                 Ok(())
             } else {
                 Err(ShellError::GenericError {

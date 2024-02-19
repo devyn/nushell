@@ -171,8 +171,8 @@ pub(crate) trait InterfaceManager {
                     Ok::<_, ShellError>(stream)
                 };
                 PipelineData::ExternalStream {
-                    stdout: info.stdout.map(&new_raw_stream).transpose()?,
-                    stderr: info.stderr.map(&new_raw_stream).transpose()?,
+                    stdout: info.stdout.map(new_raw_stream).transpose()?,
+                    stderr: info.stderr.map(new_raw_stream).transpose()?,
                     exit_code: info
                         .exit_code
                         .map(|list_info| {
@@ -240,9 +240,9 @@ pub(crate) trait Interface: Clone + Send {
         match self.prepare_pipeline_data(data)? {
             PipelineData::Value(value, _) => Ok((
                 PipelineDataHeader::Value(value),
-                PipelineDataWriter::NoStream,
+                PipelineDataWriter::None,
             )),
-            PipelineData::Empty => Ok((PipelineDataHeader::Empty, PipelineDataWriter::NoStream)),
+            PipelineData::Empty => Ok((PipelineDataHeader::Empty, PipelineDataWriter::None)),
             PipelineData::ListStream(stream, _) => {
                 let (id, writer) = new_stream(LIST_STREAM_HIGH_PRESSURE)?;
                 Ok((
@@ -316,7 +316,7 @@ where
 /// [`PipelineDataWriter::write()`] to write all of the data contained within the streams.
 #[must_use]
 pub(crate) enum PipelineDataWriter<W: WriteStreamMessage> {
-    NoStream,
+    None,
     ListStream(StreamWriter<W>, ListStream),
     ExternalStream {
         stdout: Option<(StreamWriter<W>, RawStream)>,
@@ -333,7 +333,7 @@ where
     pub(crate) fn write(self) -> Result<(), ShellError> {
         match self {
             // If no stream was contained in the PipelineData, do nothing.
-            PipelineDataWriter::NoStream => Ok(()),
+            PipelineDataWriter::None => Ok(()),
             // Write a list stream.
             PipelineDataWriter::ListStream(mut writer, stream) => {
                 writer.write_all(stream)?;
@@ -356,8 +356,15 @@ where
                     if let Some((mut writer, stream)) = stdout {
                         writer.write_all(raw_stream_iter(stream))?;
                     }
-                    stderr_thread.map(|t| t.join().unwrap()).transpose()?;
-                    exit_code_thread.map(|t| t.join().unwrap()).transpose()?;
+                    let panicked = |thread_name: &str| Err(ShellError::NushellFailed {
+                        msg: format!("{thread_name} thread panicked in PipelineDataWriter::write"),
+                    });
+                    stderr_thread
+                        .map(|t| t.join().unwrap_or_else(|_| panicked("stderr")))
+                        .transpose()?;
+                    exit_code_thread
+                        .map(|t| t.join().unwrap_or_else(|_| panicked("exit_code")))
+                        .transpose()?;
                     Ok(())
                 })
             }
@@ -370,7 +377,7 @@ where
         self,
     ) -> Option<std::thread::JoinHandle<Result<(), ShellError>>> {
         match self {
-            PipelineDataWriter::NoStream => None,
+            PipelineDataWriter::None => None,
             _ => Some(std::thread::spawn(move || {
                 let result = self.write();
                 if let Err(ref err) = result {

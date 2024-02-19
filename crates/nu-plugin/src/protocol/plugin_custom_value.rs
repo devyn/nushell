@@ -65,14 +65,14 @@ impl CustomValue for PluginCustomValue {
         })?;
 
         let empty_env: Option<(String, String)> = None;
-        let plugin = identity.spawn(empty_env).map_err(&wrap_err)?;
+        let plugin = identity.spawn(empty_env).map_err(wrap_err)?;
 
         plugin
             .custom_value_to_base_value(Spanned {
                 item: self.clone(),
                 span,
             })
-            .map_err(&wrap_err)
+            .map_err(wrap_err)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

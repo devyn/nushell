@@ -228,7 +228,7 @@ impl From<LabeledError> for ShellError {
                 error: error.label,
                 msg: "".into(),
                 span: None,
-                help: (!error.msg.is_empty()).then(|| error.msg),
+                help: (!error.msg.is_empty()).then_some(error.msg),
                 inner: vec![],
             }
         }
