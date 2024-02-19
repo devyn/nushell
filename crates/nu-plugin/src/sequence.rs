@@ -52,8 +52,7 @@ fn output_is_unique_even_under_contention() {
         // Collect all of the results into a single flat vec
         let mut results = threads
             .into_iter()
-            .map(|thread| thread.join().expect("panicked").expect("error"))
-            .flatten()
+            .flat_map(|thread| thread.join().expect("panicked").expect("error"))
             .collect::<Vec<usize>>();
 
         // Check uniqueness

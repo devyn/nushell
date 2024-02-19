@@ -5,10 +5,7 @@ use std::{
 
 use nu_protocol::ShellError;
 
-use super::{
-    EngineInterface, EngineInterfaceManager, PluginInterface, PluginInterfaceManager, PluginRead,
-    PluginWrite,
-};
+use super::{PluginRead, PluginWrite};
 
 /// Mock read/write helper for the engine and plugin interfaces.
 #[derive(Debug, Clone)]
