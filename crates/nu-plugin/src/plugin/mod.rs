@@ -2,6 +2,7 @@ mod declaration;
 pub use declaration::PluginDeclaration;
 use nu_engine::documentation::get_flags_section;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::sync::{Mutex, Arc};
 
 use crate::plugin::interface::{EngineInterfaceManager, ReceivedPluginCall};
@@ -68,6 +69,10 @@ pub trait PluginEncoder: Encoder<PluginInput> + Encoder<PluginOutput> {
 fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
     log::trace!("Starting plugin: {path:?}, shell = {shell:?}");
 
+    // There is only one mode supported at the moment, but the idea is that future
+    // communication methods could be supported if desirable
+    let mut input_arg = Some("--stdio");
+
     let mut process = match (path.extension(), shell) {
         (_, Some(shell)) => {
             let mut process = std::process::Command::new(shell);
@@ -76,18 +81,23 @@ fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
             process
         }
         (Some(extension), None) => {
-            let (shell, separator) = match extension.to_str() {
+            let (shell, command_switch) = match extension.to_str() {
                 Some("cmd") | Some("bat") => (Some("cmd"), Some("/c")),
                 Some("sh") => (Some("sh"), Some("-c")),
                 Some("py") => (Some("python"), None),
                 _ => (None, None),
             };
 
-            match (shell, separator) {
-                (Some(shell), Some(separator)) => {
+            match (shell, command_switch) {
+                (Some(shell), Some(command_switch)) => {
                     let mut process = std::process::Command::new(shell);
-                    process.arg(separator);
-                    process.arg(path);
+                    process.arg(command_switch);
+                    // If `command_switch` is set, we need to pass the path + arg as one argument
+                    // e.g. sh -c "nu_plugin_inc --stdio"
+                    let mut combined = path.as_os_str().to_owned();
+                    combined.push(OsStr::new(" "));
+                    combined.push(OsStr::new(&input_arg.take().unwrap()));
+                    process.arg(combined);
 
                     process
                 }
@@ -102,6 +112,11 @@ fn create_command(path: &Path, shell: Option<&Path>) -> CommandSys {
         }
         (None, None) => std::process::Command::new(path),
     };
+
+    // Pass input_arg, unless we consumed it already
+    if let Some(input_arg) = input_arg {
+        process.arg(input_arg);
+    }
 
     // Both stdout and stdin are piped so we can receive information from the plugin
     process.stdout(Stdio::piped()).stdin(Stdio::piped());
@@ -348,9 +363,27 @@ pub fn serve_plugin(
     plugin: &mut impl StreamingPlugin,
     encoder: impl PluginEncoder + 'static,
 ) {
-    if env::args().any(|arg| (arg == "-h") || (arg == "--help")) {
+    let mut args = env::args().skip(1);
+    let number_of_args = args.len();
+    let first_arg = args.nth(0);
+
+    if number_of_args == 0 || first_arg.as_ref().is_some_and(|arg| arg == "-h" || arg == "--help") {
         print_help(plugin, encoder);
         std::process::exit(0)
+    }
+
+    // Must pass --stdio for plugin execution. Any other arg is an error to give us options in the
+    // future.
+    if number_of_args > 1 || !first_arg.is_some_and(|arg| arg == "--stdio") {
+        eprintln!(
+            "{}: This plugin must be run from within Nushell.",
+            env::current_exe()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|_| "plugin".into())
+        );
+        eprintln!("If you are running from Nushell, this plugin may be incompatible with the \
+            version of nushell you are using.");
+        std::process::exit(1)
     }
 
     // tell nushell encoding.
