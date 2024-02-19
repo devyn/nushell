@@ -317,7 +317,7 @@ impl InterfaceManager for PluginInterfaceManager {
             }
             PluginOutput::EngineCall { context, id, call } => {
                 // Handle reading the pipeline data, if any
-                let exec_context = self.get_context(id)?;
+                let exec_context = self.get_context(context)?;
                 let ctrlc = exec_context.as_ref().and_then(|c| c.0.ctrlc());
                 let call = match call {
                     EngineCall::GetConfig => Ok(EngineCall::GetConfig),
