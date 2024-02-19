@@ -1,6 +1,6 @@
 //! Interface used by the plugin to communicate with the engine.
 
-use std::sync::{mpsc, Arc, Mutex, MutexGuard};
+use std::sync::{mpsc, Arc};
 
 use nu_protocol::{
     engine::Closure, Config, PipelineData, PluginSignature, ShellError, Spanned, Value, ListStream, IntoInterruptiblePipelineData,
@@ -50,24 +50,11 @@ struct EngineInterfaceState {
     engine_call_id_sequence: Sequence,
     /// Sequence for generating stream ids
     stream_id_sequence: Sequence,
-    /// Channels waiting for a response to an engine call
-    engine_call_response_senders:
-        Mutex<Vec<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>>,
+    /// Sender to subscribe to an engine call response
+    engine_call_subscription_sender:
+        mpsc::Sender<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>,
     /// The synchronized output writer
     writer: Box<dyn PluginWrite<PluginOutput>>,
-}
-
-impl EngineInterfaceState {
-    fn lock_engine_call_response_senders(
-        &self,
-    ) -> Result<MutexGuard<Vec<(usize, mpsc::Sender<EngineCallResponse<PipelineData>>)>>, ShellError>
-    {
-        self.engine_call_response_senders
-            .lock()
-            .map_err(|_| ShellError::NushellFailed {
-                msg: "engine_call_response_senders mutex poisoned".into(),
-            })
-    }
 }
 
 impl std::fmt::Debug for EngineInterfaceState {
@@ -75,14 +62,12 @@ impl std::fmt::Debug for EngineInterfaceState {
         f.debug_struct("EngineInterfaceState")
             .field("engine_call_id_sequence", &self.engine_call_id_sequence)
             .field("stream_id_sequence", &self.stream_id_sequence)
-            .field(
-                "engine_call_response_senders",
-                &self.engine_call_response_senders,
-            )
+            .field("engine_call_subscription_sender", &self.engine_call_subscription_sender)
             .finish_non_exhaustive()
     }
 }
 
+/// Manages reading and dispatching messages for [`EngineInterface`]s.
 #[derive(Debug)]
 pub(crate) struct EngineInterfaceManager {
     /// Shared state
@@ -91,6 +76,11 @@ pub(crate) struct EngineInterfaceManager {
     plugin_call_sender: mpsc::Sender<ReceivedPluginCall>,
     /// Receiver for PluginCalls. This is usually taken after initialization
     plugin_call_receiver: Option<mpsc::Receiver<ReceivedPluginCall>>,
+    /// Subscriptions for engine call responses
+    engine_call_subscriptions: Vec<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>,
+    /// Receiver for engine call subscriptions
+    engine_call_subscription_receiver:
+        mpsc::Receiver<(EngineCallId, mpsc::Sender<EngineCallResponse<PipelineData>>)>,
     /// Manages stream messages and state
     stream_manager: StreamManager,
     /// Protocol version info, set after `Hello` received
@@ -100,16 +90,19 @@ pub(crate) struct EngineInterfaceManager {
 impl EngineInterfaceManager {
     pub(crate) fn new(writer: impl PluginWrite<PluginOutput> + 'static) -> EngineInterfaceManager {
         let (plug_tx, plug_rx) = mpsc::channel();
+        let (subscription_tx, subscription_rx) = mpsc::channel();
 
         EngineInterfaceManager {
             state: Arc::new(EngineInterfaceState {
                 engine_call_id_sequence: Sequence::default(),
                 stream_id_sequence: Sequence::default(),
-                engine_call_response_senders: Mutex::new(Vec::new()),
+                engine_call_subscription_sender: subscription_tx,
                 writer: Box::new(writer),
             }),
             plugin_call_sender: plug_tx,
             plugin_call_receiver: Some(plug_rx),
+            engine_call_subscriptions: vec![],
+            engine_call_subscription_receiver: subscription_rx,
             stream_manager: StreamManager::new(),
             protocol_info: None,
         }
@@ -143,15 +136,18 @@ impl EngineInterfaceManager {
 
     /// Send a [`EngineCallResponse`] to the appropriate sender
     fn send_engine_call_response(
-        &self,
+        &mut self,
         id: EngineCallId,
         response: EngineCallResponse<PipelineData>,
     ) -> Result<(), ShellError> {
-        let mut senders = self.state.lock_engine_call_response_senders()?;
+        // Ensure all of the subscriptions have been flushed out of the receiver
+        while let Ok(subscription) = self.engine_call_subscription_receiver.try_recv() {
+            self.engine_call_subscriptions.push(subscription);
+        }
+        let senders = &mut self.engine_call_subscriptions;
         // Remove the sender - there is only one response per engine call
         if let Some(index) = senders.iter().position(|(sender_id, _)| *sender_id == id) {
             let (_, sender) = senders.swap_remove(index);
-            drop(senders);
             if sender.send(response).is_err() {
                 log::warn!("Received an engine call response for id={id}, but the caller hung up");
             }
@@ -440,9 +436,11 @@ impl EngineInterface {
         };
 
         // Register the channel
-        self.state
-            .lock_engine_call_response_senders()?
-            .push((id, tx));
+        self.state.engine_call_subscription_sender.send((id, tx)).map_err(|_| {
+            ShellError::NushellFailed {
+                msg: "EngineInterfaceManager hung up and is no longer accepting engine calls".into(),
+            }
+        })?;
 
         // Write request
         self.write(PluginOutput::EngineCall { context, id, call })?;

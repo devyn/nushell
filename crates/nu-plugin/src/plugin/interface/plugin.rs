@@ -1,6 +1,6 @@
 //! Interface used by the engine to communicate with the plugin.
 
-use std::sync::{mpsc, Arc, Mutex, MutexGuard};
+use std::sync::{mpsc, Arc};
 
 use nu_protocol::{PipelineData, PluginSignature, ShellError, Value, ListStream, IntoInterruptiblePipelineData, Spanned};
 
@@ -62,11 +62,8 @@ struct PluginInterfaceState {
     plugin_call_id_sequence: Sequence,
     /// Sequence for generating stream ids
     stream_id_sequence: Sequence,
-    /// Channels waiting for a response to a plugin call
-    plugin_call_response_senders:
-        Mutex<Vec<(PluginCallId, mpsc::Sender<ReceivedPluginCallMessage>)>>,
-    /// Contexts for plugin calls
-    contexts: Mutex<Vec<(PluginCallId, Context)>>,
+    /// Sender to subscribe to a plugin call response
+    plugin_call_subscription_sender: mpsc::Sender<PluginCallSubscription>,
     /// The synchronized output writer
     writer: Box<dyn PluginWrite<PluginInput>>,
 }
@@ -77,58 +74,24 @@ impl std::fmt::Debug for PluginInterfaceState {
             .field("identity", &self.identity)
             .field("plugin_call_id_sequence", &self.plugin_call_id_sequence)
             .field("stream_id_sequence", &self.stream_id_sequence)
-            .field(
-                "plugin_call_response_senders",
-                &self.plugin_call_response_senders,
-            )
-            .field("contexts", &self.contexts)
+            .field("plugin_call_subscription_sender", &self.plugin_call_subscription_sender)
             .finish_non_exhaustive()
     }
 }
 
-impl PluginInterfaceState {
-    fn lock_plugin_call_response_senders(
-        &self,
-    ) -> Result<MutexGuard<Vec<(usize, mpsc::Sender<ReceivedPluginCallMessage>)>>, ShellError> {
-        self.plugin_call_response_senders
-            .lock()
-            .map_err(|_| ShellError::NushellFailed {
-                msg: "plugin_call_response_senders mutex poisoned due to panic".into(),
-            })
-    }
-
-    fn lock_contexts(&self) -> Result<MutexGuard<Vec<(PluginCallId, Context)>>, ShellError> {
-        self.contexts.lock().map_err(|_| ShellError::NushellFailed {
-            msg: "contexts mutex poisoned due to panic".into(),
-        })
-    }
-
-    fn get_context(&self, id: PluginCallId) -> Result<Option<Context>, ShellError> {
-        Ok(self
-            .lock_contexts()?
-            .iter()
-            .find(|(context_id, _)| *context_id == id)
-            .map(|(_, context)| context.clone()))
-    }
-
-    fn add_context(&self, id: PluginCallId, context: Context) -> Result<(), ShellError> {
-        self.lock_contexts()?.push((id, context));
-        Ok(())
-    }
-
-    fn remove_context(&self, id: PluginCallId) -> Result<Option<Context>, ShellError> {
-        let mut contexts = self.lock_contexts()?;
-        if let Some(index) = contexts
-            .iter()
-            .position(|(context_id, _)| *context_id == id)
-        {
-            Ok(Some(contexts.swap_remove(index).1))
-        } else {
-            Ok(None)
-        }
-    }
+/// Sent to the [`PluginInterfaceManager`] before making a plugin call to indicate interest in its
+/// response.
+#[derive(Debug)]
+struct PluginCallSubscription {
+    /// The ID of the plugin call being subscribed to
+    id: PluginCallId,
+    /// The sender back to the thread that is waiting for the plugin call response
+    sender: mpsc::Sender<ReceivedPluginCallMessage>,
+    /// Optional context for the environment of a plugin call for servicing engine calls
+    context: Option<Context>,
 }
 
+/// Manages reading and dispatching messages for [`PluginInterface`]s.
 #[derive(Debug)]
 pub(crate) struct PluginInterfaceManager {
     /// Shared state
@@ -137,6 +100,10 @@ pub(crate) struct PluginInterfaceManager {
     stream_manager: StreamManager,
     /// Protocol version info, set after `Hello` received
     protocol_info: Option<ProtocolInfo>,
+    /// Subscriptions for messages related to plugin calls
+    plugin_call_subscriptions: Vec<PluginCallSubscription>,
+    /// Receiver for plugin call subscriptions
+    plugin_call_subscription_receiver: mpsc::Receiver<PluginCallSubscription>,
 }
 
 impl PluginInterfaceManager {
@@ -144,42 +111,60 @@ impl PluginInterfaceManager {
         identity: Arc<PluginIdentity>,
         writer: impl PluginWrite<PluginInput> + 'static,
     ) -> PluginInterfaceManager {
+        let (subscription_tx, subscription_rx) = mpsc::channel();
+
         PluginInterfaceManager {
             state: Arc::new(PluginInterfaceState {
                 identity,
                 plugin_call_id_sequence: Sequence::default(),
                 stream_id_sequence: Sequence::default(),
-                plugin_call_response_senders: Mutex::new(Vec::new()),
-                contexts: Mutex::new(Vec::new()),
+                plugin_call_subscription_sender: subscription_tx,
                 writer: Box::new(writer),
             }),
             stream_manager: StreamManager::new(),
             protocol_info: None,
+            plugin_call_subscriptions: vec![],
+            plugin_call_subscription_receiver: subscription_rx,
         }
+    }
+
+    /// Consume pending messages in the `plugin_call_subscription_receiver`
+    fn receive_plugin_call_subscriptions(&mut self) {
+        while let Ok(subscription) = self.plugin_call_subscription_receiver.try_recv() {
+            self.plugin_call_subscriptions.push(subscription);
+        }
+    }
+
+    /// Find the context corresponding to the given plugin call id
+    fn get_context(&mut self, id: PluginCallId) -> Result<Option<Context>, ShellError> {
+        // Make sure we're up to date
+        self.receive_plugin_call_subscriptions();
+        // Find the subscription and return the context
+        self
+            .plugin_call_subscriptions
+            .iter()
+            .find(|sub| sub.id == id)
+            .map(|sub| sub.context.clone())
+            .ok_or_else(|| ShellError::PluginFailedToDecode {
+                msg: format!("Unknown plugin call ID: {id}")
+            })
     }
 
     /// Send a [`PluginCallResponse`] to the appropriate sender
     fn send_plugin_call_response(
-        &self,
+        &mut self,
         id: PluginCallId,
         response: PluginCallResponse<PipelineData>,
     ) -> Result<(), ShellError> {
-        let mut senders = self
-            .state
-            .plugin_call_response_senders
-            .lock()
-            .map_err(|_| ShellError::NushellFailed {
-                msg: "plugin_call_response_senders mutex poisoned".into(),
-            })?;
-        // Remove the sender, since this would be the last message
-        if let Some(index) = senders.iter().position(|(sender_id, _)| *sender_id == id) {
-            let (_, sender) = senders.swap_remove(index);
-            drop(senders);
+        // Ensure we're caught up on the subscriptions made
+        self.receive_plugin_call_subscriptions();
 
-            // Can also remove the context if it exists.
-            self.state.remove_context(id)?;
+        // Remove the subscription, since this would be the last message
+        if let Some(index) = self.plugin_call_subscriptions.iter().position(|sub| sub.id == id) {
+            let subscription = self.plugin_call_subscriptions.swap_remove(index);
 
-            if sender
+            if subscription
+                .sender
                 .send(ReceivedPluginCallMessage::Response(response))
                 .is_err()
             {
@@ -195,25 +180,25 @@ impl PluginInterfaceManager {
 
     /// Send an [`EngineCall`] to the appropriate sender
     fn send_engine_call(
-        &self,
+        &mut self,
         plugin_call_id: PluginCallId,
         engine_call_id: EngineCallId,
         call: EngineCall<PipelineData>,
     ) -> Result<(), ShellError> {
-        let senders = self
-            .state
-            .plugin_call_response_senders
-            .lock()
-            .map_err(|_| ShellError::NushellFailed {
-                msg: "plugin_call_response_senders mutex poisoned".into(),
-            })?;
+        // Ensure we're caught up on the subscriptions made
+        self.receive_plugin_call_subscriptions();
+
         // Don't remove the sender, as there could be more calls or responses
-        if let Some((_, sender)) = senders.iter().find(|(id, _)| *id == plugin_call_id) {
-            if sender
+        if let Some(subscription) = self
+            .plugin_call_subscriptions
+            .iter()
+            .find(|sub| sub.id == plugin_call_id)
+        {
+            if subscription
+                .sender
                 .send(ReceivedPluginCallMessage::EngineCall(engine_call_id, call))
                 .is_err()
             {
-                drop(senders);
                 log::warn!(
                     "Received an engine call for plugin_call_id={plugin_call_id}, \
                     but the caller hung up"
@@ -261,10 +246,9 @@ impl PluginInterfaceManager {
                 // Error to streams
                 let _ = self.stream_manager.broadcast_read_error(err.clone());
                 // Error to call waiters
-                if let Ok(senders) = self.state.lock_plugin_call_response_senders() {
-                    for (_, sender) in senders.iter() {
-                        let _ = sender.send(ReceivedPluginCallMessage::Error(err.clone()));
-                    }
+                self.receive_plugin_call_subscriptions();
+                for subscription in self.plugin_call_subscriptions.drain(..) {
+                    let _ = subscription.sender.send(ReceivedPluginCallMessage::Error(err.clone()));
                 }
                 return Err(err);
             }
@@ -321,7 +305,7 @@ impl InterfaceManager for PluginInterfaceManager {
                     PluginCallResponse::PipelineData(data) => {
                         // If there's an error with initializing this stream, change it to a plugin
                         // error response, but send it anyway
-                        let exec_context = self.state.get_context(id)?;
+                        let exec_context = self.get_context(id)?;
                         let ctrlc = exec_context.as_ref().and_then(|c| c.0.ctrlc());
                         match self.read_pipeline_data(data, ctrlc) {
                             Ok(data) => PluginCallResponse::PipelineData(data),
@@ -333,7 +317,7 @@ impl InterfaceManager for PluginInterfaceManager {
             }
             PluginOutput::EngineCall { context, id, call } => {
                 // Handle reading the pipeline data, if any
-                let exec_context = self.state.get_context(id)?;
+                let exec_context = self.get_context(id)?;
                 let ctrlc = exec_context.as_ref().and_then(|c| c.0.ctrlc());
                 let call = match call {
                     EngineCall::GetConfig => Ok(EngineCall::GetConfig),
@@ -389,6 +373,7 @@ impl InterfaceManager for PluginInterfaceManager {
     }
 }
 
+/// A reference through which a plugin can be interacted with during execution.
 #[derive(Debug, Clone)]
 pub(crate) struct PluginInterface {
     /// Shared state
@@ -444,11 +429,6 @@ impl PluginInterface {
         let id = self.state.plugin_call_id_sequence.next()?;
         let (tx, rx) = mpsc::channel();
 
-        // Register the context, if provided
-        if let Some(context) = context.clone() {
-            self.state.add_context(id, context)?;
-        }
-
         // Convert the call into one with a header and handle the stream, if necessary
         let (call, writer) = match call {
             PluginCall::Signature => (PluginCall::Signature, None),
@@ -474,10 +454,14 @@ impl PluginInterface {
             }
         };
 
-        // Register the channel
-        self.state
-            .lock_plugin_call_response_senders()?
-            .push((id, tx));
+        // Register the subscription to the response, and the context
+        self.state.plugin_call_subscription_sender.send(PluginCallSubscription {
+            id,
+            sender: tx,
+            context: context.clone(),
+        }).map_err(|_| ShellError::NushellFailed {
+            msg: "PluginInterfaceManager hung up and is no longer accepting plugin calls".into(),
+        })?;
 
         // Write request
         self.write(PluginInput::Call(id, call))?;
