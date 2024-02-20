@@ -358,17 +358,20 @@ impl InterfaceManager for PluginInterfaceManager {
         &self.stream_manager
     }
 
-    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+    fn prepare_pipeline_data(&self, mut data: PipelineData) -> Result<PipelineData, ShellError> {
         // Add source to any values
         match data {
-            PipelineData::Value(value, meta) => Ok(PipelineData::Value(
-                PluginCustomValue::add_source(value, &self.state.identity),
-                meta,
-            )),
+            PipelineData::Value(ref mut value, _) => {
+                PluginCustomValue::add_source(value, &self.state.identity);
+                Ok(data)
+            }
             PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => {
                 let identity = self.state.identity.clone();
                 Ok(stream
-                    .map(move |value| PluginCustomValue::add_source(value, &identity))
+                    .map(move |mut value| {
+                        PluginCustomValue::add_source(&mut value, &identity);
+                        value
+                    })
                     .into_pipeline_data_with_metadata(meta, ctrlc))
             }
             PipelineData::Empty | PipelineData::ExternalStream { .. } => Ok(data),

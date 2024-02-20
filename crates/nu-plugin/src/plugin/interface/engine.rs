@@ -304,20 +304,19 @@ impl InterfaceManager for EngineInterfaceManager {
         &self.stream_manager
     }
 
-    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+    fn prepare_pipeline_data(&self, mut data: PipelineData) -> Result<PipelineData, ShellError> {
         // Deserialize custom values in the pipeline data
         match data {
-            PipelineData::Value(value, meta) => {
-                let value = PluginCustomValue::deserialize_custom_values_in(value)?;
-                Ok(PipelineData::Value(value, meta))
+            PipelineData::Value(ref mut value, _) => {
+                PluginCustomValue::deserialize_custom_values_in(value)?;
+                Ok(data)
             }
             PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => Ok(stream
-                .map(|value| {
+                .map(|mut value| {
                     let span = value.span();
-                    match PluginCustomValue::deserialize_custom_values_in(value) {
-                        Ok(value) => value,
-                        Err(err) => Value::error(err, span),
-                    }
+                    PluginCustomValue::deserialize_custom_values_in(&mut value)
+                        .map(|()| value)
+                        .unwrap_or_else(|err| Value::error(err, span))
                 })
                 .into_pipeline_data_with_metadata(meta, ctrlc)),
             PipelineData::Empty | PipelineData::ExternalStream { .. } => Ok(data),
@@ -327,20 +326,13 @@ impl InterfaceManager for EngineInterfaceManager {
 
 /// Deserialize custom values in call arguments
 fn deserialize_call_args(call: &mut crate::EvaluatedCall) -> Result<(), ShellError> {
-    for value in call.positional.iter_mut() {
-        let taken_value = std::mem::replace(value, Value::nothing(value.span()));
-
-        *value = PluginCustomValue::deserialize_custom_values_in(taken_value)?;
-    }
-
-    for (_, value) in call.named.iter_mut() {
-        if let Some(value) = value {
-            let taken_value = std::mem::replace(value, Value::nothing(value.span()));
-
-            *value = PluginCustomValue::deserialize_custom_values_in(taken_value)?;
-        }
-    }
-    Ok(())
+    call.positional
+        .iter_mut()
+        .try_for_each(PluginCustomValue::deserialize_custom_values_in)?;
+    call.named
+        .iter_mut()
+        .flat_map(|(_, value)| value.as_mut())
+        .try_for_each(PluginCustomValue::deserialize_custom_values_in)
 }
 
 /// A reference through which the nushell engine can be interacted with during execution.
@@ -638,20 +630,19 @@ impl Interface for EngineInterface {
         &self.stream_manager_handle
     }
 
-    fn prepare_pipeline_data(&self, data: PipelineData) -> Result<PipelineData, ShellError> {
+    fn prepare_pipeline_data(&self, mut data: PipelineData) -> Result<PipelineData, ShellError> {
         // Serialize custom values in the pipeline data
         match data {
-            PipelineData::Value(value, meta) => {
-                let value = PluginCustomValue::serialize_custom_values_in(value)?;
-                Ok(PipelineData::Value(value, meta))
+            PipelineData::Value(ref mut value, _) => {
+                PluginCustomValue::serialize_custom_values_in(value)?;
+                Ok(data)
             }
             PipelineData::ListStream(ListStream { stream, ctrlc, .. }, meta) => Ok(stream
-                .map(|value| {
+                .map(|mut value| {
                     let span = value.span();
-                    match PluginCustomValue::serialize_custom_values_in(value) {
-                        Ok(value) => value,
-                        Err(err) => Value::error(err, span),
-                    }
+                    PluginCustomValue::serialize_custom_values_in(&mut value)
+                        .map(|_| value)
+                        .unwrap_or_else(|err| Value::error(err, span))
                 })
                 .into_pipeline_data_with_metadata(meta, ctrlc)),
             PipelineData::Empty | PipelineData::ExternalStream { .. } => Ok(data),

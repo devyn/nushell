@@ -115,7 +115,7 @@ impl PluginCustomValue {
     }
 
     /// Add a [`PluginIdentity`] to all [`PluginCustomValue`]s within a value, recursively.
-    pub(crate) fn add_source(mut value: Value, source: &Arc<PluginIdentity>) -> Value {
+    pub(crate) fn add_source(value: &mut Value, source: &Arc<PluginIdentity>) {
         let span = value.span();
         match value {
             // Set source on custom value
@@ -124,29 +124,24 @@ impl PluginCustomValue {
                     // Since there's no `as_mut_any()`, we have to copy the whole thing
                     let mut custom_value = custom_value.clone();
                     custom_value.source = Some(source.clone());
-                    Value::custom_value(Box::new(custom_value), span)
-                } else {
-                    value
+                    *value = Value::custom_value(Box::new(custom_value), span);
                 }
             }
             // Any values that can contain other values need to be handled recursively
             Value::Range { ref mut val, .. } => {
-                val.from = Self::add_source(take(&mut val.from), source);
-                val.to = Self::add_source(take(&mut val.to), source);
-                val.incr = Self::add_source(take(&mut val.incr), source);
-                value
+                Self::add_source(&mut val.from, source);
+                Self::add_source(&mut val.to, source);
+                Self::add_source(&mut val.incr, source);
             }
             Value::Record { ref mut val, .. } => {
                 for (_, rec_value) in val.iter_mut() {
-                    *rec_value = Self::add_source(take(rec_value), source);
+                    Self::add_source(rec_value, source);
                 }
-                value
             }
             Value::List { ref mut vals, .. } => {
                 for list_value in vals.iter_mut() {
-                    *list_value = Self::add_source(take(list_value), source);
+                    Self::add_source(list_value, source);
                 }
-                value
             }
             // All of these don't contain other values
             Value::Bool { .. }
@@ -162,7 +157,7 @@ impl PluginCustomValue {
             | Value::Nothing { .. }
             | Value::Error { .. }
             | Value::Binary { .. }
-            | Value::CellPath { .. } => value,
+            | Value::CellPath { .. } => (),
             // LazyRecord could generate other values, but we shouldn't be receiving it anyway
             //
             // It's better to handle this as a bug
@@ -210,18 +205,12 @@ impl PluginCustomValue {
                 Self::verify_source(&mut val.to, source)?;
                 Self::verify_source(&mut val.incr, source)
             }
-            Value::Record { ref mut val, .. } => {
-                for (_, rec_value) in val.iter_mut() {
-                    Self::verify_source(rec_value, source)?;
-                }
-                Ok(())
-            }
-            Value::List { ref mut vals, .. } => {
-                for list_value in vals.iter_mut() {
-                    Self::verify_source(list_value, source)?;
-                }
-                Ok(())
-            }
+            Value::Record { ref mut val, .. } => val
+                .iter_mut()
+                .try_for_each(|(_, rec_value)| Self::verify_source(rec_value, source)),
+            Value::List { ref mut vals, .. } => vals
+                .iter_mut()
+                .try_for_each(|list_value| Self::verify_source(list_value, source)),
             // All of these don't contain other values
             Value::Bool { .. }
             | Value::Int { .. }
@@ -249,37 +238,31 @@ impl PluginCustomValue {
 
     /// Convert all plugin-native custom values to [`PluginCustomValue`] within the given `value`,
     /// recursively. This should only be done on the plugin side.
-    pub(crate) fn serialize_custom_values_in(mut value: Value) -> Result<Value, ShellError> {
+    pub(crate) fn serialize_custom_values_in(value: &mut Value) -> Result<(), ShellError> {
         let span = value.span();
         match value {
             Value::CustomValue { ref val, .. } => {
                 if val.as_any().downcast_ref::<PluginCustomValue>().is_some() {
                     // Already a PluginCustomValue
-                    Ok(value)
+                    Ok(())
                 } else {
-                    Self::serialize_from_custom_value(&**val, span)
-                        .map(|val| Value::custom_value(Box::new(val), span))
+                    let serialized = Self::serialize_from_custom_value(&**val, span)?;
+                    *value = Value::custom_value(Box::new(serialized), span);
+                    Ok(())
                 }
             }
             // Any values that can contain other values need to be handled recursively
             Value::Range { ref mut val, .. } => {
-                val.from = Self::serialize_custom_values_in(take(&mut val.from))?;
-                val.to = Self::serialize_custom_values_in(take(&mut val.to))?;
-                val.incr = Self::serialize_custom_values_in(take(&mut val.incr))?;
-                Ok(value)
+                Self::serialize_custom_values_in(&mut val.from)?;
+                Self::serialize_custom_values_in(&mut val.to)?;
+                Self::serialize_custom_values_in(&mut val.incr)
             }
-            Value::Record { ref mut val, .. } => {
-                for (_, rec_value) in val.iter_mut() {
-                    *rec_value = Self::serialize_custom_values_in(take(rec_value))?;
-                }
-                Ok(value)
-            }
-            Value::List { ref mut vals, .. } => {
-                for list_value in vals.iter_mut() {
-                    *list_value = Self::serialize_custom_values_in(take(list_value))?;
-                }
-                Ok(value)
-            }
+            Value::Record { ref mut val, .. } => val
+                .iter_mut()
+                .try_for_each(|(_, rec_value)| Self::serialize_custom_values_in(rec_value)),
+            Value::List { ref mut vals, .. } => vals
+                .iter_mut()
+                .try_for_each(Self::serialize_custom_values_in),
             // All of these don't contain other values
             Value::Bool { .. }
             | Value::Int { .. }
@@ -294,10 +277,10 @@ impl PluginCustomValue {
             | Value::Nothing { .. }
             | Value::Error { .. }
             | Value::Binary { .. }
-            | Value::CellPath { .. } => Ok(value),
+            | Value::CellPath { .. } => Ok(()),
             // Collect any lazy records that exist and try again
             Value::LazyRecord { val, .. } => {
-                value = val.collect()?;
+                *value = val.collect()?;
                 Self::serialize_custom_values_in(value)
             }
         }
@@ -305,37 +288,31 @@ impl PluginCustomValue {
 
     /// Convert all [`PluginCustomValue`]s to plugin-native custom values within the given `value`,
     /// recursively. This should only be done on the plugin side.
-    pub(crate) fn deserialize_custom_values_in(mut value: Value) -> Result<Value, ShellError> {
+    pub(crate) fn deserialize_custom_values_in(value: &mut Value) -> Result<(), ShellError> {
         let span = value.span();
         match value {
             Value::CustomValue { ref val, .. } => {
                 if let Some(val) = val.as_any().downcast_ref::<PluginCustomValue>() {
-                    val.deserialize_to_custom_value(span)
-                        .map(|val| Value::custom_value(val, span))
+                    let deserialized = val.deserialize_to_custom_value(span)?;
+                    *value = Value::custom_value(deserialized, span);
+                    Ok(())
                 } else {
                     // Already not a PluginCustomValue
-                    Ok(value)
+                    Ok(())
                 }
             }
             // Any values that can contain other values need to be handled recursively
             Value::Range { ref mut val, .. } => {
-                val.from = Self::deserialize_custom_values_in(take(&mut val.from))?;
-                val.to = Self::deserialize_custom_values_in(take(&mut val.to))?;
-                val.incr = Self::deserialize_custom_values_in(take(&mut val.incr))?;
-                Ok(value)
+                Self::deserialize_custom_values_in(&mut val.from)?;
+                Self::deserialize_custom_values_in(&mut val.to)?;
+                Self::deserialize_custom_values_in(&mut val.incr)
             }
-            Value::Record { ref mut val, .. } => {
-                for (_, rec_value) in val.iter_mut() {
-                    *rec_value = Self::deserialize_custom_values_in(take(rec_value))?;
-                }
-                Ok(value)
-            }
-            Value::List { ref mut vals, .. } => {
-                for list_value in vals.iter_mut() {
-                    *list_value = Self::deserialize_custom_values_in(take(list_value))?;
-                }
-                Ok(value)
-            }
+            Value::Record { ref mut val, .. } => val
+                .iter_mut()
+                .try_for_each(|(_, rec_value)| Self::deserialize_custom_values_in(rec_value)),
+            Value::List { ref mut vals, .. } => vals
+                .iter_mut()
+                .try_for_each(Self::deserialize_custom_values_in),
             // All of these don't contain other values
             Value::Bool { .. }
             | Value::Int { .. }
@@ -350,17 +327,12 @@ impl PluginCustomValue {
             | Value::Nothing { .. }
             | Value::Error { .. }
             | Value::Binary { .. }
-            | Value::CellPath { .. } => Ok(value),
+            | Value::CellPath { .. } => Ok(()),
             // Collect any lazy records that exist and try again
             Value::LazyRecord { val, .. } => {
-                value = val.collect()?;
+                *value = val.collect()?;
                 Self::deserialize_custom_values_in(value)
             }
         }
     }
-}
-
-/// Takes a value out of a location by replacing it with Nothing temporarily
-fn take(value: &mut Value) -> Value {
-    std::mem::replace(value, Value::nothing(value.span()))
 }
