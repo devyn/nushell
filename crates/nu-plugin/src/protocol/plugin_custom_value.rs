@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::plugin::PluginIdentity;
 
+#[cfg(test)]
+mod tests;
+
 /// An opaque container for a custom value that is handled fully by a plugin
 ///
 /// This is the only type of custom value that is allowed to cross the plugin serialization

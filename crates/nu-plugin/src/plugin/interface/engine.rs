@@ -45,8 +45,8 @@ pub(crate) enum ReceivedPluginCall {
     },
 }
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 /// Internal shared state between the manager and each interface.
 struct EngineInterfaceState {
@@ -231,8 +231,7 @@ impl InterfaceManager for EngineInterfaceManager {
             _ if self.protocol_info.is_none() => {
                 // Must send protocol info first
                 Err(ShellError::PluginFailedToLoad {
-                    msg: "Failed to receive initial Hello message. \
-                        This engine might be too old"
+                    msg: "Failed to receive initial Hello message. This engine might be too old"
                         .into(),
                 })
             }
