@@ -1,4 +1,4 @@
-use nu_protocol::{ast::RangeInclusion, CustomValue, Range, ShellError, Span, Value};
+use nu_protocol::{ast::RangeInclusion, CustomValue, Range, ShellError, Span, Value, record};
 use serde::{Deserialize, Serialize};
 
 use crate::plugin::PluginIdentity;
@@ -108,39 +108,177 @@ fn add_source_nested_range() -> Result<(), ShellError> {
 }
 
 #[test]
-#[ignore = "TODO"]
 fn add_source_nested_record() -> Result<(), ShellError> {
-    todo!()
+    let orig_custom_val = Value::test_custom_value(Box::new(test_plugin_custom_value()));
+    let mut val = Value::test_record(record!{
+        "foo" => orig_custom_val.clone(),
+        "bar" => orig_custom_val.clone(),
+    });
+    let source = PluginIdentity::new_fake("foo");
+    PluginCustomValue::add_source(&mut val, &source);
+
+    let record = val.as_record()?;
+    for key in ["foo", "bar"] {
+        let val = record.get(key).expect(&format!("record does not contain '{key}'"));
+        let custom_value = val
+            .as_custom_value()
+            .expect(&format!("'{key}' not custom value"));
+        let plugin_custom_value: &PluginCustomValue = custom_value
+            .as_any()
+            .downcast_ref()
+            .expect(&format!("'{key}' not PluginCustomValue"));
+        assert_eq!(
+            Some(&source),
+            plugin_custom_value.source.as_ref(),
+            "'{key}' source not set correctly"
+        );
+    }
+    Ok(())
 }
 
 #[test]
-#[ignore = "TODO"]
 fn add_source_nested_list() -> Result<(), ShellError> {
-    todo!()
+    let orig_custom_val = Value::test_custom_value(Box::new(test_plugin_custom_value()));
+    let mut val = Value::test_list(vec![
+        orig_custom_val.clone(),
+        orig_custom_val.clone(),
+    ]);
+    let source = PluginIdentity::new_fake("foo");
+    PluginCustomValue::add_source(&mut val, &source);
+
+    let list = val.as_list()?;
+    for (index, val) in list.iter().enumerate() {
+        let custom_value = val
+            .as_custom_value()
+            .expect(&format!("[{index}] not custom value"));
+        let plugin_custom_value: &PluginCustomValue = custom_value
+            .as_any()
+            .downcast_ref()
+            .expect(&format!("[{index}] not PluginCustomValue"));
+        assert_eq!(
+            Some(&source),
+            plugin_custom_value.source.as_ref(),
+            "[{index}] source not set correctly"
+        );
+    }
+    Ok(())
 }
 
 #[test]
-#[ignore = "TODO"]
 fn verify_source_error_message() -> Result<(), ShellError> {
-    todo!()
+    let span = Span::new(5, 7);
+    let mut ok_val = Value::custom_value(Box::new(test_plugin_custom_value_with_source()), span);
+    let mut native_val = Value::custom_value(Box::new(TestCustomValue(32)), span);
+    let mut foreign_val = {
+        let mut val = test_plugin_custom_value();
+        val.source = Some(PluginIdentity::new_fake("other"));
+        Value::custom_value(Box::new(val), span)
+    };
+    let source = PluginIdentity::new_fake("test");
+
+    PluginCustomValue::verify_source(&mut ok_val, &source).expect("ok_val should be verified ok");
+
+    for (val, src_plugin) in [
+        (&mut native_val, None),
+        (&mut foreign_val, Some("other"))
+    ] {
+        let error = PluginCustomValue::verify_source(val, &source)
+            .expect_err(&format!("a custom value from {src_plugin:?} should result in an error"));
+        if let ShellError::CustomValueIncorrectForPlugin { name, span: err_span, dest_plugin, src_plugin: err_src_plugin } = error {
+            assert_eq!("TestCustomValue", name, "error.name from {src_plugin:?}");
+            assert_eq!(span, err_span, "error.span from {src_plugin:?}");
+            assert_eq!("test", dest_plugin, "error.dest_plugin from {src_plugin:?}");
+            assert_eq!(src_plugin, err_src_plugin.as_deref(), "error.src_plugin");
+        } else {
+            panic!("the error returned should be CustomValueIncorrectForPlugin");
+        }
+    }
+
+    Ok(())
 }
 
 #[test]
-#[ignore = "TODO"]
 fn verify_source_nested_range() -> Result<(), ShellError> {
-    todo!()
+    let native_val = Value::test_custom_value(Box::new(TestCustomValue(32)));
+    let source = PluginIdentity::new_fake("test");
+    for (name, mut val) in [
+        ("from", Value::test_range(Range {
+            from: native_val.clone(),
+            incr: Value::test_nothing(),
+            to: Value::test_nothing(),
+            inclusion: RangeInclusion::RightExclusive,
+        })),
+        ("incr", Value::test_range(Range {
+            from: Value::test_nothing(),
+            incr: native_val.clone(),
+            to: Value::test_nothing(),
+            inclusion: RangeInclusion::RightExclusive,
+        })),
+        ("to", Value::test_range(Range {
+            from: Value::test_nothing(),
+            incr: Value::test_nothing(),
+            to: native_val.clone(),
+            inclusion: RangeInclusion::RightExclusive,
+        })),
+    ] {
+        PluginCustomValue::verify_source(&mut val, &source)
+            .expect_err(&format!("error not generated on {name}"));
+    }
+
+    let mut ok_range = Value::test_range(Range {
+        from: Value::test_nothing(),
+        incr: Value::test_nothing(),
+        to: Value::test_nothing(),
+        inclusion: RangeInclusion::RightExclusive,
+    });
+    PluginCustomValue::verify_source(&mut ok_range, &source)
+        .expect("ok_range should not generate error");
+
+    Ok(())
 }
 
 #[test]
-#[ignore = "TODO"]
 fn verify_source_nested_record() -> Result<(), ShellError> {
-    todo!()
+    let native_val = Value::test_custom_value(Box::new(TestCustomValue(32)));
+    let source = PluginIdentity::new_fake("test");
+    for (name, mut val) in [
+        ("first element foo", Value::test_record(record!{
+            "foo" => native_val.clone(),
+            "bar" => Value::test_nothing(),
+        })),
+        ("second element bar", Value::test_record(record!{
+            "foo" => Value::test_nothing(),
+            "bar" => native_val.clone(),
+        })),
+    ] {
+        PluginCustomValue::verify_source(&mut val, &source)
+            .expect_err(&format!("error not generated on {name}"));
+    }
+
+    let mut ok_record = Value::test_record(record!{"foo" => Value::test_nothing()});
+    PluginCustomValue::verify_source(&mut ok_record, &source)
+        .expect("ok_record should not generate error");
+
+    Ok(())
 }
 
 #[test]
-#[ignore = "TODO"]
 fn verify_source_nested_list() -> Result<(), ShellError> {
-    todo!()
+    let native_val = Value::test_custom_value(Box::new(TestCustomValue(32)));
+    let source = PluginIdentity::new_fake("test");
+    for (name, mut val) in [
+        ("first element", Value::test_list(vec![native_val.clone(), Value::test_nothing()])),
+        ("second element", Value::test_list(vec![Value::test_nothing(), native_val.clone()])),
+    ] {
+        PluginCustomValue::verify_source(&mut val, &source)
+            .expect_err(&format!("error not generated on {name}"));
+    }
+
+    let mut ok_list = Value::test_list(vec![Value::test_nothing()]);
+    PluginCustomValue::verify_source(&mut ok_list, &source)
+        .expect("ok_list should not generate error");
+
+    Ok(())
 }
 
 #[test]
