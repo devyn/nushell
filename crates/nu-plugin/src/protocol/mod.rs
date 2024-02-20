@@ -113,11 +113,14 @@ pub enum PluginInput {
     /// Execute a [`PluginCall`], such as `Run` or `Signature`. The ID should not have been used
     /// before.
     Call(PluginCallId, PluginCall<PipelineDataHeader>),
-    /// Stream control or data message
-    Stream(StreamMessage),
     /// Response to an [`EngineCall`]. The ID should be the same one sent with the engine call this
     /// is responding to
     EngineCallResponse(EngineCallId, EngineCallResponse<PipelineDataHeader>),
+    /// Stream control or data message. Untagged to keep them as small as possible.
+    ///
+    /// For example, `Stream(Ack(0))` is encoded as `{"Ack": 0}`
+    #[serde(untagged)]
+    Stream(StreamMessage),
 }
 
 impl TryFrom<PluginInput> for StreamMessage {
@@ -297,8 +300,6 @@ pub enum PluginOutput {
     /// A response to a [`PluginCall`]. The ID should be the same sent with the plugin call this
     /// is a response to
     CallResponse(PluginCallId, PluginCallResponse<PipelineDataHeader>),
-    /// Stream control or data message
-    Stream(StreamMessage),
     /// Execute an [`EngineCall`]. Engine calls must be executed within the `context` of a plugin
     /// call, and the `id` should not have been used before
     EngineCall {
@@ -308,6 +309,11 @@ pub enum PluginOutput {
         id: EngineCallId,
         call: EngineCall<PipelineDataHeader>,
     },
+    /// Stream control or data message. Untagged to keep them as small as possible.
+    ///
+    /// For example, `Stream(Ack(0))` is encoded as `{"Ack": 0}`
+    #[serde(untagged)]
+    Stream(StreamMessage),
 }
 
 impl TryFrom<PluginOutput> for StreamMessage {
