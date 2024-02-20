@@ -175,7 +175,7 @@ def tell_nushell_hello():
     hello = {
         "Hello": {
             "protocol": "nu-plugin", # always this value
-            "version": "0.90.1",
+            "version": "0.90.2",
             "features": []
         }
     }
