@@ -70,6 +70,7 @@ pub enum Protocol {
 /// Optional features should not be used by the protocol if they are not present in the
 /// [`ProtocolInfo`] sent by the other side.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "name")]
 pub enum Feature {
     /// A feature that was not recognized on deserialization. Attempting to serialize this feature
     /// is an error. Matching against it may only be used if necessary to determine whether
