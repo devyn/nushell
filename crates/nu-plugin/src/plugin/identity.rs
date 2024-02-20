@@ -19,12 +19,8 @@ pub struct PluginIdentity {
 }
 
 impl PluginIdentity {
-    pub(crate) fn new(
-        filename: impl Into<PathBuf>,
-        shell: Option<impl Into<PathBuf>>,
-    ) -> PluginIdentity {
+    pub(crate) fn new(filename: impl Into<PathBuf>, shell: Option<PathBuf>) -> PluginIdentity {
         let filename = filename.into();
-        let shell = shell.map(|s| s.into());
         // `C:\nu_plugin_inc.exe` becomes `inc`
         // `/home/nu/.cargo/bin/nu_plugin_inc` becomes `inc`
         // `/home/nu/other_inc` becomes `other_inc` as a fallback
@@ -45,6 +41,24 @@ impl PluginIdentity {
         }
     }
 
+    #[cfg(all(test, windows))]
+    pub(crate) fn new_fake(name: &str) -> Arc<PluginIdentity> {
+        Arc::new(PluginIdentity::new(
+            format!(r"C:\fake\path\nu_plugin_{name}.exe"),
+            None,
+        ))
+    }
+
+    #[cfg(all(test, not(windows)))]
+    pub(crate) fn new_fake(name: &str) -> Arc<PluginIdentity> {
+        Arc::new(PluginIdentity::new(
+            format!(r"/fake/path/nu_plugin_{name}"),
+            None,
+        ))
+    }
+
+    /// Run the plugin command stored in this [`PluginIdentity`], then set up and return the
+    /// [`PluginInterface`] attached to it.
     pub(crate) fn spawn(
         self: Arc<Self>,
         envs: impl IntoIterator<Item = (impl AsRef<OsStr>, impl AsRef<OsStr>)>,
@@ -78,4 +92,11 @@ impl PluginIdentity {
 
         make_plugin_interface(child, self)
     }
+}
+
+#[test]
+fn parses_name_from_path() {
+    assert_eq!("test", PluginIdentity::new_fake("test").plugin_name);
+    assert_eq!("other", PluginIdentity::new("other", None).plugin_name);
+    assert_eq!("<unknown>", PluginIdentity::new("", None).plugin_name);
 }

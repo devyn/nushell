@@ -56,7 +56,8 @@ fn manager_consume_call_run_deserializes_custom_values_in_args() -> Result<(), S
 
 #[test]
 #[ignore = "TODO"]
-fn manager_consume_call_custom_value_op_forwards_to_receiver_with_context() -> Result<(), ShellError> {
+fn manager_consume_call_custom_value_op_forwards_to_receiver_with_context() -> Result<(), ShellError>
+{
     todo!()
 }
 
@@ -74,7 +75,8 @@ fn manager_prepare_pipeline_data_deserializes_custom_values_in_streams() -> Resu
 
 #[test]
 #[ignore = "TODO"]
-fn manager_prepare_pipeline_data_embeds_deserialization_errors_in_streams() -> Result<(), ShellError> {
+fn manager_prepare_pipeline_data_embeds_deserialization_errors_in_streams() -> Result<(), ShellError>
+{
     todo!()
 }
 
@@ -122,8 +124,7 @@ fn interface_prepare_pipeline_data_serializes_custom_values_in_streams() -> Resu
 
 #[test]
 #[ignore = "TODO"]
-fn interface_prepare_pipeline_data_embeds_serialization_errors_in_streams() -> Result<(), ShellError> {
+fn interface_prepare_pipeline_data_embeds_serialization_errors_in_streams() -> Result<(), ShellError>
+{
     todo!()
 }
-
-

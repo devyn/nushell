@@ -165,7 +165,7 @@ pub fn get_signature(
     shell: Option<&Path>,
     current_envs: &HashMap<String, String>,
 ) -> Result<Vec<PluginSignature>, ShellError> {
-    Arc::new(PluginIdentity::new(path, shell))
+    Arc::new(PluginIdentity::new(path, shell.map(|s| s.to_owned())))
         .spawn(current_envs)?
         .get_signature()
 }

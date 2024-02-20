@@ -38,7 +38,8 @@ fn manager_consume_errors_on_sending_other_messages_before_hello() -> Result<(),
 
 #[test]
 #[ignore = "TODO"]
-fn manager_consume_call_response_forwards_to_subscriber_with_pipeline_data() -> Result<(), ShellError> {
+fn manager_consume_call_response_forwards_to_subscriber_with_pipeline_data(
+) -> Result<(), ShellError> {
     todo!()
 }
 
@@ -134,8 +135,7 @@ fn interface_prepare_pipeline_data_rejects_bad_custom_value() -> Result<(), Shel
 
 #[test]
 #[ignore = "TODO"]
-fn interface_prepare_pipeline_data_rejects_bad_custom_value_in_a_stream() -> Result<(), ShellError> {
+fn interface_prepare_pipeline_data_rejects_bad_custom_value_in_a_stream() -> Result<(), ShellError>
+{
     todo!()
 }
-
-
