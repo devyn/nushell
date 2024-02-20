@@ -1,14 +1,10 @@
-use std::{
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{path::Path, sync::Arc};
 
 use nu_protocol::{
     DataSource, ListStream, PipelineData, PipelineMetadata, RawStream, ShellError, Span, Value,
 };
 
 use crate::{
-    plugin::interface::PluginRead,
     protocol::{
         ExternalStreamInfo, ListStreamInfo, PipelineDataHeader, PluginInput, PluginOutput,
         RawStreamInfo, StreamData, StreamMessage,
@@ -18,8 +14,8 @@ use crate::{
 
 use super::{
     stream::{StreamManager, StreamManagerHandle},
-    test_util::{TestCase, TestData},
-    Interface, InterfaceManager, PluginWrite,
+    test_util::TestCase,
+    Interface, InterfaceManager, PluginRead, PluginWrite,
 };
 
 fn test_metadata() -> PipelineMetadata {
@@ -31,14 +27,14 @@ fn test_metadata() -> PipelineMetadata {
 #[derive(Debug)]
 struct TestInterfaceManager {
     stream_manager: StreamManager,
-    writer: Arc<Mutex<TestData<PluginOutput>>>,
+    test: TestCase<PluginInput, PluginOutput>,
     seq: Arc<Sequence>,
 }
 
 #[derive(Debug, Clone)]
 struct TestInterface {
     stream_manager_handle: StreamManagerHandle,
-    writer: Arc<Mutex<TestData<PluginOutput>>>,
+    test: TestCase<PluginInput, PluginOutput>,
     seq: Arc<Sequence>,
 }
 
@@ -46,9 +42,16 @@ impl TestInterfaceManager {
     fn new(test: &TestCase<PluginInput, PluginOutput>) -> TestInterfaceManager {
         TestInterfaceManager {
             stream_manager: StreamManager::new(),
-            writer: test.out.clone(),
+            test: test.clone(),
             seq: Arc::new(Sequence::default()),
         }
+    }
+
+    fn consume_all(&mut self) -> Result<(), ShellError> {
+        while let Some(msg) = self.test.read()? {
+            self.consume(msg)?;
+        }
+        Ok(())
     }
 }
 
@@ -59,7 +62,7 @@ impl InterfaceManager for TestInterfaceManager {
     fn get_interface(&self) -> Self::Interface {
         TestInterface {
             stream_manager_handle: self.stream_manager.get_handle(),
-            writer: self.writer.clone(),
+            test: self.test.clone(),
             seq: self.seq.clone(),
         }
     }
@@ -84,7 +87,7 @@ impl Interface for TestInterface {
     type Output = PluginOutput;
 
     fn write(&self, output: Self::Output) -> Result<(), ShellError> {
-        self.writer.write(&output)
+        self.test.write(&output)
     }
 
     fn flush(&self) -> Result<(), ShellError> {
@@ -140,7 +143,7 @@ fn read_pipeline_data_value() -> Result<(), ShellError> {
 
 #[test]
 fn read_pipeline_data_list_stream() -> Result<(), ShellError> {
-    let mut test = TestCase::new();
+    let test = TestCase::new();
     let mut manager = TestInterfaceManager::new(&test);
 
     let data = (0..100).map(Value::test_int).collect::<Vec<_>>();
@@ -159,9 +162,7 @@ fn read_pipeline_data_list_stream() -> Result<(), ShellError> {
     );
 
     // need to consume input
-    while let Some(msg) = test.r#in.read()? {
-        manager.consume(msg)?;
-    }
+    manager.consume_all()?;
 
     let mut count = 0;
     for (expected, read) in data.into_iter().zip(pipe) {
@@ -177,7 +178,7 @@ fn read_pipeline_data_list_stream() -> Result<(), ShellError> {
 
 #[test]
 fn read_pipeline_data_external_stream() -> Result<(), ShellError> {
-    let mut test = TestCase::new();
+    let test = TestCase::new();
     let mut manager = TestInterfaceManager::new(&test);
 
     let iterations = 100;
@@ -213,9 +214,7 @@ fn read_pipeline_data_external_stream() -> Result<(), ShellError> {
     let pipe = manager.read_pipeline_data(header, None)?;
 
     // need to consume input
-    while let Some(msg) = test.r#in.read()? {
-        manager.consume(msg)?;
-    }
+    manager.consume_all()?;
 
     match pipe {
         PipelineData::ExternalStream {

@@ -5,13 +5,15 @@ use std::{
 
 use nu_protocol::ShellError;
 
-use super::{PluginRead, PluginWrite};
+use crate::{plugin::PluginIdentity, protocol::PluginInput, PluginOutput};
+
+use super::{EngineInterfaceManager, PluginInterfaceManager, PluginRead, PluginWrite};
 
 /// Mock read/write helper for the engine and plugin interfaces.
 #[derive(Debug, Clone)]
 pub(crate) struct TestCase<I, O> {
-    pub r#in: Arc<Mutex<TestData<I>>>,
-    pub out: Arc<Mutex<TestData<O>>>,
+    r#in: Arc<Mutex<TestData<I>>>,
+    out: Arc<Mutex<TestData<O>>>,
 }
 
 #[derive(Debug)]
@@ -31,9 +33,9 @@ impl<T> Default for TestData<T> {
     }
 }
 
-impl<T> PluginRead<T> for Arc<Mutex<TestData<T>>> {
-    fn read(&mut self) -> Result<Option<T>, ShellError> {
-        let mut lock = self.lock().unwrap();
+impl<I, O> PluginRead<I> for TestCase<I, O> {
+    fn read(&mut self) -> Result<Option<I>, ShellError> {
+        let mut lock = self.r#in.lock().unwrap();
         if let Some(err) = lock.error.take() {
             Err(err)
         } else {
@@ -42,9 +44,13 @@ impl<T> PluginRead<T> for Arc<Mutex<TestData<T>>> {
     }
 }
 
-impl<T: Send + Clone> PluginWrite<T> for Arc<Mutex<TestData<T>>> {
-    fn write(&self, data: &T) -> Result<(), ShellError> {
-        let mut lock = self.lock().unwrap();
+impl<I, O> PluginWrite<O> for TestCase<I, O>
+where
+    I: Send + Clone,
+    O: Send + Clone,
+{
+    fn write(&self, data: &O) -> Result<(), ShellError> {
+        let mut lock = self.out.lock().unwrap();
         lock.flushed = false;
 
         if let Some(err) = lock.error.take() {
@@ -56,7 +62,7 @@ impl<T: Send + Clone> PluginWrite<T> for Arc<Mutex<TestData<T>>> {
     }
 
     fn flush(&self) -> Result<(), ShellError> {
-        let mut lock = self.lock().unwrap();
+        let mut lock = self.out.lock().unwrap();
         lock.flushed = true;
         Ok(())
     }
@@ -119,5 +125,19 @@ impl<I, O> TestCase<I, O> {
     /// Returns true if the writer has unconsumed writes.
     pub(crate) fn has_unconsumed_write(&self) -> bool {
         !self.out.lock().unwrap().data.is_empty()
+    }
+}
+
+impl TestCase<PluginOutput, PluginInput> {
+    /// Create a new [`PluginInterfaceManager`] that writes to this test case.
+    pub(crate) fn plugin(&self, name: &str) -> PluginInterfaceManager {
+        PluginInterfaceManager::new(PluginIdentity::new_fake(name), self.clone())
+    }
+}
+
+impl TestCase<PluginInput, PluginOutput> {
+    /// Create a new [`EngineInterfaceManager`] that writes to this test case.
+    pub(crate) fn engine(&self) -> EngineInterfaceManager {
+        EngineInterfaceManager::new(self.clone())
     }
 }

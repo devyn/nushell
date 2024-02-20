@@ -59,6 +59,15 @@ where
     }
 }
 
+impl<R, T> PluginRead<T> for &mut R
+where
+    R: PluginRead<T>,
+{
+    fn read(&mut self) -> Result<Option<T>, ShellError> {
+        (**self).read()
+    }
+}
+
 /// Write input/output to the stream.
 ///
 /// The write should be atomic, without interference from other threads.
@@ -104,6 +113,19 @@ where
         lock.flush().map_err(|err| ShellError::IOError {
             msg: err.to_string(),
         })
+    }
+}
+
+impl<W, T> PluginWrite<T> for &W
+where
+    W: PluginWrite<T>,
+{
+    fn write(&self, data: &T) -> Result<(), ShellError> {
+        (**self).write(data)
+    }
+
+    fn flush(&self) -> Result<(), ShellError> {
+        (**self).flush()
     }
 }
 
