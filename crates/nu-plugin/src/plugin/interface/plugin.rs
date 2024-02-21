@@ -22,7 +22,7 @@ use crate::{
 
 use super::{
     stream::{StreamManager, StreamManagerHandle},
-    Interface, InterfaceManager, PluginRead, PluginWrite,
+    Interface, InterfaceManager, PipelineDataWriter, PluginRead, PluginWrite,
 };
 
 #[cfg(test)]
@@ -425,20 +425,28 @@ impl PluginInterface {
         Ok(())
     }
 
-    /// Perform a plugin call. Input and output streams are handled, and engine calls are handled
-    /// too if there are any before the final response.
-    fn plugin_call(
+    /// Write a plugin call message. Returns the writer for the stream, and the receiver for
+    /// messages (e.g. response) related to the plugin call
+    fn write_plugin_call(
         &self,
         call: PluginCall<PipelineData>,
-        context: &Option<Context>,
-    ) -> Result<PluginCallResponse<PipelineData>, ShellError> {
+        context: Option<Context>,
+    ) -> Result<
+        (
+            PipelineDataWriter<Self>,
+            mpsc::Receiver<ReceivedPluginCallMessage>,
+        ),
+        ShellError,
+    > {
         let id = self.state.plugin_call_id_sequence.next()?;
         let (tx, rx) = mpsc::channel();
 
         // Convert the call into one with a header and handle the stream, if necessary
         let (call, writer) = match call {
-            PluginCall::Signature => (PluginCall::Signature, None),
-            PluginCall::CustomValueOp(value, op) => (PluginCall::CustomValueOp(value, op), None),
+            PluginCall::Signature => (PluginCall::Signature, Default::default()),
+            PluginCall::CustomValueOp(value, op) => {
+                (PluginCall::CustomValueOp(value, op), Default::default())
+            }
             PluginCall::Run(CallInfo {
                 name,
                 call,
@@ -453,7 +461,7 @@ impl PluginInterface {
                         input: header,
                         config,
                     }),
-                    Some(writer),
+                    writer,
                 )
             }
         };
@@ -465,7 +473,7 @@ impl PluginInterface {
                 id,
                 PluginCallSubscription {
                     sender: tx,
-                    context: context.clone(),
+                    context,
                 },
             ))
             .map_err(|_| ShellError::NushellFailed {
@@ -477,11 +485,15 @@ impl PluginInterface {
         self.write(PluginInput::Call(id, call))?;
         self.flush()?;
 
-        // Finish writing stream, if present
-        if let Some(writer) = writer {
-            writer.write_background();
-        }
+        Ok((writer, rx))
+    }
 
+    /// Read the channel for plugin call messages and handle them until the response is received.
+    fn receive_plugin_call_response(
+        &self,
+        rx: mpsc::Receiver<ReceivedPluginCallMessage>,
+        context: &Option<Context>,
+    ) -> Result<PluginCallResponse<PipelineData>, ShellError> {
         // Handle messages from receiver
         for msg in rx {
             match msg {
@@ -525,6 +537,21 @@ impl PluginInterface {
         Err(ShellError::PluginFailedToDecode {
             msg: "Failed to receive response to plugin call".into(),
         })
+    }
+
+    /// Perform a plugin call. Input and output streams are handled, and engine calls are handled
+    /// too if there are any before the final response.
+    fn plugin_call(
+        &self,
+        call: PluginCall<PipelineData>,
+        context: &Option<Context>,
+    ) -> Result<PluginCallResponse<PipelineData>, ShellError> {
+        let (writer, rx) = self.write_plugin_call(call, context.clone())?;
+
+        // Finish writing stream in the background
+        writer.write_background();
+
+        self.receive_plugin_call_response(rx, context)
     }
 
     /// Get the command signatures from the plugin.

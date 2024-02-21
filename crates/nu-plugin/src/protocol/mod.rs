@@ -5,6 +5,9 @@ mod protocol_info;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub(crate) mod test_util;
+
 pub use evaluated_call::EvaluatedCall;
 use nu_protocol::{
     engine::Closure, Config, PluginSignature, RawStream, ShellError, Span, Spanned, Value,

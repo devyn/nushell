@@ -115,3 +115,41 @@ impl PluginExecutionContext for PluginExecutionCommandContext {
         )
     }
 }
+
+/// A bogus execution context for testing that doesn't really implement anything properly
+#[cfg(test)]
+pub(crate) struct PluginExecutionBogusContext;
+
+#[cfg(test)]
+impl PluginExecutionContext for PluginExecutionBogusContext {
+    fn command_span(&self) -> Span {
+        Span::test_data()
+    }
+
+    fn command_name(&self) -> &str {
+        "bogus"
+    }
+
+    fn ctrlc(&self) -> Option<&Arc<AtomicBool>> {
+        None
+    }
+
+    fn get_config(&self) -> Result<Config, ShellError> {
+        Err(ShellError::NushellFailed {
+            msg: "get_config not implemented on bogus".into(),
+        })
+    }
+
+    fn eval_closure(
+        &self,
+        _closure: Spanned<Closure>,
+        _positional: Vec<Value>,
+        _input: PipelineData,
+        _redirect_stdout: bool,
+        _redirect_stderr: bool,
+    ) -> Result<PipelineData, ShellError> {
+        Err(ShellError::NushellFailed {
+            msg: "eval_closure not implemented on bogus".into(),
+        })
+    }
+}

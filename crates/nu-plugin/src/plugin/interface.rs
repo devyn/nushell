@@ -335,8 +335,10 @@ where
 
 /// Completes the write operation for a [`PipelineData`]. You must call
 /// [`PipelineDataWriter::write()`] to write all of the data contained within the streams.
+#[derive(Default)]
 #[must_use]
 pub(crate) enum PipelineDataWriter<W: WriteStreamMessage> {
+    #[default]
     None,
     ListStream(StreamWriter<W>, ListStream),
     ExternalStream {
