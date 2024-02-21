@@ -432,7 +432,7 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
             Err(ShellError::IOError { .. }) => std::process::exit(1),
             // If there is another error, try to send it to nushell and then exit.
             Err(err) => {
-                $interface.write_response(Err(err.clone())).unwrap_or_else(|_| {
+                let _ = $interface.write_response(Err(err.clone())).unwrap_or_else(|_| {
                     // If we can't send it to nushell, panic with it so at least we get the output
                     panic!("{}", err)
                 });
@@ -486,7 +486,10 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
                     },
             } => {
                 let result = plugin.run(&name, &config, &engine, &call, input);
-                try_or_report!(engine, engine.write_response(result));
+                let write_result = engine
+                    .write_response(result)
+                    .map(|writer| writer.write_background());
+                try_or_report!(engine, write_result);
             }
             // Do an operation on a custom value
             ReceivedPluginCall::CustomValueOp {
@@ -505,7 +508,10 @@ pub fn serve_plugin(plugin: &mut impl StreamingPlugin, encoder: impl PluginEncod
                         let result = local_value
                             .to_base_value(custom_value.span)
                             .map(|value| PipelineData::Value(value, None));
-                        try_or_report!(engine, engine.write_response(result));
+                        let write_result = engine
+                            .write_response(result)
+                            .map(|writer| writer.write_background());
+                        try_or_report!(engine, write_result);
                     }
                 }
             }

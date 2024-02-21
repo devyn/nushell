@@ -20,7 +20,7 @@ use crate::{
 
 use super::{
     stream::{StreamManager, StreamManagerHandle},
-    Interface, InterfaceManager, PluginRead, PluginWrite,
+    Interface, InterfaceManager, PipelineDataWriter, PluginRead, PluginWrite,
 };
 use crate::sequence::Sequence;
 
@@ -256,7 +256,7 @@ impl InterfaceManager for EngineInterfaceManager {
                         Ok(input) => {
                             // Deserialize custom values in the arguments
                             if let Err(err) = deserialize_call_args(&mut call) {
-                                return interface.write_response(Err(err));
+                                return interface.write_response(Err(err))?.write();
                             }
                             // Send the plugin call to the receiver
                             self.send_plugin_call(ReceivedPluginCall::Run {
@@ -269,7 +269,7 @@ impl InterfaceManager for EngineInterfaceManager {
                                 },
                             })
                         }
-                        err @ Err(_) => interface.write_response(err),
+                        err @ Err(_) => interface.write_response(err)?.write(),
                     }
                 }
                 // Send request with the custom value
@@ -360,12 +360,12 @@ impl EngineInterface {
         })
     }
 
-    /// Write a call response of either [`PipelineData`] or an error. Writes the stream in the
-    /// background
+    /// Write a call response of either [`PipelineData`] or an error. Returns the stream writer
+    /// to finish writing the stream
     pub(crate) fn write_response(
         &self,
         result: Result<PipelineData, impl Into<LabeledError>>,
-    ) -> Result<(), ShellError> {
+    ) -> Result<PipelineDataWriter<Self>, ShellError> {
         match result {
             Ok(data) => {
                 let (header, writer) = match self.init_write_pipeline_data(data) {
@@ -378,13 +378,13 @@ impl EngineInterface {
                 let response = PluginCallResponse::PipelineData(header);
                 self.write(PluginOutput::CallResponse(self.context()?, response))?;
                 self.flush()?;
-                writer.write_background();
-                Ok(())
+                Ok(writer)
             }
             Err(err) => {
                 let response = PluginCallResponse::Error(err.into());
                 self.write(PluginOutput::CallResponse(self.context()?, response))?;
-                self.flush()
+                self.flush()?;
+                Ok(Default::default())
             }
         }
     }
