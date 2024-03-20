@@ -4,14 +4,14 @@ use nu_protocol::{
     engine::Command,
     ShellError, Signature,
 };
-use nu_protocol::{PipelineData, Type};
+use nu_protocol::{PipelineData, Type, NuString};
 
 #[derive(Clone)]
 pub struct KnownExternal {
-    pub name: String,
+    pub name: NuString,
     pub signature: Box<Signature>,
-    pub usage: String,
-    pub extra_usage: String,
+    pub usage: NuString,
+    pub extra_usage: NuString,
 }
 
 impl Command for KnownExternal {
@@ -64,7 +64,7 @@ impl Command for KnownExternal {
         let extern_name: Vec<_> = extern_name.split(' ').collect();
 
         let arg_extern_name = Expression {
-            expr: Expr::String(extern_name[0].to_string()),
+            expr: Expr::String(extern_name[0].into()),
             span: call.head,
             ty: Type::String,
             custom_completion: None,
@@ -74,7 +74,7 @@ impl Command for KnownExternal {
 
         for subcommand in extern_name.into_iter().skip(1) {
             extern_call.add_positional(Expression {
-                expr: Expr::String(subcommand.to_string()),
+                expr: Expr::String(subcommand.into()),
                 span: call.head,
                 ty: Type::String,
                 custom_completion: None,
@@ -87,14 +87,14 @@ impl Command for KnownExternal {
                 Argument::Named(named) => {
                     if let Some(short) = &named.1 {
                         extern_call.add_positional(Expression {
-                            expr: Expr::String(format!("-{}", short.item)),
+                            expr: Expr::String(format!("-{}", short.item).into()),
                             span: named.0.span,
                             ty: Type::String,
                             custom_completion: None,
                         });
                     } else {
                         extern_call.add_positional(Expression {
-                            expr: Expr::String(format!("--{}", named.0.item)),
+                            expr: Expr::String(format!("--{}", named.0.item).into()),
                             span: named.0.span,
                             ty: Type::String,
                             custom_completion: None,

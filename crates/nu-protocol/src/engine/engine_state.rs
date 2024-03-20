@@ -9,7 +9,7 @@ use crate::ast::Block;
 use crate::debugger::{Debugger, NoopDebugger};
 use crate::{
     BlockId, Config, DeclId, Example, FileId, HistoryConfig, Module, ModuleId, OverlayId,
-    ShellError, Signature, Span, Type, VarId, VirtualPathId,
+    ShellError, Signature, Span, Type, VarId, VirtualPathId, NuString,
 };
 use crate::{Category, Value};
 use std::collections::HashMap;
@@ -99,7 +99,7 @@ pub struct EngineState {
     pub history_session_id: i64,
     // If Nushell was started, e.g., with `nu spam.nu`, the file's parent is stored here
     pub(super) currently_parsed_cwd: Option<PathBuf>,
-    pub regex_cache: Arc<Mutex<LruCache<String, Regex>>>,
+    pub regex_cache: Arc<Mutex<LruCache<NuString, Regex>>>,
     pub is_interactive: bool,
     pub is_login: bool,
     startup_time: i64,
@@ -142,7 +142,7 @@ impl EngineState {
             ),
             ctrlc: None,
             env_vars: Arc::new(
-                [(DEFAULT_OVERLAY_NAME.to_string(), HashMap::new())]
+                [(DEFAULT_OVERLAY_NAME.into(), HashMap::new())]
                     .into_iter()
                     .collect(),
             ),
@@ -420,7 +420,7 @@ impl EngineState {
             .1
     }
 
-    pub fn render_env_vars(&self) -> HashMap<&String, &Value> {
+    pub fn render_env_vars(&self) -> HashMap<&NuString, &Value> {
         let mut result = HashMap::new();
 
         for overlay_name in self.active_overlay_names(&[]) {
@@ -433,8 +433,8 @@ impl EngineState {
         result
     }
 
-    pub fn add_env_var(&mut self, name: String, val: Value) {
-        let overlay_name = String::from_utf8_lossy(self.last_overlay_name(&[])).to_string();
+    pub fn add_env_var(&mut self, name: NuString, val: Value) {
+        let overlay_name = String::from_utf8_lossy(self.last_overlay_name(&[])).into();
 
         if let Some(env_vars) = Arc::make_mut(&mut self.env_vars).get_mut(&overlay_name) {
             env_vars.insert(name, val);
@@ -933,7 +933,7 @@ impl EngineState {
         self.num_files() - 1
     }
 
-    pub fn get_cwd(&self) -> Option<String> {
+    pub fn get_cwd(&self) -> Option<NuString> {
         if let Some(pwd_value) = self.get_env_var(PWD_ENV) {
             pwd_value.coerce_string().ok()
         } else {
@@ -949,7 +949,7 @@ impl EngineState {
         self.config_path.get(key)
     }
 
-    pub fn build_usage(&self, spans: &[Span]) -> (String, String) {
+    pub fn build_usage(&self, spans: &[Span]) -> (NuString, NuString) {
         let comment_lines: Vec<&[u8]> = spans
             .iter()
             .map(|span| self.get_span_contents(*span))
@@ -957,12 +957,12 @@ impl EngineState {
         build_usage(&comment_lines)
     }
 
-    pub fn build_module_usage(&self, module_id: ModuleId) -> Option<(String, String)> {
+    pub fn build_module_usage(&self, module_id: ModuleId) -> Option<(NuString, NuString)> {
         self.get_module_comments(module_id)
             .map(|comment_spans| self.build_usage(comment_spans))
     }
 
-    pub fn current_work_dir(&self) -> String {
+    pub fn current_work_dir(&self) -> NuString {
         self.get_env_var("PWD")
             .map(|d| d.coerce_string().unwrap_or_default())
             .unwrap_or_default()

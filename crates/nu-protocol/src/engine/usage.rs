@@ -1,4 +1,4 @@
-use crate::{ModuleId, Span};
+use crate::{ModuleId, Span, NuString};
 use std::collections::HashMap;
 
 /// Organizes usage messages for various primitives
@@ -35,7 +35,7 @@ impl Default for Usage {
     }
 }
 
-pub(super) fn build_usage(comment_lines: &[&[u8]]) -> (String, String) {
+pub(super) fn build_usage(comment_lines: &[&[u8]]) -> (NuString, NuString) {
     let mut usage = String::new();
 
     let mut num_spaces = 0;
@@ -82,8 +82,8 @@ pub(super) fn build_usage(comment_lines: &[&[u8]]) -> (String, String) {
     }
 
     if let Some((brief_usage, extra_usage)) = usage.split_once("\n\n") {
-        (brief_usage.to_string(), extra_usage.to_string())
+        (brief_usage.into(), extra_usage.into())
     } else {
-        (usage, String::default())
+        (usage.into(), NuString::default())
     }
 }

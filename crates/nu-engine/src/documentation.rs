@@ -56,11 +56,11 @@ fn nu_highlight_string(code_string: &str, engine_state: &EngineState, stack: &mu
         ) {
             let result = output.into_value(Span::unknown());
             if let Ok(s) = result.coerce_into_string() {
-                return s; // successfully highlighted string
+                return s.into(); // successfully highlighted string
             }
         }
     }
-    code_string.to_string()
+    code_string.into()
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -361,14 +361,14 @@ fn get_ansi_color_for_component_or_default(
                     PipelineData::Empty,
                 ) {
                     if let Ok((str, ..)) = result.collect_string_strict(span) {
-                        return str;
+                        return str.into();
                     }
                 }
             }
         }
     }
 
-    default.to_string()
+    default.into()
 }
 
 fn get_argument_for_color_value(
@@ -390,7 +390,7 @@ fn get_argument_for_color_value(
                         },
                         Expression {
                             expr: Expr::String(
-                                v.clone().to_expanded_string("", engine_state.get_config()),
+                                v.clone().to_expanded_string("", engine_state.get_config()).into(),
                             ),
                             span,
                             ty: Type::String,
@@ -403,8 +403,8 @@ fn get_argument_for_color_value(
             Some(Argument::Positional(Expression {
                 span: Span::unknown(),
                 ty: Type::Record(vec![
-                    ("fg".to_string(), Type::String),
-                    ("attr".to_string(), Type::String),
+                    ("fg".into(), Type::String),
+                    ("attr".into(), Type::String),
                 ]),
                 expr: Expr::Record(record_exp),
                 custom_completion: None,

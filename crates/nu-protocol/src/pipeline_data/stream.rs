@@ -46,8 +46,8 @@ impl RawStream {
         })
     }
 
-    pub fn into_string(self) -> Result<Spanned<String>, ShellError> {
-        let mut output = String::new();
+    pub fn into_string(self) -> Result<Spanned<NuString>, ShellError> {
+        let mut output = NuString::new();
         let span = self.span;
         let ctrlc = &self.ctrlc.clone();
 
@@ -188,10 +188,11 @@ pub struct ListStream {
 }
 
 impl ListStream {
-    pub fn into_string(self, separator: &str, config: &Config) -> String {
+    pub fn into_string(self, separator: &str, config: &Config) -> NuString {
         self.map(|x: Value| x.to_expanded_string(", ", config))
-            .collect::<Vec<String>>()
+            .collect::<Vec<NuString>>()
             .join(separator)
+            .into()
     }
 
     pub fn drain(self) -> Result<(), ShellError> {

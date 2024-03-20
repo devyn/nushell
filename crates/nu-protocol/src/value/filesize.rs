@@ -1,9 +1,9 @@
-use crate::Config;
+use crate::{Config, NuString};
 use byte_unit::UnitType;
 use nu_utils::get_system_locale;
 use num_format::ToFormattedString;
 
-pub fn format_filesize_from_conf(num_bytes: i64, config: &Config) -> String {
+pub fn format_filesize_from_conf(num_bytes: i64, config: &Config) -> NuString {
     // We need to take into account config.filesize_metric so, if someone asks for KB
     // and filesize_metric is false, return KiB
     format_filesize(
@@ -19,7 +19,7 @@ pub fn format_filesize(
     num_bytes: i64,
     format_value: &str,
     filesize_metric: Option<bool>,
-) -> String {
+) -> NuString {
     // Allow the user to specify how they want their numbers formatted
 
     // When format_value is "auto" or an invalid value, the returned ByteUnit doesn't matter
@@ -62,7 +62,7 @@ pub fn format_filesize(
                 format!("{:.1}", adj_byte)
             }
         }
-    }
+    }.into()
 }
 
 /// Get the filesize unit, or None if format is "auto"

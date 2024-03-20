@@ -9,7 +9,7 @@ pub use stream::*;
 use crate::{
     ast::{Call, PathMember},
     engine::{EngineState, Stack, StateWorkingSet},
-    format_error, Config, ShellError, Span, Value,
+    format_error, Config, ShellError, Span, Value, NuString,
 };
 use nu_utils::{stderr_write_all_and_flush, stdout_write_all_and_flush};
 use std::io::{self, Cursor, Read, Write};
@@ -450,12 +450,12 @@ impl PipelineData {
         iter
     }
 
-    pub fn collect_string(self, separator: &str, config: &Config) -> Result<String, ShellError> {
+    pub fn collect_string(self, separator: &str, config: &Config) -> Result<NuString, ShellError> {
         match self {
-            PipelineData::Empty => Ok(String::new()),
+            PipelineData::Empty => Ok(NuString::new()),
             PipelineData::Value(v, ..) => Ok(v.to_expanded_string(separator, config)),
             PipelineData::ListStream(s, ..) => Ok(s.into_string(separator, config)),
-            PipelineData::ExternalStream { stdout: None, .. } => Ok(String::new()),
+            PipelineData::ExternalStream { stdout: None, .. } => Ok(NuString::new()),
             PipelineData::ExternalStream {
                 stdout: Some(s),
                 trim_end_newline,
@@ -469,7 +469,7 @@ impl PipelineData {
                 if trim_end_newline {
                     output.truncate(output.trim_end_matches(LINE_ENDING_PATTERN).len());
                 }
-                Ok(output)
+                Ok(output.into())
             }
         }
     }
@@ -481,9 +481,9 @@ impl PipelineData {
     pub fn collect_string_strict(
         self,
         span: Span,
-    ) -> Result<(String, Span, Option<PipelineMetadata>), ShellError> {
+    ) -> Result<(NuString, Span, Option<PipelineMetadata>), ShellError> {
         match self {
-            PipelineData::Empty => Ok((String::new(), span, None)),
+            PipelineData::Empty => Ok((NuString::new(), span, None)),
             PipelineData::Value(Value::String { val, .. }, metadata) => Ok((val, span, metadata)),
             PipelineData::Value(val, _) => Err(ShellError::TypeMismatch {
                 err_message: "string".into(),
@@ -498,7 +498,7 @@ impl PipelineData {
                 metadata,
                 span,
                 ..
-            } => Ok((String::new(), span, metadata)),
+            } => Ok((NuString::new(), span, metadata)),
             PipelineData::ExternalStream {
                 stdout: Some(stdout),
                 metadata,
@@ -915,9 +915,9 @@ impl PipelineData {
                 is_err = true;
                 format_error(&working_set, &*error)
             } else if no_newline {
-                item.to_expanded_string("", config)
+                item.to_expanded_string("", config).into()
             } else {
-                item.to_expanded_string("\n", config)
+                item.to_expanded_string("\n", config).into()
             };
 
             if !no_newline {
@@ -1150,7 +1150,7 @@ fn value_to_bytes(value: Value) -> Result<Vec<u8>, ShellError> {
             let val = vals
                 .into_iter()
                 .map(Value::coerce_into_string)
-                .collect::<Result<Vec<String>, ShellError>>()?
+                .collect::<Result<Vec<NuString>, ShellError>>()?
                 .join("\n")
                 + "\n";
 

@@ -1,4 +1,4 @@
-use nu_protocol::report_error;
+use nu_protocol::{report_error, NuString};
 use nu_protocol::{
     ast::RangeInclusion,
     engine::{EngineState, Stack, StateWorkingSet},
@@ -62,9 +62,9 @@ For more help: (https://nushell.sh/book/configuration.html#configurations-with-b
 fn get_editor_commandline(
     value: &Value,
     var_name: &str,
-) -> Result<(String, Vec<String>), ShellError> {
+) -> Result<(NuString, Vec<NuString>), ShellError> {
     match value {
-        Value::String { val, .. } if !val.is_empty() => Ok((val.to_string(), Vec::new())),
+        Value::String { val, .. } if !val.is_empty() => Ok((val.into(), Vec::new())),
         Value::List { vals, .. } if !vals.is_empty() => {
             let mut editor_cmd = vals.iter().map(|l| l.coerce_string());
             match editor_cmd.next().transpose()? {
@@ -101,7 +101,7 @@ pub fn get_editor(
     engine_state: &EngineState,
     stack: &Stack,
     span: Span,
-) -> Result<(String, Vec<String>), ShellError> {
+) -> Result<(NuString, Vec<NuString>), ShellError> {
     let config = engine_state.get_config();
     let env_vars = stack.get_env_vars(engine_state);
 

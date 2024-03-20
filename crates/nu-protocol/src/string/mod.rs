@@ -1,4 +1,4 @@
-use std::{sync::Arc, fmt, ops::Deref, cmp::Ordering, hash::Hash, borrow::Cow};
+use std::{sync::Arc, fmt, ops::Deref, cmp::Ordering, hash::Hash, borrow::{Cow, Borrow}, path::{PathBuf, Path}};
 
 use serde::{Serialize, Deserialize};
 
@@ -16,8 +16,10 @@ const SHARED_STRING_MAX_LEN: usize = 255;
 /// This is intended to be mostly a drop-in replacement for `String`, but it may be missing some
 /// methods. The trait implementations should generally work identically.
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct NuString(Variant);
 
+#[derive(Clone)]
 enum Variant {
     Empty,
     Owned(String),
@@ -72,6 +74,11 @@ impl NuString {
     pub fn push_str(&mut self, s: &str) {
         self.string_mut().push_str(s)
     }
+
+    /// Convert the string into a byte vector, copying if necessary.
+    pub fn into_bytes(self) -> Vec<u8> {
+        String::from(self).into_bytes()
+    }
 }
 
 impl Deref for NuString {
@@ -100,11 +107,83 @@ impl PartialEq for NuString {
     }
 }
 
+impl PartialEq<str> for NuString {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl<'a> PartialEq<&'a str> for NuString {
+    fn eq(&self, other: &&'a str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<String> for NuString {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl PartialEq<NuString> for str {
+    fn eq(&self, other: &NuString) -> bool {
+        other.eq(self)
+    }
+}
+
+impl<'a> PartialEq<NuString> for &'a str {
+    fn eq(&self, other: &NuString) -> bool {
+        other.eq(self)
+    }
+}
+
+impl PartialEq<NuString> for String {
+    fn eq(&self, other: &NuString) -> bool {
+        other.eq(self)
+    }
+}
+
 impl Eq for NuString { }
 
 impl PartialOrd for NuString {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.deref().partial_cmp(other.deref())
+    }
+}
+
+impl PartialOrd<str> for NuString {
+    fn partial_cmp(&self, other: &str) -> Option<Ordering> {
+        self.deref().partial_cmp(other)
+    }
+}
+
+impl<'a> PartialOrd<&'a str> for NuString {
+    fn partial_cmp(&self, other: &&'a str) -> Option<Ordering> {
+        self.deref().partial_cmp(*other)
+    }
+}
+
+impl PartialOrd<String> for NuString {
+    fn partial_cmp(&self, other: &String) -> Option<Ordering> {
+        self.as_str().partial_cmp(other.as_str())
+    }
+}
+
+impl PartialOrd<NuString> for str {
+    fn partial_cmp(&self, other: &NuString) -> Option<Ordering> {
+        other.partial_cmp(self)
+    }
+}
+
+impl<'a> PartialOrd<NuString> for &'a str {
+    fn partial_cmp(&self, other: &NuString) -> Option<Ordering> {
+        other.partial_cmp(self)
+    }
+}
+
+impl PartialOrd<NuString> for String {
+    fn partial_cmp(&self, other: &NuString) -> Option<Ordering> {
+        other.partial_cmp(self)
     }
 }
 
@@ -166,12 +245,30 @@ impl<'a> From<&'a str> for NuString {
     }
 }
 
+impl From<char> for NuString {
+    fn from(value: char) -> Self {
+        String::from(value).into()
+    }
+}
+
+impl<'a> From<&'a String> for NuString {
+    fn from(value: &'a String) -> Self {
+        value.as_str().into()
+    }
+}
+
 impl<'a> From<Cow<'a, str>> for NuString {
     fn from(s: Cow<'a, str>) -> Self {
         match s {
             Cow::Borrowed(s) => s.into(),
             Cow::Owned(s) => s.into(),
         }
+    }
+}
+
+impl<'a> From<&'a NuString> for NuString {
+    fn from(value: &'a NuString) -> Self {
+        value.clone()
     }
 }
 
@@ -185,9 +282,21 @@ impl From<NuString> for String {
     }
 }
 
+impl<'a> From<&'a NuString> for String {
+    fn from(value: &'a NuString) -> Self {
+        value.as_str().into()
+    }
+}
+
 impl<'a> From<NuString> for Cow<'a, str> {
     fn from(value: NuString) -> Self {
         Cow::Owned(String::from(value))
+    }
+}
+
+impl From<NuString> for PathBuf {
+    fn from(value: NuString) -> Self {
+        String::from(value).into()
     }
 }
 
@@ -221,3 +330,33 @@ impl<'a> FromIterator<String> for NuString {
     }
 }
 
+impl AsRef<str> for NuString {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for NuString {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        self.as_str().as_ref()
+    }
+}
+
+impl AsRef<Path> for NuString {
+    fn as_ref(&self) -> &Path {
+        self.as_str().as_ref()
+    }
+}
+
+impl Borrow<str> for NuString {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Write for NuString {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.push_str(s);
+        Ok(())
+    }
+}

@@ -1,7 +1,7 @@
-use nu_protocol::Value;
+use nu_protocol::{Value, NuString};
 use std::collections::HashSet;
 
-pub fn get_columns(input: &[Value]) -> Vec<String> {
+pub fn get_columns(input: &[Value]) -> Vec<NuString> {
     let mut columns = vec![];
     for item in input {
         let Value::Record { val, .. } = item else {
@@ -10,7 +10,7 @@ pub fn get_columns(input: &[Value]) -> Vec<String> {
 
         for col in val.columns() {
             if !columns.contains(col) {
-                columns.push(col.to_string());
+                columns.push(col.into());
             }
         }
     }

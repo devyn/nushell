@@ -1,3 +1,4 @@
+use nu_protocol::NuString;
 use nu_protocol::ast::Expression;
 
 use nu_protocol::{
@@ -25,7 +26,7 @@ pub struct EvaluatedCall {
     /// Values of positional arguments
     pub positional: Vec<Value>,
     /// Names and values of named arguments
-    pub named: Vec<(Spanned<String>, Option<Value>)>,
+    pub named: Vec<(Spanned<NuString>, Option<Value>)>,
 }
 
 impl EvaluatedCall {
@@ -368,7 +369,7 @@ impl EvaluatedCall {
 #[cfg(test)]
 mod test {
     use super::*;
-    use nu_protocol::{Span, Spanned, Value};
+    use nu_protocol::{Span, Spanned, Value, NuString};
 
     #[test]
     fn call_to_value() {
@@ -381,14 +382,14 @@ mod test {
             named: vec![
                 (
                     Spanned {
-                        item: "name".to_string(),
+                        item: "name".into(),
                         span: Span::new(0, 10),
                     },
                     Some(Value::float(1.0, Span::new(0, 10))),
                 ),
                 (
                     Spanned {
-                        item: "flag".to_string(),
+                        item: "flag".into(),
                         span: Span::new(0, 10),
                     },
                     None,
@@ -404,10 +405,10 @@ mod test {
         let required: f64 = call.req(0).unwrap();
         assert!((required - 1.0).abs() < f64::EPSILON);
 
-        let optional: Option<String> = call.opt(1).unwrap();
-        assert_eq!(optional, Some("something".to_string()));
+        let optional: Option<NuString> = call.opt(1).unwrap();
+        assert_eq!(optional, Some("something".into()));
 
-        let rest: Vec<String> = call.rest(1).unwrap();
-        assert_eq!(rest, vec!["something".to_string()]);
+        let rest: Vec<NuString> = call.rest(1).unwrap();
+        assert_eq!(rest, ["something"]);
     }
 }

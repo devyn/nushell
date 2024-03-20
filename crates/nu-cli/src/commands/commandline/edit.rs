@@ -2,7 +2,7 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    Category, IntoPipelineData, PipelineData, ShellError, Signature, SyntaxShape, Type, Value,
+    Category, IntoPipelineData, PipelineData, ShellError, Signature, SyntaxShape, Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -54,7 +54,7 @@ impl Command for SubCommand {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let str: String = call.req(engine_state, stack, 0)?;
+        let str: NuString = call.req(engine_state, stack, 0)?;
         let mut repl = engine_state.repl_state.lock().expect("repl state mutex");
         if call.has_flag(engine_state, stack, "append")? {
             repl.buffer.push_str(&str);
@@ -63,7 +63,7 @@ impl Command for SubCommand {
             repl.buffer.insert_str(cursor_pos, &str);
             repl.cursor_pos += str.len();
         } else {
-            repl.buffer = str;
+            repl.buffer = str.into();
             repl.cursor_pos = repl.buffer.len();
         }
         Ok(Value::nothing(call.head).into_pipeline_data())

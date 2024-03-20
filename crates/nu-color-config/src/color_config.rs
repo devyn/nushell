@@ -13,7 +13,7 @@ pub fn lookup_ansi_color_style(s: &str) -> Style {
             .and_then(|c| c.map(|c| c.normal()))
             .unwrap_or_default()
     } else if s.starts_with('{') {
-        color_string_to_nustyle(s.to_string())
+        color_string_to_nustyle(s.into())
     } else {
         lookup_style(s)
     }
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_color_string_to_nustyle_valid_string() {
-        let color_string = r#"{"fg": "black", "bg": "white", "attr": "b"}"#.to_string();
+        let color_string = r#"{"fg": "black", "bg": "white", "attr": "b"}"#.into();
         let style = color_string_to_nustyle(color_string);
         assert_eq!(style.foreground, Some(Color::Black));
         assert_eq!(style.background, Some(Color::White));
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_color_string_to_nustyle_invalid_string() {
-        let color_string = "invalid string".to_string();
+        let color_string = "invalid string".into();
         let style = color_string_to_nustyle(color_string);
         assert_eq!(style, Style::default());
     }
@@ -126,9 +126,9 @@ mod tests {
             "attr" => Value::test_string("bold"),
         };
         let expected_style = NuStyle {
-            bg: Some("red".to_string()),
-            fg: Some("blue".to_string()),
-            attr: Some("bold".to_string()),
+            bg: Some("red".into()),
+            fg: Some("blue".into()),
+            attr: Some("bold".into()),
         };
         assert_eq!(get_style_from_value(&record), Some(expected_style));
 
@@ -144,7 +144,7 @@ mod tests {
             "invalid" => Value::nothing(Span::unknown()),
         };
         let expected_style = NuStyle {
-            bg: Some("green".to_string()),
+            bg: Some("green".into()),
             fg: None,
             attr: None,
         };

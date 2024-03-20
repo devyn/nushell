@@ -5,6 +5,7 @@ use self::output::*;
 use self::reedline::*;
 use self::table::*;
 
+use crate::NuString;
 use crate::{record, ShellError, Span, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -56,12 +57,12 @@ pub struct Config {
     pub table_indent: TableIndent,
     pub table_abbreviation_threshold: Option<usize>,
     pub use_ls_colors: bool,
-    pub color_config: HashMap<String, Value>,
+    pub color_config: HashMap<NuString, Value>,
     pub use_grid_icons: bool,
     pub footer_mode: FooterMode,
     pub float_precision: i64,
     pub max_external_completion_results: i64,
-    pub filesize_format: String,
+    pub filesize_format: NuString,
     pub use_ansi_coloring: bool,
     pub quick_completions: bool,
     pub partial_completions: bool,
@@ -82,12 +83,12 @@ pub struct Config {
     pub bracketed_paste: bool,
     pub show_clickable_links_in_ls: bool,
     pub render_right_prompt_on_last_line: bool,
-    pub explore: HashMap<String, Value>,
+    pub explore: HashMap<NuString, Value>,
     pub cursor_shape_vi_insert: NuCursorShape,
     pub cursor_shape_vi_normal: NuCursorShape,
     pub cursor_shape_emacs: NuCursorShape,
-    pub datetime_normal_format: Option<String>,
-    pub datetime_table_format: Option<String>,
+    pub datetime_normal_format: Option<NuString>,
+    pub datetime_table_format: Option<NuString>,
     pub error_style: ErrorStyle,
     pub use_kitty_protocol: bool,
     pub highlight_resolved_externals: bool,
@@ -97,7 +98,7 @@ pub struct Config {
     /// Users can provide configuration for a plugin through this entry.  The entry name must
     /// match the registered plugin name so `register nu_plugin_example` will be able to place
     /// its configuration under a `nu_plugin_example` column.
-    pub plugins: HashMap<String, Value>,
+    pub plugins: HashMap<NuString, Value>,
     /// Configuration for plugin garbage collection.
     pub plugin_gc: PluginGcConfigs,
 }
@@ -545,7 +546,7 @@ impl Value {
                                 }
                                 "format" => {
                                     if let Ok(v) = value.coerce_str() {
-                                        config.filesize_format = v.to_lowercase();
+                                        config.filesize_format = v.to_lowercase().into();
                                     } else {
                                         report_invalid_value("should be a string", span, &mut errors);
                                         // Reconstruct

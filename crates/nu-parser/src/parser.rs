@@ -19,7 +19,7 @@ use nu_protocol::{
     engine::StateWorkingSet,
     eval_const::eval_constant,
     span, BlockId, DidYouMean, Flag, ParseError, PositionalArg, Signature, Span, Spanned,
-    SyntaxShape, Type, Unit, VarId, ENV_VARIABLE_ID, IN_VARIABLE_ID,
+    SyntaxShape, Type, Unit, VarId, ENV_VARIABLE_ID, IN_VARIABLE_ID, NuString,
 };
 
 use crate::parse_keywords::{
@@ -292,9 +292,9 @@ fn parse_external_arg(working_set: &mut StateWorkingSet, span: Span) -> External
             if let Some(err) = err {
                 working_set.error(err)
             }
-            String::from_utf8_lossy(&contents).to_string()
+            String::from_utf8_lossy(&contents).into()
         } else {
-            String::from_utf8_lossy(contents).to_string()
+            String::from_utf8_lossy(contents).into()
         };
 
         ExternalArgument::Regular(Expression {
@@ -354,11 +354,11 @@ pub fn parse_external_call(working_set: &mut StateWorkingSet, spans: &[Span]) ->
 
 fn ensure_flag_arg_type(
     working_set: &mut StateWorkingSet,
-    arg_name: String,
+    arg_name: NuString,
     arg: Expression,
     arg_shape: &SyntaxShape,
     long_name_span: Span,
-) -> (Spanned<String>, Expression) {
+) -> (Spanned<NuString>, Expression) {
     if !type_compatible(&arg.ty, &arg_shape.to_type()) {
         working_set.error(ParseError::TypeMismatch(
             arg_shape.to_type(),
@@ -388,7 +388,7 @@ fn parse_long_flag(
     spans: &[Span],
     spans_idx: &mut usize,
     sig: &Signature,
-) -> (Option<Spanned<String>>, Option<Expression>) {
+) -> (Option<Spanned<NuString>>, Option<Expression>) {
     let arg_span = spans[*spans_idx];
     let arg_contents = working_set.get_span_contents(arg_span);
 
@@ -397,7 +397,7 @@ fn parse_long_flag(
         let split: Vec<_> = arg_contents.split(|x| *x == b'=').collect();
         let long_name = String::from_utf8(split[0].into());
         if let Ok(long_name) = long_name {
-            let long_name = long_name[2..].to_string();
+            let long_name = NuString::from(&long_name[2..]);
             if let Some(flag) = sig.get_long_flag(&long_name) {
                 if let Some(arg_shape) = &flag.arg {
                     if split.len() > 1 {
@@ -424,7 +424,7 @@ fn parse_long_flag(
                         (Some(arg_name), Some(val_expression))
                     } else {
                         working_set.error(ParseError::MissingFlagParam(
-                            arg_shape.to_string(),
+                            arg_shape.to_string().into(),
                             arg_span,
                         ));
                         (
@@ -547,7 +547,7 @@ fn parse_short_flags(
                 let contents = working_set.get_span_contents(*first);
                 working_set.error(ParseError::UnknownFlag(
                     sig.name.clone(),
-                    format!("-{}", String::from_utf8_lossy(contents)),
+                    format!("-{}", String::from_utf8_lossy(contents)).into(),
                     *first,
                     sig.clone().formatted_flags(),
                 ));
@@ -744,7 +744,7 @@ pub fn parse_multispan_value(
             *spans_idx += 1;
             if *spans_idx >= spans.len() {
                 working_set.error(ParseError::KeywordMissingArgument(
-                    arg.to_string(),
+                    arg.to_string().into(),
                     String::from_utf8_lossy(keyword).into(),
                     Span::new(spans[*spans_idx - 1].end, spans[*spans_idx - 1].end),
                 ));
@@ -876,7 +876,7 @@ pub fn parse_internal_call(
 
                 call.add_unknown(arg);
             } else {
-                call.add_named((long_name, None, arg));
+                call.add_named((long_name.into(), None, arg));
             }
 
             spans_idx += 1;
@@ -898,11 +898,11 @@ pub fn parse_internal_call(
             if short_flags.is_empty() {
                 // workaround for completions (PR #6067)
                 short_flags.push(Flag {
-                    long: "".to_string(),
+                    long: "".into(),
                     short: Some('a'),
                     arg: None,
                     required: false,
-                    desc: "".to_string(),
+                    desc: "".into(),
                     var_id: None,
                     default_value: None,
                 })
@@ -927,11 +927,11 @@ pub fn parse_internal_call(
                                 if let Some(short) = flag.short {
                                     call.add_named((
                                         Spanned {
-                                            item: String::new(),
+                                            item: NuString::new(),
                                             span: spans[spans_idx],
                                         },
                                         Some(Spanned {
-                                            item: short.to_string(),
+                                            item: short.into(),
                                             span: spans[spans_idx],
                                         }),
                                         Some(arg),
@@ -950,7 +950,7 @@ pub fn parse_internal_call(
                             spans_idx += 1;
                         } else {
                             working_set.error(ParseError::MissingFlagParam(
-                                arg_shape.to_string(),
+                                arg_shape.to_string().into(),
                                 arg_span,
                             ))
                         }
@@ -958,11 +958,11 @@ pub fn parse_internal_call(
                         if let Some(short) = flag.short {
                             call.add_named((
                                 Spanned {
-                                    item: String::new(),
+                                    item: NuString::new(),
                                     span: spans[spans_idx],
                                 },
                                 Some(Spanned {
-                                    item: short.to_string(),
+                                    item: short.into(),
                                     span: spans[spans_idx],
                                 }),
                                 None,
@@ -1789,7 +1789,7 @@ pub fn parse_string_interpolation(working_set: &mut StateWorkingSet, span: Span)
                     }
 
                     output.push(Expression {
-                        expr: Expr::String(String::from_utf8_lossy(&str_contents).to_string()),
+                        expr: Expr::String(String::from_utf8_lossy(&str_contents).into()),
                         span,
                         ty: Type::String,
                         custom_completion: None,
@@ -1859,7 +1859,7 @@ pub fn parse_string_interpolation(working_set: &mut StateWorkingSet, span: Span)
                 }
 
                 output.push(Expression {
-                    expr: Expr::String(String::from_utf8_lossy(&str_contents).to_string()),
+                    expr: Expr::String(String::from_utf8_lossy(&str_contents).into()),
                     span,
                     ty: Type::String,
                     custom_completion: None,
@@ -2658,25 +2658,25 @@ pub fn unescape_string(bytes: &[u8], span: Span) -> (Vec<u8>, Option<ParseError>
     (output, error)
 }
 
-pub fn unescape_unquote_string(bytes: &[u8], span: Span) -> (String, Option<ParseError>) {
+pub fn unescape_unquote_string(bytes: &[u8], span: Span) -> (NuString, Option<ParseError>) {
     if bytes.starts_with(b"\"") {
         // Needs unescaping
         let bytes = trim_quotes(bytes);
 
         let (bytes, err) = unescape_string(bytes, span);
 
-        if let Ok(token) = String::from_utf8(bytes) {
-            (token, err)
+        if let Ok(token) = str::from_utf8(&bytes) {
+            (token.into(), err)
         } else {
-            (String::new(), Some(ParseError::Expected("string", span)))
+            (NuString::new(), Some(ParseError::Expected("string", span)))
         }
     } else {
         let bytes = trim_quotes(bytes);
 
-        if let Ok(token) = String::from_utf8(bytes.into()) {
-            (token, None)
+        if let Ok(token) = str::from_utf8(bytes.into()) {
+            (token.into(), None)
         } else {
-            (String::new(), Some(ParseError::Expected("string", span)))
+            (NuString::new(), Some(ParseError::Expected("string", span)))
         }
     }
 }
@@ -2748,12 +2748,12 @@ pub fn parse_string_strict(working_set: &mut StateWorkingSet, span: Span) -> Exp
         (bytes, false)
     };
 
-    if let Ok(token) = String::from_utf8(bytes.into()) {
+    if let Ok(token) = str::from_utf8(bytes.into()) {
         trace!("-- found {}", token);
 
         if quoted {
             Expression {
-                expr: Expr::String(token),
+                expr: Expr::String(token.into()),
                 span,
                 ty: Type::String,
                 custom_completion: None,
@@ -2764,7 +2764,7 @@ pub fn parse_string_strict(working_set: &mut StateWorkingSet, span: Span) -> Exp
             garbage(span)
         } else {
             Expression {
-                expr: Expr::String(token),
+                expr: Expr::String(token.into()),
                 span,
                 ty: Type::String,
                 custom_completion: None,
@@ -3296,7 +3296,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                                 let flags: Vec<_> =
                                     contents.split(|x| x == &b'(').map(|x| x.to_vec()).collect();
 
-                                let long = String::from_utf8_lossy(&flags[0][2..]).to_string();
+                                let long = String::from_utf8_lossy(&flags[0][2..]).into();
                                 let mut variable_name = flags[0][2..].to_vec();
                                 // Replace the '-' in a variable name with '_'
                                 (0..variable_name.len()).for_each(|idx| {
@@ -3320,7 +3320,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                                     args.push(Arg::Flag {
                                         flag: Flag {
                                             arg: None,
-                                            desc: String::new(),
+                                            desc: NuString::new(),
                                             long,
                                             short: None,
                                             required: false,
@@ -3354,7 +3354,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                                     let short_flag =
                                         String::from_utf8_lossy(short_flag).to_string();
                                     let chars: Vec<char> = short_flag.chars().collect();
-                                    let long = String::from_utf8_lossy(&flags[0][2..]).to_string();
+                                    let long = String::from_utf8_lossy(&flags[0][2..]).into();
                                     let mut variable_name = flags[0][2..].to_vec();
 
                                     (0..variable_name.len()).for_each(|idx| {
@@ -3381,7 +3381,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                                         args.push(Arg::Flag {
                                             flag: Flag {
                                                 arg: None,
-                                                desc: String::new(),
+                                                desc: NuString::new(),
                                                 long,
                                                 short: Some(chars[0]),
                                                 required: false,
@@ -3423,8 +3423,8 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                                 args.push(Arg::Flag {
                                     flag: Flag {
                                         arg: None,
-                                        desc: String::new(),
-                                        long: String::new(),
+                                        desc: NuString::new(),
+                                        long: NuString::new(),
                                         short: Some(chars[0]),
                                         required: false,
                                         var_id: Some(var_id),
@@ -3477,7 +3477,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                             // Positional arg, optional
                             else if contents.ends_with(b"?") {
                                 let contents: Vec<_> = contents[..(contents.len() - 1)].into();
-                                let name = String::from_utf8_lossy(&contents).to_string();
+                                let name = String::from_utf8_lossy(&contents).into();
 
                                 if !is_variable(&contents) {
                                     working_set.error(ParseError::Expected(
@@ -3491,7 +3491,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
 
                                 args.push(Arg::Positional {
                                     arg: PositionalArg {
-                                        desc: String::new(),
+                                        desc: NuString::new(),
                                         name,
                                         shape: SyntaxShape::Any,
                                         var_id: Some(var_id),
@@ -3504,7 +3504,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                             }
                             // Rest param
                             else if let Some(contents) = contents.strip_prefix(b"...") {
-                                let name = String::from_utf8_lossy(contents).to_string();
+                                let name = String::from_utf8_lossy(contents).into();
                                 let contents_vec: Vec<u8> = contents.to_vec();
 
                                 if !is_variable(&contents_vec) {
@@ -3518,7 +3518,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                                     working_set.add_variable(contents_vec, span, Type::Any, false);
 
                                 args.push(Arg::RestPositional(PositionalArg {
-                                    desc: String::new(),
+                                    desc: NuString::new(),
                                     name,
                                     shape: SyntaxShape::Any,
                                     var_id: Some(var_id),
@@ -3528,7 +3528,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                             }
                             // Normal param
                             else {
-                                let name = String::from_utf8_lossy(&contents).to_string();
+                                let name = String::from_utf8_lossy(&contents).into();
                                 let contents_vec = contents.to_vec();
 
                                 if !is_variable(&contents_vec) {
@@ -3544,7 +3544,7 @@ pub fn parse_signature_helper(working_set: &mut StateWorkingSet, span: Span) -> 
                                 // Positional arg, required
                                 args.push(Arg::Positional {
                                     arg: PositionalArg {
-                                        desc: String::new(),
+                                        desc: NuString::new(),
                                         name,
                                         shape: SyntaxShape::Any,
                                         var_id: Some(var_id),
@@ -4061,7 +4061,7 @@ fn table_type(head: &[Expression], rows: &[Vec<Expression>]) -> (Type, Vec<Parse
                 str
             } else {
                 errors.push(mk_error(expr.span));
-                String::from("{ column }")
+                NuString::from("{ column }")
             }
         })
         .map(|title| (title, mk_ty()))
@@ -4127,7 +4127,7 @@ pub fn parse_block_expression(working_set: &mut StateWorkingSet, span: Span) -> 
             signature.required_positional.push(PositionalArg {
                 var_id: Some(*var_id),
                 name: "$it".into(),
-                desc: String::new(),
+                desc: NuString::new(),
                 shape: SyntaxShape::Any,
                 default_value: None,
             });
@@ -4446,9 +4446,9 @@ pub fn parse_closure_expression(
             {
                 if expected != shape && *shape != SyntaxShape::Any {
                     working_set.error(ParseError::ParameterMismatchType(
-                        name.to_owned(),
-                        expected.to_string(),
-                        shape.to_string(),
+                        name.into(),
+                        expected.to_string().into(),
+                        shape.to_string().into(),
                         *sig_span,
                     ));
                 }
@@ -4468,7 +4468,7 @@ pub fn parse_closure_expression(
             signature.required_positional.push(PositionalArg {
                 var_id: Some(*var_id),
                 name: "$it".into(),
-                desc: String::new(),
+                desc: NuString::new(),
                 shape: SyntaxShape::Any,
                 default_value: None,
             });
@@ -5085,7 +5085,7 @@ pub fn parse_expression(working_set: &mut StateWorkingSet, spans: &[Span]) -> Ex
                 }
             } else {
                 Expression {
-                    expr: Expr::String(String::new()),
+                    expr: Expr::String(NuString::new()),
                     span: Span::unknown(),
                     ty: Type::Nothing,
                     custom_completion: None,
@@ -6168,7 +6168,7 @@ fn wrap_expr_with_collect(working_set: &mut StateWorkingSet, expr: &Expression) 
         signature.required_positional.push(PositionalArg {
             var_id: Some(var_id),
             name: "$in".into(),
-            desc: String::new(),
+            desc: NuString::new(),
             shape: SyntaxShape::Any,
             default_value: None,
         });
@@ -6190,7 +6190,7 @@ fn wrap_expr_with_collect(working_set: &mut StateWorkingSet, expr: &Expression) 
 
         output.push(Argument::Named((
             Spanned {
-                item: "keep-env".to_string(),
+                item: "keep-env".into(),
                 span: Span::new(0, 0),
             },
             None,

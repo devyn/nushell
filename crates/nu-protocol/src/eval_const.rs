@@ -1,3 +1,4 @@
+use crate::NuString;
 use crate::debugger::{DebugContext, WithoutDebug};
 use crate::{
     ast::{Assignment, Block, Call, Expr, Expression, ExternalArgument},
@@ -276,7 +277,7 @@ impl Eval for EvalConst {
     fn eval_filepath(
         _: &StateWorkingSet,
         _: &mut (),
-        path: String,
+        path: NuString,
         _: bool,
         span: Span,
     ) -> Result<Value, ShellError> {
@@ -286,7 +287,7 @@ impl Eval for EvalConst {
     fn eval_directory(
         _: &StateWorkingSet,
         _: &mut (),
-        _: String,
+        _: NuString,
         _: bool,
         span: Span,
     ) -> Result<Value, ShellError> {

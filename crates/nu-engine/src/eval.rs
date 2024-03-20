@@ -2,6 +2,7 @@ use std::{borrow::Cow, fs::OpenOptions, path::PathBuf};
 
 use crate::{current_dir, current_dir_str, get_config, get_full_help};
 use nu_path::expand_path_with;
+use nu_protocol::NuString;
 use nu_protocol::debugger::DebugContext;
 use nu_protocol::{
     ast::{
@@ -27,8 +28,8 @@ pub fn eval_call<D: DebugContext>(
 
     if !decl.is_known_external() && call.named_iter().any(|(flag, _, _)| flag.item == "help") {
         let mut signature = engine_state.get_signature(decl);
-        signature.usage = decl.usage().to_string();
-        signature.extra_usage = decl.extra_usage().to_string();
+        signature.usage = decl.usage().into();
+        signature.extra_usage = decl.extra_usage().into();
 
         let full_help = get_full_help(
             &signature,
@@ -600,9 +601,9 @@ pub fn eval_variable(
             let env_values = env_vars.values();
 
             let mut pairs = env_columns
-                .map(|x| x.to_string())
+                .cloned()
                 .zip(env_values.cloned())
-                .collect::<Vec<(String, Value)>>();
+                .collect::<Vec<(NuString, Value)>>();
 
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -626,7 +627,7 @@ impl Eval for EvalRuntime {
     fn eval_filepath(
         engine_state: &EngineState,
         stack: &mut Stack,
-        path: String,
+        path: NuString,
         quoted: bool,
         span: Span,
     ) -> Result<Value, ShellError> {
@@ -643,7 +644,7 @@ impl Eval for EvalRuntime {
     fn eval_directory(
         engine_state: Self::State<'_>,
         stack: &mut Self::MutState,
-        path: String,
+        path: NuString,
         quoted: bool,
         span: Span,
     ) -> Result<Value, ShellError> {
@@ -795,12 +796,12 @@ impl Eval for EvalRuntime {
                                                 span: *span,
                                             });
                                         } else {
-                                            stack.add_env_var(val.to_string(), vardata);
+                                            stack.add_env_var(val.into(), vardata);
                                         }
                                     }
                                     // In case someone really wants an integer env-var
                                     PathMember::Int { val, .. } => {
-                                        stack.add_env_var(val.to_string(), vardata);
+                                        stack.add_env_var(val.to_string().into(), vardata);
                                     }
                                 }
                             } else {

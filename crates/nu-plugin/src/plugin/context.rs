@@ -8,7 +8,7 @@ use nu_engine::get_eval_block_with_early_return;
 use nu_protocol::{
     ast::Call,
     engine::{Closure, EngineState, Redirection, Stack},
-    Config, IntoSpanned, IoStream, PipelineData, PluginIdentity, ShellError, Spanned, Value,
+    Config, IntoSpanned, IoStream, PipelineData, PluginIdentity, ShellError, Spanned, Value, NuString,
 };
 
 use crate::util::MutableCow;
@@ -24,11 +24,11 @@ pub(crate) trait PluginExecutionContext: Send + Sync {
     /// Get an environment variable from `$env`
     fn get_env_var(&self, name: &str) -> Result<Option<Value>, ShellError>;
     /// Get all environment variables
-    fn get_env_vars(&self) -> Result<HashMap<String, Value>, ShellError>;
+    fn get_env_vars(&self) -> Result<HashMap<NuString, Value>, ShellError>;
     /// Get current working directory
-    fn get_current_dir(&self) -> Result<Spanned<String>, ShellError>;
+    fn get_current_dir(&self) -> Result<Spanned<NuString>, ShellError>;
     /// Set an environment variable
-    fn add_env_var(&mut self, name: String, value: Value) -> Result<(), ShellError>;
+    fn add_env_var(&mut self, name: NuString, value: Value) -> Result<(), ShellError>;
     /// Evaluate a closure passed to the plugin
     fn eval_closure(
         &self,
@@ -116,17 +116,17 @@ impl<'a> PluginExecutionContext for PluginExecutionCommandContext<'a> {
         Ok(self.stack.get_env_var(&self.engine_state, name))
     }
 
-    fn get_env_vars(&self) -> Result<HashMap<String, Value>, ShellError> {
+    fn get_env_vars(&self) -> Result<HashMap<NuString, Value>, ShellError> {
         Ok(self.stack.get_env_vars(&self.engine_state))
     }
 
-    fn get_current_dir(&self) -> Result<Spanned<String>, ShellError> {
+    fn get_current_dir(&self) -> Result<Spanned<NuString>, ShellError> {
         let cwd = nu_engine::env::current_dir_str(&self.engine_state, &self.stack)?;
         // The span is not really used, so just give it call.head
         Ok(cwd.into_spanned(self.call.head))
     }
 
-    fn add_env_var(&mut self, name: String, value: Value) -> Result<(), ShellError> {
+    fn add_env_var(&mut self, name: NuString, value: Value) -> Result<(), ShellError> {
         self.stack.add_env_var(name, value);
         Ok(())
     }
@@ -228,19 +228,19 @@ impl PluginExecutionContext for PluginExecutionBogusContext {
         })
     }
 
-    fn get_env_vars(&self) -> Result<HashMap<String, Value>, ShellError> {
+    fn get_env_vars(&self) -> Result<HashMap<NuString, Value>, ShellError> {
         Err(ShellError::NushellFailed {
             msg: "get_env_vars not implemented on bogus".into(),
         })
     }
 
-    fn get_current_dir(&self) -> Result<Spanned<String>, ShellError> {
+    fn get_current_dir(&self) -> Result<Spanned<NuString>, ShellError> {
         Err(ShellError::NushellFailed {
             msg: "get_current_dir not implemented on bogus".into(),
         })
     }
 
-    fn add_env_var(&mut self, _name: String, _value: Value) -> Result<(), ShellError> {
+    fn add_env_var(&mut self, _name: NuString, _value: Value) -> Result<(), ShellError> {
         Err(ShellError::NushellFailed {
             msg: "add_env_var not implemented on bogus".into(),
         })

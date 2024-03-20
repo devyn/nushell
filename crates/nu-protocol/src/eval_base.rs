@@ -1,3 +1,4 @@
+use crate::NuString;
 use crate::debugger::DebugContext;
 use crate::{
     ast::{
@@ -64,7 +65,7 @@ pub trait Eval {
                             let col_name = Self::eval::<D>(state, mut_state, col)?.coerce_into_string()?;
                             if let Some(orig_span) = col_names.get(&col_name) {
                                 return Err(ShellError::ColumnDefinedTwice {
-                                    col_name,
+                                    col_name: col_name.into(),
                                     second_use: col.span,
                                     first_use: *orig_span,
                                 });
@@ -77,9 +78,9 @@ pub trait Eval {
                             match Self::eval::<D>(state, mut_state, inner)? {
                                 Value::Record { val: inner_val, .. } => {
                                     for (col_name, val) in inner_val {
-                                        if let Some(orig_span) = col_names.get(&col_name) {
+                                        if let Some(orig_span) = col_names.get(col_name.as_str()) {
                                             return Err(ShellError::ColumnDefinedTwice {
-                                                col_name,
+                                                col_name: col_name.into(),
                                                 second_use: inner.span,
                                                 first_use: *orig_span,
                                             });
@@ -110,7 +111,7 @@ pub trait Eval {
                         .position(|existing| existing == &header)
                     {
                         return Err(ShellError::ColumnDefinedTwice {
-                            col_name: header,
+                            col_name: header.into(),
                             second_use: expr.span,
                             first_use: headers[idx].span,
                         });
@@ -306,7 +307,7 @@ pub trait Eval {
     fn eval_filepath(
         state: Self::State<'_>,
         mut_state: &mut Self::MutState,
-        path: String,
+        path: NuString,
         quoted: bool,
         span: Span,
     ) -> Result<Value, ShellError>;
@@ -314,7 +315,7 @@ pub trait Eval {
     fn eval_directory(
         state: Self::State<'_>,
         mut_state: &mut Self::MutState,
-        path: String,
+        path: NuString,
         quoted: bool,
         span: Span,
     ) -> Result<Value, ShellError>;

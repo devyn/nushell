@@ -1,3 +1,4 @@
+use crate::NuString;
 use crate::{PluginExample, Signature};
 use serde::Deserialize;
 use serde::Serialize;
@@ -24,25 +25,25 @@ impl PluginSignature {
     }
 
     /// Build an internal signature with default help option
-    pub fn build(name: impl Into<String>) -> PluginSignature {
+    pub fn build(name: impl Into<NuString>) -> PluginSignature {
         let sig = Signature::new(name.into()).add_help();
         Self::new(sig, vec![])
     }
 
     /// Add a description to the signature
-    pub fn usage(mut self, msg: impl Into<String>) -> PluginSignature {
+    pub fn usage(mut self, msg: impl Into<NuString>) -> PluginSignature {
         self.sig = self.sig.usage(msg);
         self
     }
 
     /// Add an extra description to the signature
-    pub fn extra_usage(mut self, msg: impl Into<String>) -> PluginSignature {
+    pub fn extra_usage(mut self, msg: impl Into<NuString>) -> PluginSignature {
         self.sig = self.sig.extra_usage(msg);
         self
     }
 
     /// Add search terms to the signature
-    pub fn search_terms(mut self, terms: Vec<String>) -> PluginSignature {
+    pub fn search_terms(mut self, terms: Vec<NuString>) -> PluginSignature {
         self.sig = self.sig.search_terms(terms);
         self
     }
@@ -62,9 +63,9 @@ impl PluginSignature {
     /// Add a required positional argument to the signature
     pub fn required(
         mut self,
-        name: impl Into<String>,
+        name: impl Into<NuString>,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
     ) -> PluginSignature {
         self.sig = self.sig.required(name, shape, desc);
         self
@@ -73,9 +74,9 @@ impl PluginSignature {
     /// Add an optional positional argument to the signature
     pub fn optional(
         mut self,
-        name: impl Into<String>,
+        name: impl Into<NuString>,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
     ) -> PluginSignature {
         self.sig = self.sig.optional(name, shape, desc);
         self
@@ -85,7 +86,7 @@ impl PluginSignature {
         mut self,
         name: &str,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
     ) -> PluginSignature {
         self.sig = self.sig.rest(name, shape, desc);
         self
@@ -99,9 +100,9 @@ impl PluginSignature {
     /// Add an optional named flag argument to the signature
     pub fn named(
         mut self,
-        name: impl Into<String>,
+        name: impl Into<NuString>,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
         short: Option<char>,
     ) -> PluginSignature {
         self.sig = self.sig.named(name, shape, desc, short);
@@ -111,9 +112,9 @@ impl PluginSignature {
     /// Add a required named flag argument to the signature
     pub fn required_named(
         mut self,
-        name: impl Into<String>,
+        name: impl Into<NuString>,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
         short: Option<char>,
     ) -> PluginSignature {
         self.sig = self.sig.required_named(name, shape, desc, short);
@@ -123,8 +124,8 @@ impl PluginSignature {
     /// Add a switch to the signature
     pub fn switch(
         mut self,
-        name: impl Into<String>,
-        desc: impl Into<String>,
+        name: impl Into<NuString>,
+        desc: impl Into<NuString>,
         short: Option<char>,
     ) -> PluginSignature {
         self.sig = self.sig.switch(name, desc, short);
@@ -161,7 +162,7 @@ impl PluginSignature {
         self
     }
 
-    pub fn call_signature(&self) -> String {
+    pub fn call_signature(&self) -> NuString {
         self.sig.call_signature()
     }
 
@@ -215,7 +216,7 @@ impl PluginSignature {
         self.sig.into_block_command(block_id)
     }
 
-    pub fn formatted_flags(self) -> String {
+    pub fn formatted_flags(self) -> NuString {
         self.sig.formatted_flags()
     }
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{record, ShellError, Span, Value};
+use crate::{record, ShellError, Span, Value, NuString};
 
 use super::helper::{
     process_bool_config, report_invalid_key, report_invalid_value, ReconstructVal,
@@ -14,7 +14,7 @@ pub struct PluginGcConfigs {
     /// The config to use for plugins not otherwise specified
     pub default: PluginGcConfig,
     /// Specific configs for plugins (by name)
-    pub plugins: HashMap<String, PluginGcConfig>,
+    pub plugins: HashMap<NuString, PluginGcConfig>,
 }
 
 impl PluginGcConfigs {
@@ -82,7 +82,7 @@ fn process_plugins(
     path: &[&str],
     value: &mut Value,
     errors: &mut Vec<ShellError>,
-    plugins: &mut HashMap<String, PluginGcConfig>,
+    plugins: &mut HashMap<NuString, PluginGcConfig>,
 ) {
     if let Value::Record { val, .. } = value {
         // Remove any plugin configs that aren't in the value
@@ -90,7 +90,7 @@ fn process_plugins(
 
         val.retain_mut(|key, value| {
             if matches!(value, Value::Record { .. }) {
-                plugins.entry(key.to_owned()).or_default().process(
+                plugins.entry(key.into()).or_default().process(
                     &join_path(path, &[key]),
                     value,
                     errors,
@@ -111,7 +111,7 @@ fn process_plugins(
     }
 }
 
-fn reconstruct_plugins(plugins: &HashMap<String, PluginGcConfig>, span: Span) -> Value {
+fn reconstruct_plugins(plugins: &HashMap<NuString, PluginGcConfig>, span: Span) -> Value {
     Value::record(
         plugins
             .iter()
@@ -210,7 +210,7 @@ mod tests {
                     stop_after: 30_000_000_000,
                 },
                 plugins: [(
-                    "my_plugin".to_owned(),
+                    "my_plugin".into(),
                     PluginGcConfig {
                         enabled: false,
                         stop_after: 0,

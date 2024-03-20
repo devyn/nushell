@@ -1,4 +1,4 @@
-use crate::{Record, ShellError, Span, Value};
+use crate::{Record, ShellError, Span, Value, NuString};
 use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 pub(super) trait ReconstructVal {
@@ -114,7 +114,7 @@ pub(super) fn report_invalid_value(msg: &str, span: Span, errors: &mut Vec<Shell
     });
 }
 
-pub(super) fn create_map(value: &Value) -> Result<HashMap<String, Value>, ShellError> {
+pub(super) fn create_map(value: &Value) -> Result<HashMap<NuString, Value>, ShellError> {
     Ok(value
         .as_record()?
         .iter()

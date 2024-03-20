@@ -110,7 +110,7 @@ pub fn complete_item(
                 Some(v) => env_to_string("LS_COLORS", &v, engine_state, stack).ok(),
                 None => None,
             };
-            get_ls_colors(ls_colors_env_str)
+            get_ls_colors(ls_colors_env_str.as_deref())
         });
     let mut original_cwd = OriginalCwd::None;
     let mut components_vec: Vec<Component> = Path::new(&partial).components().collect();

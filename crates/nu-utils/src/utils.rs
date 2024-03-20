@@ -55,9 +55,9 @@ pub fn get_default_config() -> &'static str {
     include_str!("sample_config/default_config.nu")
 }
 
-pub fn get_ls_colors(lscolors_env_string: Option<String>) -> LsColors {
+pub fn get_ls_colors(lscolors_env_string: Option<&str>) -> LsColors {
     if let Some(s) = lscolors_env_string {
-        LsColors::from_string(&s)
+        LsColors::from_string(s)
     } else {
         LsColors::from_string(
             &[

@@ -1,7 +1,7 @@
 use nu_protocol::{
     ast::Expr,
     engine::{Command, EngineState, Stack, Visibility},
-    record, ModuleId, Signature, Span, SyntaxShape, Type, Value,
+    record, ModuleId, Signature, Span, SyntaxShape, Type, Value, NuString,
 };
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -140,14 +140,14 @@ impl<'e, 's> ScopeData<'e, 's> {
             .iter()
             .map(|(input_type, output_type)| {
                 (
-                    input_type.to_shape().to_string(),
+                    input_type.to_shape().to_string().into(),
                     Value::list(
                         self.collect_signature_entries(input_type, output_type, signature, span),
                         span,
                     ),
                 )
             })
-            .collect::<Vec<(String, Value)>>();
+            .collect::<Vec<(NuString, Value)>>();
 
         // Until we allow custom commands to have input and output types, let's just
         // make them Type::Any Type::Any so they can show up in our `scope commands`
@@ -156,7 +156,7 @@ impl<'e, 's> ScopeData<'e, 's> {
         if sigs.is_empty() {
             let any_type = &Type::Any;
             sigs.push((
-                any_type.to_shape().to_string(),
+                any_type.to_shape().to_string().into(),
                 Value::list(
                     self.collect_signature_entries(any_type, any_type, signature, span),
                     span,

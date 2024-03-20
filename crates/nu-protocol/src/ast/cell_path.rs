@@ -1,12 +1,12 @@
 use super::Expression;
-use crate::Span;
+use crate::{Span, NuString};
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, fmt::Display};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PathMember {
     String {
-        val: String,
+        val: NuString,
         span: Span,
         optional: bool,
     },
@@ -26,9 +26,9 @@ impl PathMember {
         }
     }
 
-    pub fn string(val: String, optional: bool, span: Span) -> Self {
+    pub fn string(val: impl Into<NuString>, optional: bool, span: Span) -> Self {
         PathMember::String {
-            val,
+            val: val.into(),
             span,
             optional,
         }
@@ -42,9 +42,9 @@ impl PathMember {
         }
     }
 
-    pub fn test_string(val: String, optional: bool) -> Self {
+    pub fn test_string(val: impl Into<NuString>, optional: bool) -> Self {
         PathMember::String {
-            val,
+            val: val.into(),
             optional,
             span: Span::test_data(),
         }
@@ -186,7 +186,7 @@ mod test {
     fn path_member_partial_ord() {
         assert_eq!(
             Some(Greater),
-            PathMember::test_int(5, true).partial_cmp(&PathMember::test_string("e".into(), true))
+            PathMember::test_int(5, true).partial_cmp(&PathMember::test_string("e", true))
         );
 
         assert_eq!(
@@ -201,14 +201,14 @@ mod test {
 
         assert_eq!(
             Some(Greater),
-            PathMember::test_string("e".into(), true)
-                .partial_cmp(&PathMember::test_string("e".into(), false))
+            PathMember::test_string("e", true)
+                .partial_cmp(&PathMember::test_string("e", false))
         );
 
         assert_eq!(
             Some(Greater),
-            PathMember::test_string("f".into(), true)
-                .partial_cmp(&PathMember::test_string("e".into(), true))
+            PathMember::test_string("f", true)
+                .partial_cmp(&PathMember::test_string("e", true))
         );
     }
 }

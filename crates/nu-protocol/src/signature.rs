@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::NuString;
 use crate::ast::Call;
 use crate::engine::Command;
 use crate::engine::EngineState;
@@ -16,11 +17,11 @@ use std::fmt::Write;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Flag {
-    pub long: String,
+    pub long: NuString,
     pub short: Option<char>,
     pub arg: Option<SyntaxShape>,
     pub required: bool,
-    pub desc: String,
+    pub desc: NuString,
 
     // For custom commands
     pub var_id: Option<VarId>,
@@ -29,8 +30,8 @@ pub struct Flag {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PositionalArg {
-    pub name: String,
-    pub desc: String,
+    pub name: NuString,
+    pub desc: NuString,
     pub shape: SyntaxShape,
 
     // For custom commands
@@ -45,7 +46,7 @@ pub enum Category {
     Chart,
     Conversions,
     Core,
-    Custom(String),
+    Custom(NuString),
     Database,
     Date,
     Debug,
@@ -66,7 +67,7 @@ pub enum Category {
     Platform,
     Random,
     Shells,
-    Strings,
+    NuStrings,
     System,
     Viewers,
 }
@@ -100,7 +101,7 @@ impl std::fmt::Display for Category {
             Category::Platform => "platform",
             Category::Random => "random",
             Category::Shells => "shells",
-            Category::Strings => "strings",
+            Category::NuStrings => "strings",
             Category::System => "system",
             Category::Viewers => "viewers",
         };
@@ -111,10 +112,10 @@ impl std::fmt::Display for Category {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Signature {
-    pub name: String,
-    pub usage: String,
-    pub extra_usage: String,
-    pub search_terms: Vec<String>,
+    pub name: NuString,
+    pub usage: NuString,
+    pub extra_usage: NuString,
+    pub search_terms: Vec<NuString>,
     pub required_positional: Vec<PositionalArg>,
     pub optional_positional: Vec<PositionalArg>,
     pub rest_positional: Option<PositionalArg>,
@@ -142,11 +143,11 @@ impl PartialEq for Signature {
 impl Eq for Signature {}
 
 impl Signature {
-    pub fn new(name: impl Into<String>) -> Signature {
+    pub fn new(name: impl Into<NuString>) -> Signature {
         Signature {
             name: name.into(),
-            usage: String::new(),
-            extra_usage: String::new(),
+            usage: NuString::new(),
+            extra_usage: NuString::new(),
             search_terms: vec![],
             required_positional: vec![],
             optional_positional: vec![],
@@ -218,24 +219,24 @@ impl Signature {
     }
 
     // Build an internal signature with default help option
-    pub fn build(name: impl Into<String>) -> Signature {
+    pub fn build(name: impl Into<NuString>) -> Signature {
         Signature::new(name.into()).add_help()
     }
 
     /// Add a description to the signature
-    pub fn usage(mut self, msg: impl Into<String>) -> Signature {
+    pub fn usage(mut self, msg: impl Into<NuString>) -> Signature {
         self.usage = msg.into();
         self
     }
 
     /// Add an extra description to the signature
-    pub fn extra_usage(mut self, msg: impl Into<String>) -> Signature {
+    pub fn extra_usage(mut self, msg: impl Into<NuString>) -> Signature {
         self.extra_usage = msg.into();
         self
     }
 
     /// Add search terms to the signature
-    pub fn search_terms(mut self, terms: Vec<String>) -> Signature {
+    pub fn search_terms(mut self, terms: Vec<NuString>) -> Signature {
         self.search_terms = terms;
         self
     }
@@ -245,10 +246,10 @@ impl Signature {
         self.search_terms = command
             .search_terms()
             .into_iter()
-            .map(|term| term.to_string())
+            .map(|term| term.into())
             .collect();
-        self.extra_usage = command.extra_usage().to_string();
-        self.usage = command.usage().to_string();
+        self.extra_usage = command.extra_usage().into();
+        self.usage = command.usage().into();
         self
     }
 
@@ -261,9 +262,9 @@ impl Signature {
     /// Add a required positional argument to the signature
     pub fn required(
         mut self,
-        name: impl Into<String>,
+        name: impl Into<NuString>,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
     ) -> Signature {
         self.required_positional.push(PositionalArg {
             name: name.into(),
@@ -279,9 +280,9 @@ impl Signature {
     /// Add an optional positional argument to the signature
     pub fn optional(
         mut self,
-        name: impl Into<String>,
+        name: impl Into<NuString>,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
     ) -> Signature {
         self.optional_positional.push(PositionalArg {
             name: name.into(),
@@ -298,7 +299,7 @@ impl Signature {
         mut self,
         name: &str,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
     ) -> Signature {
         self.rest_positional = Some(PositionalArg {
             name: name.into(),
@@ -330,9 +331,9 @@ impl Signature {
     /// Add an optional named flag argument to the signature
     pub fn named(
         mut self,
-        name: impl Into<String>,
+        name: impl Into<NuString>,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
         short: Option<char>,
     ) -> Signature {
         let (name, s) = self.check_names(name, short);
@@ -353,9 +354,9 @@ impl Signature {
     /// Add a required named flag argument to the signature
     pub fn required_named(
         mut self,
-        name: impl Into<String>,
+        name: impl Into<NuString>,
         shape: impl Into<SyntaxShape>,
-        desc: impl Into<String>,
+        desc: impl Into<NuString>,
         short: Option<char>,
     ) -> Signature {
         let (name, s) = self.check_names(name, short);
@@ -376,8 +377,8 @@ impl Signature {
     /// Add a switch to the signature
     pub fn switch(
         mut self,
-        name: impl Into<String>,
-        desc: impl Into<String>,
+        name: impl Into<NuString>,
+        desc: impl Into<NuString>,
         short: Option<char>,
     ) -> Signature {
         let (name, s) = self.check_names(name, short);
@@ -426,8 +427,8 @@ impl Signature {
         self
     }
 
-    pub fn call_signature(&self) -> String {
-        let mut one_liner = String::new();
+    pub fn call_signature(&self) -> NuString {
+        let mut one_liner = NuString::new();
         one_liner.push_str(&self.name);
         one_liner.push(' ');
 
@@ -469,7 +470,7 @@ impl Signature {
 
     /// Checks if short or long are already present
     /// Panics if one of them is found
-    fn check_names(&self, name: impl Into<String>, short: Option<char>) -> (String, Option<char>) {
+    fn check_names(&self, name: impl Into<NuString>, short: Option<char>) -> (NuString, Option<char>) {
         let s = short.map(|c| {
             assert!(
                 !self.get_shorts().contains(&c),
@@ -480,7 +481,7 @@ impl Signature {
         });
 
         let name = {
-            let name: String = name.into();
+            let name: NuString = name.into();
             assert!(
                 !self.get_names().contains(&name.as_str()),
                 "There may be duplicate name flags for '--{}'",
@@ -586,7 +587,7 @@ impl Signature {
         })
     }
 
-    pub fn formatted_flags(self) -> String {
+    pub fn formatted_flags(self) -> NuString {
         if self.named.len() < 11 {
             let mut s = "Available flags:".to_string();
             for flag in self.named {
@@ -614,7 +615,7 @@ impl Signature {
                 "... Use `--help` for a full list of flags and more information."
             );
             s
-        }
+        }.into()
     }
 }
 
@@ -651,20 +652,20 @@ impl Command for Predeclaration {
     }
 }
 
-fn get_positional_short_name(arg: &PositionalArg, is_required: bool) -> String {
+fn get_positional_short_name(arg: &PositionalArg, is_required: bool) -> NuString {
     match &arg.shape {
         SyntaxShape::Keyword(name, ..) => {
             if is_required {
-                format!("{} <{}> ", String::from_utf8_lossy(name), arg.name)
+                format!("{} <{}> ", String::from_utf8_lossy(name), arg.name).into()
             } else {
-                format!("({} <{}>) ", String::from_utf8_lossy(name), arg.name)
+                format!("({} <{}>) ", String::from_utf8_lossy(name), arg.name).into()
             }
         }
         _ => {
             if is_required {
-                format!("<{}> ", arg.name)
+                format!("<{}> ", arg.name).into()
             } else {
-                format!("({}) ", arg.name)
+                format!("({}) ", arg.name).into()
             }
         }
     }

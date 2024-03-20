@@ -1,5 +1,5 @@
 use super::Expression;
-use crate::{Span, VarId};
+use crate::{Span, VarId, NuString};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -17,7 +17,7 @@ impl MatchPattern {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Pattern {
-    Record(Vec<(String, MatchPattern)>),
+    Record(Vec<(NuString, MatchPattern)>),
     List(Vec<MatchPattern>),
     Value(Expression),
     Variable(VarId),

@@ -1,16 +1,16 @@
 use crate::{
     ast::{Call, Expression},
     engine::{Command, EngineState, Stack},
-    PipelineData, ShellError, Signature,
+    PipelineData, ShellError, Signature, NuString,
 };
 
 #[derive(Clone)]
 pub struct Alias {
-    pub name: String,
+    pub name: NuString,
     pub command: Option<Box<dyn Command>>, // None if external call
     pub wrapped_call: Expression,
-    pub usage: String,
-    pub extra_usage: String,
+    pub usage: NuString,
+    pub extra_usage: NuString,
 }
 
 impl Command for Alias {

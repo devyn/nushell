@@ -192,13 +192,13 @@ pub fn parse_record_pattern(working_set: &mut StateWorkingSet, span: Span) -> Ma
         let bytes = working_set.get_span_contents(tokens[idx].span);
         let (field, pattern) = if !bytes.is_empty() && bytes[0] == b'$' {
             // If this is a variable, treat it as both the name of the field and the pattern
-            let field = String::from_utf8_lossy(&bytes[1..]).to_string();
+            let field = String::from_utf8_lossy(&bytes[1..]).into();
 
             let pattern = parse_variable_pattern(working_set, tokens[idx].span);
 
             (field, pattern)
         } else {
-            let field = String::from_utf8_lossy(bytes).to_string();
+            let field = String::from_utf8_lossy(bytes).into();
 
             idx += 1;
             if idx == tokens.len() {

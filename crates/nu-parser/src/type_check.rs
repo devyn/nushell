@@ -3,12 +3,12 @@ use nu_protocol::{
         Assignment, Bits, Block, Boolean, Comparison, Expr, Expression, Math, Operator, Pipeline,
     },
     engine::StateWorkingSet,
-    ParseError, Type,
+    ParseError, Type, NuString,
 };
 
 pub fn type_compatible(lhs: &Type, rhs: &Type) -> bool {
     // Structural subtyping
-    let is_compatible = |expected: &[(String, Type)], found: &[(String, Type)]| {
+    let is_compatible = |expected: &[(NuString, Type)], found: &[(NuString, Type)]| {
         if expected.is_empty() || found.is_empty() {
             // We treat an incoming empty table/record type as compatible for typechecking purposes
             // It is the responsibility of the runtime to reject if necessary

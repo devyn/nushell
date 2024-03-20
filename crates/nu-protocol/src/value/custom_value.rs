@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, fmt};
 
-use crate::{ast::Operator, ShellError, Span, Value};
+use crate::{ast::Operator, ShellError, Span, Value, NuString};
 
 /// Trait definition for a custom [`Value`](crate::Value) type
 #[typetag::serde(tag = "type")]
@@ -45,7 +45,7 @@ pub trait CustomValue: fmt::Debug + Send + Sync {
     fn follow_path_string(
         &self,
         self_span: Span,
-        column_name: String,
+        column_name: NuString,
         path_span: Span,
     ) -> Result<Value, ShellError> {
         let _ = (self_span, column_name);

@@ -1,4 +1,5 @@
 use nu_color_config::StyleComputer;
+use nu_protocol::NuString;
 use tabled::{
     builder::Builder,
     grid::{
@@ -60,7 +61,7 @@ pub fn colorize_space(data: &mut [Vec<CellInfo<String>>], style_computer: &Style
     }
 }
 
-pub fn colorize_space_str(text: &mut String, style_computer: &StyleComputer<'_>) {
+pub fn colorize_space_str(text: &mut NuString, style_computer: &StyleComputer<'_>) {
     if let Some(style) = get_leading_trailing_space_style(style_computer).color_style {
         let style = convert_style(style).into();
         *text = colorize_space_one(text, Some(&style), Some(&style));

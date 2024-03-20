@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ast::Expression, engine::StateWorkingSet, eval_const::eval_constant, DeclId, FromValue,
-    ShellError, Span, Spanned, Value,
+    ShellError, Span, Spanned, Value, NuString,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Argument {
     Positional(Expression),
-    Named((Spanned<String>, Option<Spanned<String>>, Option<Expression>)),
+    Named((Spanned<NuString>, Option<Spanned<NuString>>, Option<Expression>)),
     Unknown(Expression), // unknown argument used in "fall-through" signatures
     Spread(Expression),  // a list spread to fill in rest arguments
 }
@@ -86,7 +86,7 @@ impl Call {
 
     pub fn named_iter(
         &self,
-    ) -> impl Iterator<Item = &(Spanned<String>, Option<Spanned<String>>, Option<Expression>)> {
+    ) -> impl Iterator<Item = &(Spanned<NuString>, Option<Spanned<NuString>>, Option<Expression>)> {
         self.arguments.iter().filter_map(|arg| match arg {
             Argument::Named(named) => Some(named),
             Argument::Positional(_) => None,
@@ -97,7 +97,7 @@ impl Call {
 
     pub fn named_iter_mut(
         &mut self,
-    ) -> impl Iterator<Item = &mut (Spanned<String>, Option<Spanned<String>>, Option<Expression>)>
+    ) -> impl Iterator<Item = &mut (Spanned<NuString>, Option<Spanned<NuString>>, Option<Expression>)>
     {
         self.arguments.iter_mut().filter_map(|arg| match arg {
             Argument::Named(named) => Some(named),
@@ -113,7 +113,7 @@ impl Call {
 
     pub fn add_named(
         &mut self,
-        named: (Spanned<String>, Option<Spanned<String>>, Option<Expression>),
+        named: (Spanned<NuString>, Option<Spanned<NuString>>, Option<Expression>),
     ) {
         self.arguments.push(Argument::Named(named));
     }
@@ -209,7 +209,7 @@ impl Call {
         None
     }
 
-    pub fn get_named_arg(&self, flag_name: &str) -> Option<Spanned<String>> {
+    pub fn get_named_arg(&self, flag_name: &str) -> Option<Spanned<NuString>> {
         for name in self.named_iter() {
             if flag_name == name.0.item {
                 return Some(name.0.clone());
@@ -353,11 +353,11 @@ mod test {
     #[test]
     fn argument_span_named() {
         let named = Spanned {
-            item: "named".to_string(),
+            item: "named".into(),
             span: Span::new(2, 3),
         };
         let short = Spanned {
-            item: "short".to_string(),
+            item: "short".into(),
             span: Span::new(5, 7),
         };
         let expr = Expression::garbage(Span::new(11, 13));

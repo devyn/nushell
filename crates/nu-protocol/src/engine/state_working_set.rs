@@ -3,7 +3,7 @@ use super::{
     Visibility, PWD_ENV,
 };
 use crate::ast::Block;
-use crate::{BlockId, Config, DeclId, FileId, Module, ModuleId, Span, Type, VarId, VirtualPathId};
+use crate::{BlockId, Config, DeclId, FileId, Module, ModuleId, Span, Type, VarId, VirtualPathId, NuString};
 use crate::{Category, ParseError, ParseWarning, Value};
 use core::panic;
 use std::collections::{HashMap, HashSet};
@@ -604,7 +604,7 @@ impl<'a> StateWorkingSet<'a> {
         next_id
     }
 
-    pub fn get_cwd(&self) -> String {
+    pub fn get_cwd(&self) -> NuString {
         let pwd = self
             .permanent_state
             .get_env_var(PWD_ENV)
@@ -625,7 +625,7 @@ impl<'a> StateWorkingSet<'a> {
         &self.permanent_state.config
     }
 
-    pub fn list_env(&self) -> Vec<String> {
+    pub fn list_env(&self) -> Vec<NuString> {
         let mut env_vars = vec![];
 
         for env_var in self.permanent_state.env_vars.iter() {
@@ -952,7 +952,7 @@ impl<'a> StateWorkingSet<'a> {
         self.delta
     }
 
-    pub fn build_usage(&self, spans: &[Span]) -> (String, String) {
+    pub fn build_usage(&self, spans: &[Span]) -> (NuString, NuString) {
         let comment_lines: Vec<&[u8]> = spans
             .iter()
             .map(|span| self.get_span_contents(*span))

@@ -5,7 +5,7 @@ macro_rules! generate_tests {
             PluginCallResponse, PluginCustomValue, PluginInput, PluginOption, PluginOutput,
             StreamData, StreamMessage,
         };
-        use nu_protocol::{PluginSignature, Span, Spanned, SyntaxShape, Value};
+        use nu_protocol::{PluginSignature, Span, Spanned, SyntaxShape, NuString, Value};
 
         #[test]
         fn decode_eof() {
@@ -102,7 +102,7 @@ macro_rules! generate_tests {
 
         #[test]
         fn call_round_trip_run() {
-            let name = "test".to_string();
+            let name = NuString::from("test");
 
             let input = Value::bool(false, Span::new(1, 20));
 
@@ -114,7 +114,7 @@ macro_rules! generate_tests {
                 ],
                 named: vec![(
                     Spanned {
-                        item: "name".to_string(),
+                        item: "name".into(),
                         span: Span::new(0, 10),
                     },
                     Some(Value::float(1.0, Span::new(0, 10))),

@@ -1,12 +1,12 @@
 use nu_ansi_term::{Color, Style};
-use nu_protocol::Value;
+use nu_protocol::{Value, NuString};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct NuStyle {
-    pub fg: Option<String>,
-    pub bg: Option<String>,
-    pub attr: Option<String>,
+    pub fg: Option<NuString>,
+    pub bg: Option<NuString>,
+    pub attr: Option<NuString>,
 }
 
 impl From<Style> for NuStyle {
@@ -19,8 +19,8 @@ impl From<Style> for NuStyle {
     }
 }
 
-fn style_get_attr(s: Style) -> Option<String> {
-    let mut attrs = String::new();
+fn style_get_attr(s: Style) -> Option<NuString> {
+    let mut attrs = NuString::new();
 
     if s.is_blink {
         attrs.push('l');
@@ -54,28 +54,28 @@ fn style_get_attr(s: Style) -> Option<String> {
     }
 }
 
-fn color_to_string(color: Color) -> Option<String> {
+fn color_to_string(color: Color) -> Option<NuString> {
     match color {
-        Color::Black => Some(String::from("black")),
-        Color::DarkGray => Some(String::from("dark_gray")),
-        Color::Red => Some(String::from("red")),
-        Color::LightRed => Some(String::from("light_red")),
-        Color::Green => Some(String::from("green")),
-        Color::LightGreen => Some(String::from("light_green")),
-        Color::Yellow => Some(String::from("yellow")),
-        Color::LightYellow => Some(String::from("light_yellow")),
-        Color::Blue => Some(String::from("blue")),
-        Color::LightBlue => Some(String::from("light_blue")),
-        Color::Purple => Some(String::from("purple")),
-        Color::LightPurple => Some(String::from("light_purple")),
-        Color::Magenta => Some(String::from("magenta")),
-        Color::LightMagenta => Some(String::from("light_magenta")),
-        Color::Cyan => Some(String::from("cyan")),
-        Color::LightCyan => Some(String::from("light_cyan")),
-        Color::White => Some(String::from("white")),
-        Color::LightGray => Some(String::from("light_gray")),
-        Color::Default => Some(String::from("default")),
-        Color::Rgb(r, g, b) => Some(format!("#{r:X}{g:X}{b:X}")),
+        Color::Black => Some(NuString::from("black")),
+        Color::DarkGray => Some(NuString::from("dark_gray")),
+        Color::Red => Some(NuString::from("red")),
+        Color::LightRed => Some(NuString::from("light_red")),
+        Color::Green => Some(NuString::from("green")),
+        Color::LightGreen => Some(NuString::from("light_green")),
+        Color::Yellow => Some(NuString::from("yellow")),
+        Color::LightYellow => Some(NuString::from("light_yellow")),
+        Color::Blue => Some(NuString::from("blue")),
+        Color::LightBlue => Some(NuString::from("light_blue")),
+        Color::Purple => Some(NuString::from("purple")),
+        Color::LightPurple => Some(NuString::from("light_purple")),
+        Color::Magenta => Some(NuString::from("magenta")),
+        Color::LightMagenta => Some(NuString::from("light_magenta")),
+        Color::Cyan => Some(NuString::from("cyan")),
+        Color::LightCyan => Some(NuString::from("light_cyan")),
+        Color::White => Some(NuString::from("white")),
+        Color::LightGray => Some(NuString::from("light_gray")),
+        Color::Default => Some(NuString::from("default")),
+        Color::Rgb(r, g, b) => Some(format!("#{r:X}{g:X}{b:X}").into()),
         Color::Fixed(_) => None,
     }
 }

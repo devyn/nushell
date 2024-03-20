@@ -13,7 +13,7 @@ use std::collections::HashMap;
 pub use evaluated_call::EvaluatedCall;
 use nu_protocol::{
     ast::Operator, engine::Closure, Config, PipelineData, PluginSignature, RawStream, ShellError,
-    Span, Spanned, Value,
+    Span, Spanned, Value, NuString,
 };
 pub use plugin_custom_value::PluginCustomValue;
 #[cfg(test)]
@@ -36,7 +36,7 @@ pub type EngineCallId = usize;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CallInfo<D> {
     /// The name of the command to be run
-    pub name: String,
+    pub name: NuString,
     /// Information about the invocation, including arguments
     pub call: EvaluatedCall,
     /// Pipeline input. This is usually [`nu_protocol::PipelineData`] or [`PipelineDataHeader`]
@@ -136,7 +136,7 @@ pub enum CustomValueOp {
     /// [`follow_path_int()`](nu_protocol::CustomValue::follow_path_int)
     FollowPathInt(Spanned<usize>),
     /// [`follow_path_string()`](nu_protocol::CustomValue::follow_path_string)
-    FollowPathString(Spanned<String>),
+    FollowPathString(Spanned<NuString>),
     /// [`partial_cmp()`](nu_protocol::CustomValue::partial_cmp)
     PartialCmp(Value),
     /// [`operation()`](nu_protocol::CustomValue::operation)
@@ -457,13 +457,13 @@ pub enum EngineCall<D> {
     /// Get the plugin-specific configuration (`$env.config.plugins.NAME`)
     GetPluginConfig,
     /// Get an environment variable
-    GetEnvVar(String),
+    GetEnvVar(NuString),
     /// Get all environment variables
     GetEnvVars,
     /// Get current working directory
     GetCurrentDir,
     /// Set an environment variable in the caller's scope
-    AddEnvVar(String, Value),
+    AddEnvVar(NuString, Value),
     /// Evaluate a closure with stream input/output
     EvalClosure {
         /// The closure to call.
@@ -503,7 +503,7 @@ pub enum EngineCallResponse<D> {
     Error(ShellError),
     PipelineData(D),
     Config(Box<Config>),
-    ValueMap(HashMap<String, Value>),
+    ValueMap(HashMap<NuString, Value>),
 }
 
 impl EngineCallResponse<PipelineData> {

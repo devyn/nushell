@@ -1,4 +1,5 @@
 use nu_engine::documentation::get_flags_section;
+use nu_protocol::NuString;
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -314,7 +315,7 @@ pub trait Plugin: Sync {
         &self,
         engine: &EngineInterface,
         custom_value: Spanned<Box<dyn CustomValue>>,
-        column_name: Spanned<String>,
+        column_name: Spanned<NuString>,
     ) -> Result<Value, LabeledError> {
         let _ = engine;
         custom_value
@@ -442,7 +443,7 @@ pub fn serve_plugin(plugin: &impl Plugin, encoder: impl PluginEncoder + 'static)
     }
 
     // Build commands map, to make running a command easier
-    let mut commands: HashMap<String, _> = HashMap::new();
+    let mut commands: HashMap<NuString, _> = HashMap::new();
 
     for command in plugin.commands() {
         if let Some(previous) = commands.insert(command.signature().sig.name.clone(), command) {

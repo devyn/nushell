@@ -7,7 +7,7 @@ use std::{
 
 use nu_protocol::{
     engine::Closure, Config, IntoInterruptiblePipelineData, ListStream, PipelineData,
-    PluginSignature, ShellError, Spanned, Value,
+    PluginSignature, ShellError, Spanned, Value, NuString,
 };
 
 use crate::{
@@ -584,7 +584,7 @@ impl EngineInterface {
     /// engine.get_env_var("PATH") // => Ok(Some(Value::List([...])))
     /// # }
     /// ```
-    pub fn get_env_var(&self, name: impl Into<String>) -> Result<Option<Value>, ShellError> {
+    pub fn get_env_var(&self, name: impl Into<NuString>) -> Result<Option<Value>, ShellError> {
         self.engine_call_option_value(EngineCall::GetEnvVar(name.into()))
     }
 
@@ -598,7 +598,7 @@ impl EngineInterface {
     /// engine.get_current_dir() // => "/home/user"
     /// # }
     /// ```
-    pub fn get_current_dir(&self) -> Result<String, ShellError> {
+    pub fn get_current_dir(&self) -> Result<NuString, ShellError> {
         match self.engine_call(EngineCall::GetCurrentDir)? {
             // Always a string, and the span doesn't matter.
             EngineCallResponse::PipelineData(PipelineData::Value(Value::String { val, .. }, _)) => {
@@ -625,7 +625,7 @@ impl EngineInterface {
     /// engine.get_env_vars() // => Ok({"PATH": Value::List([...]), ...})
     /// # }
     /// ```
-    pub fn get_env_vars(&self) -> Result<HashMap<String, Value>, ShellError> {
+    pub fn get_env_vars(&self) -> Result<HashMap<NuString, Value>, ShellError> {
         match self.engine_call(EngineCall::GetEnvVars)? {
             EngineCallResponse::ValueMap(map) => Ok(map),
             EngineCallResponse::Error(err) => Err(err),
@@ -649,7 +649,7 @@ impl EngineInterface {
     /// engine.add_env_var("FOO", Value::test_string("bar"))
     /// # }
     /// ```
-    pub fn add_env_var(&self, name: impl Into<String>, value: Value) -> Result<(), ShellError> {
+    pub fn add_env_var(&self, name: impl Into<NuString>, value: Value) -> Result<(), ShellError> {
         match self.engine_call(EngineCall::AddEnvVar(name.into(), value))? {
             EngineCallResponse::PipelineData(_) => Ok(()),
             EngineCallResponse::Error(err) => Err(err),

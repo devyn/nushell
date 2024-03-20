@@ -3,7 +3,7 @@ use std::{
     str::{from_utf8, Utf8Error},
 };
 
-use crate::{ast::RedirectionSource, did_you_mean, Span, Type};
+use crate::{ast::RedirectionSource, did_you_mean, Span, Type, NuString};
 use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -19,12 +19,12 @@ pub enum ParseError {
 
     #[error("Extra positional argument.")]
     #[diagnostic(code(nu::parser::extra_positional), help("Usage: {0}"))]
-    ExtraPositional(String, #[label = "extra positional argument"] Span),
+    ExtraPositional(NuString, #[label = "extra positional argument"] Span),
 
     #[error("Required positional parameter after optional parameter")]
     #[diagnostic(code(nu::parser::required_after_optional))]
     RequiredAfterOptional(
-        String,
+        NuString,
         #[label = "required parameter {0} after optional parameter"] Span,
     ),
 
@@ -215,7 +215,7 @@ pub enum ParseError {
         code(nu::parser::module_not_found),
         help("module files and their paths must be available before your script is run as parsing occurs before anything is evaluated")
     )]
-    ModuleNotFound(#[label = "module {1} not found"] Span, String),
+    ModuleNotFound(#[label = "module {1} not found"] Span, NuString),
 
     #[error("Missing mod.nu file.")]
     #[diagnostic(
@@ -237,9 +237,9 @@ pub enum ParseError {
         help("Module {1} can't export {0} named the same as the module. Either change the module name, or export `{2}` {0}.")
     )]
     NamedAsModule(
-        String,
-        String,
-        String,
+        NuString,
+        NuString,
+        NuString,
         #[label = "can't export from module {1}"] Span,
     ),
 
@@ -249,7 +249,7 @@ pub enum ParseError {
         help("Tried to add 'main' command to module '{0}' but it has already been added.")
     )]
     ModuleDoubleMain(
-        String,
+        NuString,
         #[label = "module '{0}' already contains 'main'"] Span,
     ),
 
@@ -270,9 +270,9 @@ pub enum ParseError {
         help("Overlay {0} already exists {1} a prefix. To add it again, do it {1} the --prefix flag.")
     )]
     OverlayPrefixMismatch(
-        String,
-        String,
-        #[label = "already exists {1} a prefix"] Span,
+        NuString,
+        NuString,
+        #[label = "aNulready exists {1} a prefix"] Span,
     ),
 
     #[error("Module or overlay not found.")]
@@ -294,7 +294,7 @@ pub enum ParseError {
         code(nu::parser::cant_hide_default_overlay),
         help("'{0}' is a default overlay. Default overlays cannot be hidden.")
     )]
-    CantHideDefaultOverlay(String, #[label = "can't hide overlay"] Span),
+    CantHideDefaultOverlay(NuString, #[label = "can't hide overlay"] Span),
 
     #[error("Cannot add overlay.")]
     #[diagnostic(code(nu::parser::cant_add_overlay_help), help("{0}"))]
@@ -317,7 +317,7 @@ pub enum ParseError {
 
     #[error("The `{0}` command doesn't have flag `{1}`.")]
     #[diagnostic(code(nu::parser::unknown_flag), help("{3}"))]
-    UnknownFlag(String, String, #[label = "unknown flag"] Span, String),
+    UnknownFlag(NuString, NuString, #[label = "unknown flag"] Span, NuString),
 
     #[error("Unknown type.")]
     #[diagnostic(code(nu::parser::unknown_type))]
@@ -325,7 +325,7 @@ pub enum ParseError {
 
     #[error("Missing flag argument.")]
     #[diagnostic(code(nu::parser::missing_flag_param))]
-    MissingFlagParam(String, #[label = "flag missing {0} argument"] Span),
+    MissingFlagParam(NuString, #[label = "flag missing {0} argument"] Span),
 
     #[error("Only the last flag in a short flag batch can take an argument.")]
     #[diagnostic(code(nu::parser::only_last_flag_in_batch_can_take_arg))]
@@ -336,13 +336,13 @@ pub enum ParseError {
         code(nu::parser::missing_positional),
         help("Usage: {2}. Use `--help` for more information.")
     )]
-    MissingPositional(String, #[label("missing {0}")] Span, String),
+    MissingPositional(NuString, #[label("missing {0}")] Span, NuString),
 
     #[error("Missing argument to `{1}`.")]
     #[diagnostic(code(nu::parser::keyword_missing_arg))]
     KeywordMissingArgument(
-        String,
-        String,
+        NuString,
+        NuString,
         #[label("missing {0} value that follows {1}")] Span,
     ),
 
@@ -360,7 +360,7 @@ pub enum ParseError {
 
     #[error("Missing required flag.")]
     #[diagnostic(code(nu::parser::missing_required_flag))]
-    MissingRequiredFlag(String, #[label("missing required flag {0}")] Span),
+    MissingRequiredFlag(NuString, #[label("missing required flag {0}")] Span),
 
     #[error("Incomplete math expression.")]
     #[diagnostic(code(nu::parser::incomplete_math_expression))]
@@ -385,9 +385,9 @@ pub enum ParseError {
     #[error("Parameter not correct type.")]
     #[diagnostic(code(nu::parser::parameter_mismatch_type))]
     ParameterMismatchType(
-        String,
-        String,
-        String,
+        NuString,
+        NuString,
+        NuString,
         #[label = "parameter {0} needs to be '{1}' instead of '{2}'"] Span,
     ),
 
@@ -426,18 +426,18 @@ pub enum ParseError {
         code(nu::parser::sourced_file_not_found),
         help("sourced files need to be available before your script is run")
     )]
-    SourcedFileNotFound(String, #[label("File not found: {0}")] Span),
+    SourcedFileNotFound(NuString, #[label("File not found: {0}")] Span),
 
     #[error("File not found")]
     #[diagnostic(
         code(nu::parser::registered_file_not_found),
         help("registered files need to be available before your script is run")
     )]
-    RegisteredFileNotFound(String, #[label("File not found: {0}")] Span),
+    RegisteredFileNotFound(NuString, #[label("File not found: {0}")] Span),
 
     #[error("File not found")]
     #[diagnostic(code(nu::parser::file_not_found))]
-    FileNotFound(String, #[label("File not found: {0}")] Span),
+    FileNotFound(NuString, #[label("File not found: {0}")] Span),
 
     #[error("Invalid literal")] // <problem> in <entity>.
     #[diagnostic()]
@@ -470,7 +470,7 @@ pub enum ParseError {
         code(nu::parser::unexpected_spread_arg),
         help("To spread arguments, the command needs to define a multi-positional parameter in its signature, such as ...rest")
     )]
-    UnexpectedSpreadArg(String, #[label = "unexpected spread argument"] Span),
+    UnexpectedSpreadArg(NuString, #[label = "unexpected spread argument"] Span),
 }
 
 impl ParseError {

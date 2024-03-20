@@ -4,7 +4,7 @@ use strum_macros::EnumIter;
 
 use std::fmt::Display;
 
-use crate::SyntaxShape;
+use crate::{SyntaxShape, NuString};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(EnumIter))]
@@ -28,17 +28,17 @@ pub enum Type {
     Nothing,
     Number,
     Range,
-    Record(Vec<(String, Type)>),
+    Record(Vec<(NuString, Type)>),
     Signature,
     String,
     Glob,
-    Table(Vec<(String, Type)>),
+    Table(Vec<(NuString, Type)>),
 }
 
 impl Type {
     pub fn is_subtype(&self, other: &Type) -> bool {
         // Structural subtyping
-        let is_subtype_collection = |this: &[(String, Type)], that: &[(String, Type)]| {
+        let is_subtype_collection = |this: &[(NuString, Type)], that: &[(NuString, Type)]| {
             if this.is_empty() || that.is_empty() {
                 true
             } else if this.len() < that.len() {
@@ -82,7 +82,7 @@ impl Type {
     }
 
     pub fn to_shape(&self) -> SyntaxShape {
-        let mk_shape = |tys: &[(String, Type)]| {
+        let mk_shape = |tys: &[(NuString, Type)]| {
             tys.iter()
                 .map(|(key, val)| (key.clone(), val.to_shape()))
                 .collect()

@@ -10,7 +10,7 @@ fn test_signature() {
 
     // constructing signature with description
     let signature = Signature::new("signature").usage("example usage");
-    assert_eq!(signature.usage, "example usage".to_string())
+    assert_eq!(signature.usage, "example usage")
 }
 
 #[test]
@@ -40,8 +40,8 @@ fn test_signature_chained() {
     assert_eq!(
         signature.get_positional(0),
         Some(PositionalArg {
-            name: "required".to_string(),
-            desc: "required description".to_string(),
+            name: "required".into(),
+            desc: "required description".into(),
             shape: SyntaxShape::String,
             var_id: None,
             default_value: None,
@@ -50,8 +50,8 @@ fn test_signature_chained() {
     assert_eq!(
         signature.get_positional(1),
         Some(PositionalArg {
-            name: "optional".to_string(),
-            desc: "optional description".to_string(),
+            name: "optional".into(),
+            desc: "optional description".into(),
             shape: SyntaxShape::String,
             var_id: None,
             default_value: None,
@@ -60,8 +60,8 @@ fn test_signature_chained() {
     assert_eq!(
         signature.get_positional(2),
         Some(PositionalArg {
-            name: "rest".to_string(),
-            desc: "rest description".to_string(),
+            name: "rest".into(),
+            desc: "rest description".into(),
             shape: SyntaxShape::String,
             var_id: None,
             default_value: None,
@@ -71,11 +71,11 @@ fn test_signature_chained() {
     assert_eq!(
         signature.get_long_flag("req-named"),
         Some(Flag {
-            long: "req-named".to_string(),
+            long: "req-named".into(),
             short: Some('r'),
             arg: Some(SyntaxShape::String),
             required: true,
-            desc: "required named description".to_string(),
+            desc: "required named description".into(),
             var_id: None,
             default_value: None,
         })
@@ -84,11 +84,11 @@ fn test_signature_chained() {
     assert_eq!(
         signature.get_short_flag('r'),
         Some(Flag {
-            long: "req-named".to_string(),
+            long: "req-named".into(),
             short: Some('r'),
             arg: Some(SyntaxShape::String),
             required: true,
-            desc: "required named description".to_string(),
+            desc: "required named description".into(),
             var_id: None,
             default_value: None,
         })

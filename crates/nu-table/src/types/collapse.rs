@@ -58,7 +58,7 @@ fn colorize_value(value: &mut Value, config: &Config, style_computer: &StyleComp
                     colorize_value(&mut val, config, style_computer);
 
                     if let Some(color) = style.color_style {
-                        header = color.paint(header).to_string();
+                        header = color.paint(header).to_string().into();
                     }
                     (header, val)
                 })

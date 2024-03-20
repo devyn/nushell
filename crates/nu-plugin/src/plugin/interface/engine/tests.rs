@@ -5,7 +5,7 @@ use std::{
 
 use nu_protocol::{
     engine::Closure, Config, CustomValue, IntoInterruptiblePipelineData, PipelineData,
-    PluginExample, PluginSignature, ShellError, Span, Spanned, Value,
+    PluginExample, PluginSignature, ShellError, Span, Spanned, Value, NuString,
 };
 
 use crate::{
@@ -978,7 +978,7 @@ fn interface_get_env_vars() -> Result<(), ShellError> {
     let manager = test.engine();
     let interface = manager.interface_for_context(0);
 
-    let envs: HashMap<String, Value> = [("FOO".to_owned(), Value::test_string("foo"))]
+    let envs: HashMap<NuString, Value> = [("FOO".into(), Value::test_string("foo"))]
         .into_iter()
         .collect();
     let envs_clone = envs.clone();

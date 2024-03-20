@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::NuString;
 use crate::{
     engine::{EngineState, DEFAULT_OVERLAY_NAME},
     IoStream, ShellError, Span, Value, VarId, ENV_VARIABLE_ID, NU_VARIABLE_ID,
@@ -9,7 +10,7 @@ use crate::{
 use super::{Redirection, StackCallArgGuard, StackCaptureGuard, StackIoGuard, StackStdio};
 
 /// Environment variables per overlay
-pub type EnvVars = HashMap<String, HashMap<String, Value>>;
+pub type EnvVars = HashMap<NuString, HashMap<NuString, Value>>;
 
 /// A runtime value stack used during evaluation
 ///
@@ -35,9 +36,9 @@ pub struct Stack {
     /// Environment variables arranged as a stack to be able to recover values from parent scopes
     pub env_vars: Vec<EnvVars>,
     /// Tells which environment variables from engine state are hidden, per overlay.
-    pub env_hidden: HashMap<String, HashSet<String>>,
+    pub env_hidden: HashMap<NuString, HashSet<NuString>>,
     /// List of active overlays
-    pub active_overlays: Vec<String>,
+    pub active_overlays: Vec<NuString>,
     pub recursion_count: u64,
     pub parent_stack: Option<Arc<Stack>>,
     /// Variables that have been deleted (this is used to hide values from parent stack lookups)
@@ -64,7 +65,7 @@ impl Stack {
             vars: Vec::new(),
             env_vars: Vec::new(),
             env_hidden: HashMap::new(),
-            active_overlays: vec![DEFAULT_OVERLAY_NAME.to_string()],
+            active_overlays: vec![DEFAULT_OVERLAY_NAME.into()],
             recursion_count: 0,
             parent_stack: None,
             parent_deletions: vec![],
@@ -131,7 +132,7 @@ impl Stack {
     pub fn with_env(
         &mut self,
         env_vars: &[EnvVars],
-        env_hidden: &HashMap<String, HashSet<String>>,
+        env_hidden: &HashMap<NuString, HashSet<NuString>>,
     ) {
         // Do not clone the environment if it hasn't changed
         if self.env_vars.iter().any(|scope| !scope.is_empty()) {
@@ -216,7 +217,7 @@ impl Stack {
         }
     }
 
-    pub fn add_env_var(&mut self, var: String, value: Value) {
+    pub fn add_env_var(&mut self, var: NuString, value: Value) {
         if let Some(last_overlay) = self.active_overlays.last() {
             if let Some(env_hidden) = self.env_hidden.get_mut(last_overlay) {
                 // if the env var was hidden, let's activate it again
@@ -242,7 +243,7 @@ impl Stack {
         }
     }
 
-    pub fn last_overlay_name(&self) -> Result<String, ShellError> {
+    pub fn last_overlay_name(&self) -> Result<NuString, ShellError> {
         self.active_overlays
             .last()
             .cloned()
@@ -303,7 +304,7 @@ impl Stack {
     }
 
     /// Flatten the env var scope frames into one frame
-    pub fn get_env_vars(&self, engine_state: &EngineState) -> HashMap<String, Value> {
+    pub fn get_env_vars(&self, engine_state: &EngineState) -> HashMap<NuString, Value> {
         let mut result = HashMap::new();
 
         for active_overlay in self.active_overlays.iter() {
@@ -320,7 +321,7 @@ impl Stack {
                             }
                         })
                         .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect::<HashMap<String, Value>>(),
+                        .collect::<HashMap<NuString, Value>>(),
                 );
             }
         }
@@ -331,7 +332,7 @@ impl Stack {
     }
 
     /// Get flattened environment variables only from the stack
-    pub fn get_stack_env_vars(&self) -> HashMap<String, Value> {
+    pub fn get_stack_env_vars(&self) -> HashMap<NuString, Value> {
         let mut result = HashMap::new();
 
         for scope in &self.env_vars {
@@ -346,7 +347,7 @@ impl Stack {
     }
 
     /// Get flattened environment variables only from the stack and one overlay
-    pub fn get_stack_overlay_env_vars(&self, overlay_name: &str) -> HashMap<String, Value> {
+    pub fn get_stack_overlay_env_vars(&self, overlay_name: &str) -> HashMap<NuString, Value> {
         let mut result = HashMap::new();
 
         for scope in &self.env_vars {
@@ -361,7 +362,7 @@ impl Stack {
     }
 
     /// Same as get_env_vars, but returns only the names as a HashSet
-    pub fn get_env_var_names(&self, engine_state: &EngineState) -> HashSet<String> {
+    pub fn get_env_var_names(&self, engine_state: &EngineState) -> HashSet<NuString> {
         let mut result = HashSet::new();
 
         for active_overlay in self.active_overlays.iter() {
@@ -378,7 +379,7 @@ impl Stack {
                             }
                         })
                         .cloned()
-                        .collect::<HashSet<String>>(),
+                        .collect::<HashSet<NuString>>(),
                 );
             }
         }
@@ -386,7 +387,7 @@ impl Stack {
         for scope in &self.env_vars {
             for active_overlay in self.active_overlays.iter() {
                 if let Some(env_vars) = scope.get(active_overlay) {
-                    result.extend(env_vars.keys().cloned().collect::<HashSet<String>>());
+                    result.extend(env_vars.keys().cloned().collect::<HashSet<NuString>>());
                 }
             }
         }
@@ -496,7 +497,7 @@ impl Stack {
         self.active_overlays.iter().any(|n| n == name)
     }
 
-    pub fn add_overlay(&mut self, name: String) {
+    pub fn add_overlay(&mut self, name: NuString) {
         self.active_overlays.retain(|o| o != &name);
         self.active_overlays.push(name);
     }
@@ -599,7 +600,7 @@ mod test {
     const ZERO_SPAN: Span = Span { start: 0, end: 0 };
     fn string_value(s: &str) -> Value {
         Value::String {
-            val: s.to_string(),
+            val: s.into(),
             internal_span: ZERO_SPAN,
         }
     }
@@ -674,7 +675,7 @@ mod test {
 
         cloned.remove_var(0);
 
-        cloned.add_env_var("ADDED_IN_CHILD".to_string(), string_value("New Env Var"));
+        cloned.add_env_var("ADDED_IN_CHILD".into(), string_value("New Env Var"));
 
         let original = Stack::with_changes_from_child(original_arc, cloned);
 

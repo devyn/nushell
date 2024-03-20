@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, convert::Infallible, sync::Arc};
 
-use nu_protocol::{ast::Operator, CustomValue, IntoSpanned, ShellError, Span, Value};
+use nu_protocol::{ast::Operator, CustomValue, IntoSpanned, ShellError, Span, Value, NuString};
 use serde::{Deserialize, Serialize};
 
 use crate::plugin::{PluginInterface, PluginSource};
@@ -80,7 +80,7 @@ impl CustomValue for PluginCustomValue {
     fn follow_path_string(
         &self,
         self_span: Span,
-        column_name: String,
+        column_name: NuString,
         path_span: Span,
     ) -> Result<Value, ShellError> {
         self.get_plugin(Some(self_span), "follow cell path")?

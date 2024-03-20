@@ -7,7 +7,7 @@ use std::{
 
 use nu_protocol::{
     ast::Operator, IntoInterruptiblePipelineData, IntoSpanned, ListStream, PipelineData,
-    PluginSignature, ShellError, Span, Spanned, Value,
+    PluginSignature, ShellError, Span, Spanned, Value, NuString,
 };
 
 use crate::{
@@ -875,7 +875,7 @@ impl PluginInterface {
     pub(crate) fn custom_value_follow_path_string(
         &self,
         value: Spanned<PluginCustomValue>,
-        column_name: Spanned<String>,
+        column_name: Spanned<NuString>,
     ) -> Result<Value, ShellError> {
         self.custom_value_op_expecting_value(value, CustomValueOp::FollowPathString(column_name))
     }

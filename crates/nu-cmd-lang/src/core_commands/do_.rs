@@ -132,7 +132,7 @@ impl Command for Do {
                 // The threading issues mentioned above dictate why we also need to intercept stdout.
                 let mut stderr_ctrlc = None;
                 let stderr_msg = match stderr {
-                    None => "".to_string(),
+                    None => "".into(),
                     Some(stderr_stream) => {
                         stderr_ctrlc = stderr_stream.ctrlc.clone();
                         stderr_stream.into_string().map(|s| s.item)?

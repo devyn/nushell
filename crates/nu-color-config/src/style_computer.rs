@@ -2,6 +2,7 @@ use crate::text_style::Alignment;
 use crate::{color_record_to_nustyle, lookup_ansi_color_style, TextStyle};
 use nu_ansi_term::{Color, Style};
 use nu_engine::{env::get_config, eval_block};
+use nu_protocol::NuString;
 use nu_protocol::{
     cli_error::CliError,
     engine::{EngineState, Stack, StateWorkingSet},
@@ -22,7 +23,7 @@ pub enum ComputableStyle {
 }
 
 // An alias for the mapping used internally by StyleComputer.
-pub type StyleMapping = HashMap<String, ComputableStyle>;
+pub type StyleMapping = HashMap<NuString, ComputableStyle>;
 //
 // A StyleComputer is an all-in-one way to compute styles. A nu command can
 // simply create it with from_config(), and then use it with compute().
@@ -143,37 +144,37 @@ impl<'a> StyleComputer<'a> {
         // Create the hashmap
         #[rustfmt::skip]
         let mut map: StyleMapping = [
-            ("separator".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("leading_trailing_space_bg".to_string(), ComputableStyle::Static(Style::default().on(Color::Rgb(128, 128, 128)))),
-            ("header".to_string(), ComputableStyle::Static(Color::Green.bold())),
-            ("empty".to_string(), ComputableStyle::Static(Color::Blue.normal())),
-            ("bool".to_string(), ComputableStyle::Static(Color::LightCyan.normal())),
-            ("int".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("filesize".to_string(), ComputableStyle::Static(Color::Cyan.normal())),
-            ("duration".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("date".to_string(), ComputableStyle::Static(Color::Purple.normal())),
-            ("range".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("float".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("string".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("nothing".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("binary".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("cell-path".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("row_index".to_string(), ComputableStyle::Static(Color::Green.bold())),
-            ("record".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("list".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("block".to_string(), ComputableStyle::Static(Color::White.normal())),
-            ("hints".to_string(), ComputableStyle::Static(Color::DarkGray.normal())),
-            ("search_result".to_string(), ComputableStyle::Static(Color::White.normal().on(Color::Red))),
+            ("separator".into(), ComputableStyle::Static(Color::White.normal())),
+            ("leading_trailing_space_bg".into(), ComputableStyle::Static(Style::default().on(Color::Rgb(128, 128, 128)))),
+            ("header".into(), ComputableStyle::Static(Color::Green.bold())),
+            ("empty".into(), ComputableStyle::Static(Color::Blue.normal())),
+            ("bool".into(), ComputableStyle::Static(Color::LightCyan.normal())),
+            ("int".into(), ComputableStyle::Static(Color::White.normal())),
+            ("filesize".into(), ComputableStyle::Static(Color::Cyan.normal())),
+            ("duration".into(), ComputableStyle::Static(Color::White.normal())),
+            ("date".into(), ComputableStyle::Static(Color::Purple.normal())),
+            ("range".into(), ComputableStyle::Static(Color::White.normal())),
+            ("float".into(), ComputableStyle::Static(Color::White.normal())),
+            ("string".into(), ComputableStyle::Static(Color::White.normal())),
+            ("nothing".into(), ComputableStyle::Static(Color::White.normal())),
+            ("binary".into(), ComputableStyle::Static(Color::White.normal())),
+            ("cell-path".into(), ComputableStyle::Static(Color::White.normal())),
+            ("row_index".into(), ComputableStyle::Static(Color::Green.bold())),
+            ("record".into(), ComputableStyle::Static(Color::White.normal())),
+            ("list".into(), ComputableStyle::Static(Color::White.normal())),
+            ("block".into(), ComputableStyle::Static(Color::White.normal())),
+            ("hints".into(), ComputableStyle::Static(Color::DarkGray.normal())),
+            ("search_result".into(), ComputableStyle::Static(Color::White.normal().on(Color::Red))),
         ].into_iter().collect();
 
         for (key, value) in &config.color_config {
             match value {
                 Value::Closure { .. } => {
-                    map.insert(key.to_string(), ComputableStyle::Closure(value.clone()));
+                    map.insert(key.into(), ComputableStyle::Closure(value.clone()));
                 }
                 Value::Record { .. } => {
                     map.insert(
-                        key.to_string(),
+                        key.into(),
                         ComputableStyle::Static(color_record_to_nustyle(value)),
                     );
                 }
@@ -183,7 +184,7 @@ impl<'a> StyleComputer<'a> {
                     if let Some(v) = map.get_mut(key) {
                         *v = ComputableStyle::Static(color);
                     } else {
-                        map.insert(key.to_string(), ComputableStyle::Static(color));
+                        map.insert(key.into(), ComputableStyle::Static(color));
                     }
                 }
                 // This should never occur.

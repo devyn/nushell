@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use nu_protocol::ast::{Call, Expr};
 use nu_protocol::engine::{EngineState, Stack, StateWorkingSet, PWD_ENV};
-use nu_protocol::{Config, PipelineData, ShellError, Span, Value, VarId};
+use nu_protocol::{Config, PipelineData, ShellError, Span, Value, VarId, NuString};
 
 use nu_path::canonicalize_with;
 use nu_protocol::debugger::WithoutDebug;
@@ -42,11 +42,11 @@ pub fn convert_env_values(engine_state: &mut EngineState, stack: &Stack) -> Opti
     for (name, val) in env_vars {
         match get_converted_value(engine_state, stack, name, val, "from_string") {
             ConversionResult::Ok(v) => {
-                let _ = new_scope.insert(name.to_string(), v);
+                let _ = new_scope.insert(name.into(), v);
             }
             ConversionResult::ConversionError(e) => error = error.or(Some(e)),
             ConversionResult::CellPathError => {
-                let _ = new_scope.insert(name.to_string(), val.clone());
+                let _ = new_scope.insert(name.into(), val.clone());
             }
         }
     }
@@ -88,7 +88,7 @@ pub fn convert_env_values(engine_state: &mut EngineState, stack: &Stack) -> Opti
     error
 }
 
-/// Translate one environment variable from Value to String
+/// Translate one environment variable from Value to NuString
 ///
 /// Returns Ok(None) if the env var is not
 pub fn env_to_string(
@@ -96,7 +96,7 @@ pub fn env_to_string(
     value: &Value,
     engine_state: &EngineState,
     stack: &Stack,
-) -> Result<String, ShellError> {
+) -> Result<NuString, ShellError> {
     match get_converted_value(engine_state, stack, env_name, value, "to_string") {
         ConversionResult::Ok(v) => Ok(v.coerce_into_string()?),
         ConversionResult::ConversionError(e) => Err(e),
@@ -113,7 +113,7 @@ pub fn env_to_string(
                                 .collect::<Result<Vec<_>, _>>()?;
 
                             match std::env::join_paths(paths.iter().map(AsRef::as_ref)) {
-                                Ok(p) => Ok(p.to_string_lossy().to_string()),
+                                Ok(p) => Ok(p.to_string_lossy().into()),
                                 Err(_) => Err(ShellError::EnvVarNotAString {
                                     envvar_name: env_name.to_string(),
                                     span: value.span(),
@@ -136,17 +136,17 @@ pub fn env_to_string(
     }
 }
 
-/// Translate all environment variables from Values to Strings
+/// Translate all environment variables from Values to NuStrings
 pub fn env_to_strings(
     engine_state: &EngineState,
     stack: &Stack,
-) -> Result<HashMap<String, String>, ShellError> {
+) -> Result<HashMap<NuString, NuString>, ShellError> {
     let env_vars = stack.get_env_vars(engine_state);
     let mut env_vars_str = HashMap::new();
     for (env_name, val) in env_vars {
         match env_to_string(&env_name, &val, engine_state, stack) {
             Ok(val_str) => {
-                env_vars_str.insert(env_name, val_str);
+                env_vars_str.insert(env_name.into(), val_str);
             }
             Err(ShellError::EnvVarNotAString { .. }) => {} // ignore non-string values
             Err(e) => return Err(e),
@@ -157,7 +157,7 @@ pub fn env_to_strings(
 }
 
 /// Shorthand for env_to_string() for PWD with custom error
-pub fn current_dir_str(engine_state: &EngineState, stack: &Stack) -> Result<String, ShellError> {
+pub fn current_dir_str(engine_state: &EngineState, stack: &Stack) -> Result<NuString, ShellError> {
     if let Some(pwd) = stack.get_env_var(engine_state, PWD_ENV) {
         // TODO: PWD should be string by default, we don't need to run ENV_CONVERSIONS on it
         match env_to_string(PWD_ENV, &pwd, engine_state, stack) {
@@ -188,7 +188,7 @@ pub fn current_dir_str(engine_state: &EngineState, stack: &Stack) -> Result<Stri
 }
 
 /// Simplified version of current_dir_str() for constant evaluation
-pub fn current_dir_str_const(working_set: &StateWorkingSet) -> Result<String, ShellError> {
+pub fn current_dir_str_const(working_set: &StateWorkingSet) -> Result<NuString, ShellError> {
     if let Some(pwd) = working_set.get_env_var(PWD_ENV) {
         let span = pwd.span();
         match pwd {
@@ -245,7 +245,7 @@ pub fn path_str(
     engine_state: &EngineState,
     stack: &Stack,
     span: Span,
-) -> Result<String, ShellError> {
+) -> Result<NuString, ShellError> {
     let (pathname, pathval) = match stack.get_env_var(engine_state, ENV_PATH_NAME) {
         Some(v) => Ok((ENV_PATH_NAME, v)),
         None => {
@@ -413,7 +413,7 @@ fn get_converted_value(
     }
 }
 
-fn ensure_path(scope: &mut HashMap<String, Value>, env_path_name: &str) -> Option<ShellError> {
+fn ensure_path(scope: &mut HashMap<NuString, Value>, env_path_name: &str) -> Option<ShellError> {
     let mut error = None;
 
     // If PATH/Path is still a string, force-convert it to a list
@@ -426,7 +426,7 @@ fn ensure_path(scope: &mut HashMap<String, Value>, env_path_name: &str) -> Optio
                     .map(|p| Value::string(p.to_string_lossy().to_string(), span))
                     .collect();
 
-                scope.insert(env_path_name.to_string(), Value::list(paths, span));
+                scope.insert(env_path_name.into(), Value::list(paths, span));
             }
             Value::List { vals, .. } => {
                 // Must be a list of strings

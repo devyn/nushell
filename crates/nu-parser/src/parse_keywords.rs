@@ -16,7 +16,7 @@ use nu_protocol::{
     engine::{StateWorkingSet, DEFAULT_OVERLAY_NAME},
     eval_const::eval_constant,
     span, Alias, BlockId, DeclId, Module, ModuleId, ParseError, PositionalArg,
-    ResolvedImportPattern, Span, Spanned, SyntaxShape, Type, Value, VarId,
+    ResolvedImportPattern, Span, Spanned, SyntaxShape, Type, Value, VarId, NuString,
 };
 use std::path::{Path, PathBuf};
 use std::{
@@ -340,8 +340,8 @@ pub fn parse_for(working_set: &mut StateWorkingSet, lite_command: &LiteCommand) 
         block.signature.required_positional.insert(
             0,
             PositionalArg {
-                name: String::new(),
-                desc: String::new(),
+                name: NuString::new(),
+                desc: NuString::new(),
                 shape: var_type.to_shape(),
                 var_id: Some(*var_id),
                 default_value: None,
@@ -508,9 +508,9 @@ pub fn parse_def(
                 let name_expr_span = name_expr.span;
 
                 working_set.error(ParseError::NamedAsModule(
-                    "command".to_string(),
+                    "command".into(),
                     name,
-                    "main".to_string(),
+                    "main".into(),
                     name_expr_span,
                 ));
                 return (
@@ -575,7 +575,7 @@ pub fn parse_def(
                     }
                 }
             } else {
-                working_set.error(ParseError::MissingPositional("...rest-like positional argument".to_string(), name_expr.span, "def --wrapped must have a ...rest-like positional argument. Add '...rest: string' to the command's signature.".to_string()));
+                working_set.error(ParseError::MissingPositional("...rest-like positional argument".into(), name_expr.span, "def --wrapped must have a ...rest-like positional argument. Add '...rest: string' to the command's signature.".into()));
 
                 return (
                     Pipeline::from_vec(vec![Expression {
@@ -596,8 +596,8 @@ pub fn parse_def(
             if !has_wrapped {
                 *signature = signature.add_help();
             }
-            signature.usage = usage;
-            signature.extra_usage = extra_usage;
+            signature.usage = usage.into();
+            signature.extra_usage = extra_usage.into();
             signature.allows_unknown_args = has_wrapped;
 
             *declaration = signature.clone().into_block_command(block_id);
@@ -724,9 +724,9 @@ pub fn parse_extern(
                 if name.as_bytes() == mod_name {
                     let name_expr_span = name_expr.span;
                     working_set.error(ParseError::NamedAsModule(
-                        "known external".to_string(),
+                        "known external".into(),
                         name.clone(),
-                        "main".to_string(),
+                        "main".into(),
                         name_expr_span,
                     ));
                     return Pipeline::from_vec(vec![Expression {
@@ -743,7 +743,7 @@ pub fn parse_extern(
 
                 let external_name = if let Some(mod_name) = module_name {
                     if name.as_bytes() == b"main" {
-                        String::from_utf8_lossy(mod_name).to_string()
+                        String::from_utf8_lossy(mod_name).into()
                     } else {
                         name.clone()
                     }
@@ -893,9 +893,9 @@ pub fn parse_alias(
             if let Some(mod_name) = module_name {
                 if alias_name.as_bytes() == mod_name {
                     working_set.error(ParseError::NamedAsModule(
-                        "alias".to_string(),
+                        "alias".into(),
                         alias_name,
-                        "main".to_string(),
+                        "main".into(),
                         spans[split_id],
                     ));
 
@@ -1000,12 +1000,12 @@ pub fn parse_alias(
                     })) => {
                         let aliased = working_set.get_span_contents(expr.span);
                         (
-                            format!("Alias for `{}`", String::from_utf8_lossy(aliased)),
-                            String::new(),
+                            format!("Alias for `{}`", String::from_utf8_lossy(aliased)).into(),
+                            NuString::new(),
                         )
                     }
                     // Then with a default.
-                    _ => ("User declared alias".into(), String::new()),
+                    _ => ("User declared alias".into(), NuString::new()),
                 },
             };
 
@@ -1510,9 +1510,9 @@ pub fn parse_export_in_module(
         }
     } else {
         working_set.error(ParseError::MissingPositional(
-            "def, alias, use, module, const or extern keyword".to_string(),
+            "def, alias, use, module, const or extern keyword".into(),
             Span::new(export_span.end, export_span.end),
-            "def, alias, use, module, const or extern keyword".to_string(),
+            "def, alias, use, module, const or extern keyword".into(),
         ));
 
         vec![]
@@ -1740,7 +1740,7 @@ pub fn parse_module_block(
                                             span
                                         };
                                         working_set.error(ParseError::ModuleDoubleMain(
-                                            String::from_utf8_lossy(module_name).to_string(),
+                                            String::from_utf8_lossy(module_name).into(),
                                             err_span,
                                         ));
                                     } else {
@@ -1777,7 +1777,7 @@ pub fn parse_module_block(
                                                 span
                                             };
                                             working_set.error(ParseError::ModuleDoubleMain(
-                                                String::from_utf8_lossy(module_name).to_string(),
+                                                String::from_utf8_lossy(module_name).into(),
                                                 err_span,
                                             ));
                                         } else {
@@ -1835,7 +1835,7 @@ fn parse_module_file(
     working_set: &mut StateWorkingSet,
     path: ParserPath,
     path_span: Span,
-    name_override: Option<String>,
+    name_override: Option<NuString>,
 ) -> Option<ModuleId> {
     if let Some(i) = working_set
         .parsed_module_files
@@ -1846,10 +1846,10 @@ fn parse_module_file(
             .parsed_module_files
             .split_off(i)
             .iter()
-            .map(|p| p.to_string_lossy().to_string())
+            .map(|p| p.to_string_lossy().into())
             .collect();
 
-        files.push(path.path().to_string_lossy().to_string());
+        files.push(path.path().to_string_lossy().into());
 
         let msg = files.join("\nuses ");
 
@@ -1860,11 +1860,11 @@ fn parse_module_file(
     let module_name = if let Some(name) = name_override {
         name
     } else if let Some(stem) = path.file_stem() {
-        stem.to_string_lossy().to_string()
+        stem.to_string_lossy().into()
     } else {
         working_set.error(ParseError::ModuleNotFound(
             path_span,
-            path.path().to_string_lossy().to_string(),
+            path.path().to_string_lossy().into(),
         ));
         return None;
     };
@@ -1874,7 +1874,7 @@ fn parse_module_file(
     } else {
         working_set.error(ParseError::ModuleNotFound(
             path_span,
-            path.path().to_string_lossy().to_string(),
+            path.path().to_string_lossy().into(),
         ));
         return None;
     };
@@ -1916,7 +1916,7 @@ pub fn parse_module_file_or_dir(
     working_set: &mut StateWorkingSet,
     path: &[u8],
     path_span: Span,
-    name_override: Option<String>,
+    name_override: Option<NuString>,
 ) -> Option<ModuleId> {
     let (module_path_str, err) = unescape_unquote_string(path, path_span);
     if let Some(err) = err {
@@ -1938,17 +1938,17 @@ pub fn parse_module_file_or_dir(
         if module_path.read_dir().is_none() {
             working_set.error(ParseError::ModuleNotFound(
                 path_span,
-                module_path.path().to_string_lossy().to_string(),
+                module_path.path().to_string_lossy().into(),
             ));
             return None;
         };
 
         let module_name = if let Some(stem) = module_path.file_stem() {
-            stem.to_string_lossy().to_string()
+            stem.to_string_lossy().into()
         } else {
             working_set.error(ParseError::ModuleNotFound(
                 path_span,
-                module_path.path().to_string_lossy().to_string(),
+                module_path.path().to_string_lossy().into(),
             ));
             return None;
         };
@@ -1991,7 +1991,7 @@ pub fn parse_module_file_or_dir(
     } else {
         working_set.error(ParseError::ModuleNotFound(
             path_span,
-            module_path.path().to_string_lossy().to_string(),
+            module_path.path().to_string_lossy().into(),
         ));
         None
     }
@@ -2066,9 +2066,9 @@ pub fn parse_module(
                 if let Some(mod_name) = module_name {
                     if s.as_bytes() == mod_name {
                         working_set.error(ParseError::NamedAsModule(
-                            "module".to_string(),
+                            "module".into(),
                             s,
-                            "mod".to_string(),
+                            "mod".into(),
                             name.span,
                         ));
                         return (
@@ -2324,7 +2324,7 @@ pub fn parse_use(
     } else {
         working_set.error(ParseError::ModuleNotFound(
             import_pattern.head.span,
-            String::from_utf8_lossy(&import_pattern.head.name).to_string(),
+            String::from_utf8_lossy(&import_pattern.head.name).into(),
         ));
         return (
             Pipeline::from_vec(vec![Expression {
@@ -2503,7 +2503,7 @@ pub fn parse_hide(working_set: &mut StateWorkingSet, lite_command: &LiteCommand)
             } else {
                 working_set.error(ParseError::ModuleNotFound(
                     spans[1],
-                    String::from_utf8_lossy(&import_pattern.head.name).to_string(),
+                    String::from_utf8_lossy(&import_pattern.head.name).into(),
                 ));
                 return garbage_pipeline(spans);
             };
@@ -2724,7 +2724,7 @@ pub fn parse_overlay_use(working_set: &mut StateWorkingSet, call: Box<Call>) -> 
             if has_prefix && !overlay_frame.prefixed {
                 working_set.error(ParseError::OverlayPrefixMismatch(
                     overlay_name,
-                    "without".to_string(),
+                    "without".into(),
                     overlay_name_span,
                 ));
                 return pipeline;
@@ -2733,7 +2733,7 @@ pub fn parse_overlay_use(working_set: &mut StateWorkingSet, call: Box<Call>) -> 
             if !has_prefix && overlay_frame.prefixed {
                 working_set.error(ParseError::OverlayPrefixMismatch(
                     overlay_name,
-                    "with".to_string(),
+                    "with".into(),
                     overlay_name_span,
                 ));
                 return pipeline;
@@ -2798,7 +2798,7 @@ pub fn parse_overlay_use(working_set: &mut StateWorkingSet, call: Box<Call>) -> 
                 (
                     new_name
                         .map(|spanned| spanned.item)
-                        .unwrap_or_else(|| String::from_utf8_lossy(&new_module.name).to_string()),
+                        .unwrap_or_else(|| String::from_utf8_lossy(&new_module.name).into()),
                     new_module,
                     module_id,
                     true,
@@ -2888,7 +2888,7 @@ pub fn parse_overlay_hide(working_set: &mut StateWorkingSet, call: Box<Call>) ->
         }
     } else {
         (
-            String::from_utf8_lossy(working_set.last_overlay_name()).to_string(),
+            String::from_utf8_lossy(working_set.last_overlay_name()).into(),
             call_span,
         )
     };
@@ -3519,6 +3519,8 @@ pub fn parse_where(working_set: &mut StateWorkingSet, lite_command: &LiteCommand
 
 #[cfg(feature = "plugin")]
 pub fn parse_register(working_set: &mut StateWorkingSet, lite_command: &LiteCommand) -> Pipeline {
+    use std::str;
+
     use nu_plugin::{get_signature, PersistentPlugin, PluginDeclaration};
     use nu_protocol::{
         engine::Stack, IntoSpanned, PluginIdentity, PluginSignature, RegisteredPlugin,
@@ -3619,18 +3621,18 @@ pub fn parse_register(working_set: &mut StateWorkingSet, lite_command: &LiteComm
     let shell = call.get_flag_expr("shell").map(|expr| {
         let shell_expr = working_set.get_span_contents(expr.span);
 
-        String::from_utf8(shell_expr.to_vec())
+        str::from_utf8(shell_expr)
             .map_err(|_| ParseError::NonUtf8(expr.span))
             .and_then(|name| {
-                canonicalize_with(&name, cwd)
-                    .map_err(|_| ParseError::RegisteredFileNotFound(name, expr.span))
+                canonicalize_with(name, cwd)
+                    .map_err(|_| ParseError::RegisteredFileNotFound(name.into(), expr.span))
             })
             .and_then(|path| {
                 if path.exists() & path.is_file() {
                     Ok(path)
                 } else {
                     Err(ParseError::RegisteredFileNotFound(
-                        format!("{path:?}"),
+                        format!("{path:?}").into(),
                         expr.span,
                     ))
                 }

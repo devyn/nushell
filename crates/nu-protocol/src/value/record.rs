@@ -1,6 +1,6 @@
 use std::ops::RangeBounds;
 
-use crate::{ShellError, Span, Value};
+use crate::{ShellError, Span, Value, NuString};
 
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,7 @@ pub struct Record {
     ///
     /// Only public as command `rename` is not reimplemented in a sane way yet
     /// Using it or making `vals` public will draw shaming by @sholderbach
-    pub cols: Vec<String>,
+    pub cols: Vec<NuString>,
     vals: Vec<Value>,
 }
 
@@ -33,7 +33,7 @@ impl Record {
     /// For perf reasons, this will not validate the rest of the record assumptions:
     /// - unique keys
     pub fn from_raw_cols_vals(
-        cols: Vec<String>,
+        cols: Vec<NuString>,
         vals: Vec<Value>,
         input_span: Span,
         creation_site_span: Span,
@@ -71,7 +71,7 @@ impl Record {
     /// May duplicate data!
     ///
     /// Consider to use [`Record::insert`] instead
-    pub fn push(&mut self, col: impl Into<String>, val: Value) {
+    pub fn push(&mut self, col: impl Into<NuString>, val: Value) {
         self.cols.push(col.into());
         self.vals.push(val);
     }
@@ -81,7 +81,7 @@ impl Record {
     /// Returns `Some(previous_value)` if found. Else `None`
     pub fn insert<K>(&mut self, col: K, val: Value) -> Option<Value>
     where
-        K: AsRef<str> + Into<String>,
+        K: AsRef<str> + Into<NuString>,
     {
         if let Some(idx) = self.index_of(&col) {
             // Can panic if vals.len() < cols.len()
@@ -94,11 +94,11 @@ impl Record {
     }
 
     pub fn contains(&self, col: impl AsRef<str>) -> bool {
-        self.columns().any(|k| k == col.as_ref())
+        self.columns().any(|k| k.as_str() == col.as_ref())
     }
 
     pub fn index_of(&self, col: impl AsRef<str>) -> Option<usize> {
-        self.columns().position(|k| k == col.as_ref())
+        self.columns().position(|k| k.as_str() == col.as_ref())
     }
 
     pub fn get(&self, col: impl AsRef<str>) -> Option<&Value> {
@@ -109,7 +109,7 @@ impl Record {
         self.index_of(col).and_then(|idx| self.vals.get_mut(idx))
     }
 
-    pub fn get_index(&self, idx: usize) -> Option<(&String, &Value)> {
+    pub fn get_index(&self, idx: usize) -> Option<(&NuString, &Value)> {
         Some((self.cols.get(idx)?, self.vals.get(idx)?))
     }
 
@@ -137,8 +137,8 @@ impl Record {
     /// );
     /// rec.retain(|_k, val| !val.is_nothing());
     /// let mut iter_rec = rec.columns();
-    /// assert_eq!(iter_rec.next().map(String::as_str), Some("b"));
-    /// assert_eq!(iter_rec.next().map(String::as_str), Some("d"));
+    /// assert_eq!(iter_rec.next().map(NuString::as_str), Some("b"));
+    /// assert_eq!(iter_rec.next().map(NuString::as_str), Some("d"));
     /// assert_eq!(iter_rec.next(), None);
     /// ```
     pub fn retain<F>(&mut self, mut keep: F)
@@ -191,7 +191,7 @@ impl Record {
     {
         // `Vec::retain` is able to optimize memcopies internally.
         // For maximum benefit, `retain` is used on `vals`,
-        // as `Value` is a larger struct than `String`.
+        // as `Value` is a larger struct than `NuString`.
         //
         // To do a simultaneous retain on the `cols`, three portions of it are tracked:
         //     [..retained, ..dropped, ..unvisited]
@@ -232,9 +232,9 @@ impl Record {
     ///     "d" => Value::test_int(42),
     /// );
     /// rec.truncate(42); // this is fine
-    /// assert_eq!(rec.columns().map(String::as_str).collect::<String>(), "abcd");
+    /// assert_eq!(rec.columns().map(NuString::as_str).collect::<NuString>(), "abcd");
     /// rec.truncate(2); // truncate
-    /// assert_eq!(rec.columns().map(String::as_str).collect::<String>(), "ab");
+    /// assert_eq!(rec.columns().map(NuString::as_str).collect::<NuString>(), "ab");
     /// rec.truncate(0); // clear the record
     /// assert_eq!(rec.len(), 0);
     /// ```
@@ -294,16 +294,16 @@ impl Record {
     }
 }
 
-impl FromIterator<(String, Value)> for Record {
-    fn from_iter<T: IntoIterator<Item = (String, Value)>>(iter: T) -> Self {
+impl FromIterator<(NuString, Value)> for Record {
+    fn from_iter<T: IntoIterator<Item = (NuString, Value)>>(iter: T) -> Self {
         let (cols, vals) = iter.into_iter().unzip();
         // TODO: should this check for duplicate keys/columns?
         Self { cols, vals }
     }
 }
 
-impl Extend<(String, Value)> for Record {
-    fn extend<T: IntoIterator<Item = (String, Value)>>(&mut self, iter: T) {
+impl Extend<(NuString, Value)> for Record {
+    fn extend<T: IntoIterator<Item = (NuString, Value)>>(&mut self, iter: T) {
         for (k, v) in iter {
             // TODO: should this .insert with a check?
             self.push(k, v)
@@ -312,11 +312,11 @@ impl Extend<(String, Value)> for Record {
 }
 
 pub struct IntoIter {
-    iter: std::iter::Zip<std::vec::IntoIter<String>, std::vec::IntoIter<Value>>,
+    iter: std::iter::Zip<std::vec::IntoIter<NuString>, std::vec::IntoIter<Value>>,
 }
 
 impl Iterator for IntoIter {
-    type Item = (String, Value);
+    type Item = (NuString, Value);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -336,7 +336,7 @@ impl ExactSizeIterator for IntoIter {
 }
 
 impl IntoIterator for Record {
-    type Item = (String, Value);
+    type Item = (NuString, Value);
 
     type IntoIter = IntoIter;
 
@@ -348,11 +348,11 @@ impl IntoIterator for Record {
 }
 
 pub struct Iter<'a> {
-    iter: std::iter::Zip<std::slice::Iter<'a, String>, std::slice::Iter<'a, Value>>,
+    iter: std::iter::Zip<std::slice::Iter<'a, NuString>, std::slice::Iter<'a, Value>>,
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = (&'a String, &'a Value);
+    type Item = (&'a NuString, &'a Value);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -372,7 +372,7 @@ impl<'a> ExactSizeIterator for Iter<'a> {
 }
 
 impl<'a> IntoIterator for &'a Record {
-    type Item = (&'a String, &'a Value);
+    type Item = (&'a NuString, &'a Value);
 
     type IntoIter = Iter<'a>;
 
@@ -384,11 +384,11 @@ impl<'a> IntoIterator for &'a Record {
 }
 
 pub struct IterMut<'a> {
-    iter: std::iter::Zip<std::slice::Iter<'a, String>, std::slice::IterMut<'a, Value>>,
+    iter: std::iter::Zip<std::slice::Iter<'a, NuString>, std::slice::IterMut<'a, Value>>,
 }
 
 impl<'a> Iterator for IterMut<'a> {
-    type Item = (&'a String, &'a mut Value);
+    type Item = (&'a NuString, &'a mut Value);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -408,7 +408,7 @@ impl<'a> ExactSizeIterator for IterMut<'a> {
 }
 
 impl<'a> IntoIterator for &'a mut Record {
-    type Item = (&'a String, &'a mut Value);
+    type Item = (&'a NuString, &'a mut Value);
 
     type IntoIter = IterMut<'a>;
 
@@ -420,11 +420,11 @@ impl<'a> IntoIterator for &'a mut Record {
 }
 
 pub struct Columns<'a> {
-    iter: std::slice::Iter<'a, String>,
+    iter: std::slice::Iter<'a, NuString>,
 }
 
 impl<'a> Iterator for Columns<'a> {
-    type Item = &'a String;
+    type Item = &'a NuString;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -504,12 +504,12 @@ impl ExactSizeIterator for IntoValues {
 }
 
 pub struct Drain<'a> {
-    keys: std::vec::Drain<'a, String>,
+    keys: std::vec::Drain<'a, NuString>,
     values: std::vec::Drain<'a, Value>,
 }
 
 impl Iterator for Drain<'_> {
-    type Item = (String, Value);
+    type Item = (NuString, Value);
 
     fn next(&mut self) -> Option<Self::Item> {
         Some((self.keys.next()?, self.values.next()?))

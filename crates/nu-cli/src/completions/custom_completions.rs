@@ -1,5 +1,6 @@
 use crate::completions::{Completer, CompletionOptions, MatchAlgorithm, SortBy};
 use nu_engine::eval_call;
+use nu_protocol::NuString;
 use nu_protocol::debugger::WithoutDebug;
 use nu_protocol::{
     ast::{Argument, Call, Expr, Expression},
@@ -57,7 +58,7 @@ impl Completer for CustomCompletion {
                     Argument::Positional(Expression {
                         span: Span::unknown(),
                         ty: Type::String,
-                        expr: Expr::String(self.line.clone()),
+                        expr: Expr::String(NuString::from(&self.line)),
                         custom_completion: None,
                     }),
                     Argument::Positional(Expression {
@@ -118,7 +119,7 @@ impl Completer for CustomCompletion {
                                     Some(option) => option
                                         .coerce_string()
                                         .ok()
-                                        .and_then(|option| option.try_into().ok())
+                                        .and_then(|option| option.as_str().try_into().ok())
                                         .unwrap_or(MatchAlgorithm::Prefix),
                                     None => completion_options.match_algorithm,
                                 },

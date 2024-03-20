@@ -459,7 +459,7 @@ pub fn map_value_completions<'a>(
         // Match for string values
         if let Ok(s) = x.coerce_string() {
             return Some(Suggestion {
-                value: s,
+                value: s.into(),
                 description: None,
                 style: None,
                 extra: None,
@@ -492,7 +492,7 @@ pub fn map_value_completions<'a>(
                     // Convert the value to string
                     if let Ok(val_str) = it.1.coerce_string() {
                         // Update the suggestion value
-                        suggestion.value = val_str;
+                        suggestion.value = val_str.into();
                     }
                 }
 
@@ -501,7 +501,7 @@ pub fn map_value_completions<'a>(
                     // Convert the value to string
                     if let Ok(desc_str) = it.1.coerce_string() {
                         // Update the suggestion value
-                        suggestion.description = Some(desc_str);
+                        suggestion.description = Some(desc_str.into());
                     }
                 }
 

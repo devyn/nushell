@@ -19,7 +19,7 @@ pub use record::Record;
 
 use crate::ast::{Bits, Boolean, CellPath, Comparison, Math, Operator, PathMember, RangeInclusion};
 use crate::engine::{Closure, EngineState};
-use crate::{did_you_mean, BlockId, Config, ShellError, Span, Type};
+use crate::{did_you_mean, BlockId, Config, ShellError, Span, Type, NuString};
 
 use chrono::{DateTime, Datelike, FixedOffset, Locale, TimeZone};
 use chrono_humanize::HumanTime;
@@ -91,7 +91,7 @@ pub enum Value {
         internal_span: Span,
     },
     String {
-        val: String,
+        val: NuString,
         // note: spans are being refactored out of Value
         // please use .span() instead of matching this span value
         #[serde(rename = "span")]
@@ -368,8 +368,8 @@ impl Value {
         }
     }
 
-    /// Unwraps the inner `String` value or returns an error if this `Value` is not a string
-    pub fn into_string(self) -> Result<String, ShellError> {
+    /// Unwraps the inner `NuString` value or returns an error if this `Value` is not a string
+    pub fn into_string(self) -> Result<NuString, ShellError> {
         if let Value::String { val, .. } = self {
             Ok(val)
         } else {
@@ -452,8 +452,8 @@ impl Value {
     ///     );
     /// }
     /// ```
-    pub fn coerce_string(&self) -> Result<String, ShellError> {
-        self.coerce_str().map(Cow::into_owned)
+    pub fn coerce_string(&self) -> Result<NuString, ShellError> {
+        self.coerce_str().map(NuString::from)
     }
 
     /// Returns this `Value` converted to a `String` or an error if it cannot be converted
@@ -481,17 +481,17 @@ impl Value {
     ///     );
     /// }
     /// ```
-    pub fn coerce_into_string(self) -> Result<String, ShellError> {
+    pub fn coerce_into_string(self) -> Result<NuString, ShellError> {
         let span = self.span();
         match self {
-            Value::Int { val, .. } => Ok(val.to_string()),
-            Value::Float { val, .. } => Ok(val.to_string()),
+            Value::Int { val, .. } => Ok(val.to_string().into()),
+            Value::Float { val, .. } => Ok(val.to_string().into()),
             Value::String { val, .. } => Ok(val),
             Value::Binary { val, .. } => match String::from_utf8(val) {
-                Ok(s) => Ok(s),
+                Ok(s) => Ok(s.into()),
                 Err(err) => Value::binary(err.into_bytes(), span).cant_convert_to("string"),
             },
-            Value::Date { val, .. } => Ok(val.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+            Value::Date { val, .. } => Ok(val.to_rfc3339_opts(chrono::SecondsFormat::Millis, true).into()),
             val => val.cant_convert_to("string"),
         }
     }
@@ -860,7 +860,7 @@ impl Value {
         }
     }
 
-    fn format_datetime<Tz: TimeZone>(&self, date_time: &DateTime<Tz>, formatter: &str) -> String
+    fn format_datetime<Tz: TimeZone>(&self, date_time: &DateTime<Tz>, formatter: &str) -> NuString
     where
         Tz::Offset: Display,
     {
@@ -885,19 +885,19 @@ impl Value {
             Ok(_) => (),
             Err(_) => formatter_buf = format!("Invalid format string {}", formatter),
         }
-        formatter_buf
+        formatter_buf.into()
     }
 
     /// Converts this `Value` to a string according to the given [`Config`] and separator
     ///
     /// This functions recurses into records and lists,
     /// returning a string that contains the stringified form of all nested `Value`s.
-    pub fn to_expanded_string(&self, separator: &str, config: &Config) -> String {
+    pub fn to_expanded_string(&self, separator: &str, config: &Config) -> NuString {
         let span = self.span();
         match self {
-            Value::Bool { val, .. } => val.to_string(),
-            Value::Int { val, .. } => val.to_string(),
-            Value::Float { val, .. } => val.to_string(),
+            Value::Bool { val, .. } => val.to_string().into(),
+            Value::Int { val, .. } => val.to_string().into(),
+            Value::Float { val, .. } => val.to_string().into(),
             Value::Filesize { val, .. } => format_filesize_from_conf(*val, config),
             Value::Duration { val, .. } => format_duration(*val),
             Value::Date { val, .. } => match &config.datetime_normal_format {
@@ -911,7 +911,7 @@ impl Value {
                             val.to_rfc3339()
                         },
                         HumanTime::from(*val),
-                    )
+                    ).into()
                 }
             },
             Value::Range { val, .. } => {
@@ -919,40 +919,40 @@ impl Value {
                     "{}..{}",
                     val.from.to_expanded_string(", ", config),
                     val.to.to_expanded_string(", ", config)
-                )
+                ).into()
             }
-            Value::String { val, .. } => val.clone(),
-            Value::Glob { val, .. } => val.clone(),
+            Value::String { val, .. } => val.into(),
+            Value::Glob { val, .. } => val.into(),
             Value::List { vals: val, .. } => format!(
                 "[{}]",
                 val.iter()
                     .map(|x| x.to_expanded_string(", ", config))
                     .collect::<Vec<_>>()
                     .join(separator)
-            ),
+            ).into(),
             Value::Record { val, .. } => format!(
                 "{{{}}}",
                 val.iter()
                     .map(|(x, y)| format!("{}: {}", x, y.to_expanded_string(", ", config)))
                     .collect::<Vec<_>>()
                     .join(separator)
-            ),
+            ).into(),
             Value::LazyRecord { val, .. } => val
                 .collect()
                 .unwrap_or_else(|err| Value::error(err, span))
                 .to_expanded_string(separator, config),
-            Value::Block { val, .. } => format!("<Block {val}>"),
-            Value::Closure { val, .. } => format!("<Closure {}>", val.block_id),
-            Value::Nothing { .. } => String::new(),
-            Value::Error { error, .. } => format!("{error:?}"),
-            Value::Binary { val, .. } => format!("{val:?}"),
-            Value::CellPath { val, .. } => val.to_string(),
+            Value::Block { val, .. } => format!("<Block {val}>").into(),
+            Value::Closure { val, .. } => format!("<Closure {}>", val.block_id).into(),
+            Value::Nothing { .. } => NuString::new(),
+            Value::Error { error, .. } => format!("{error:?}").into(),
+            Value::Binary { val, .. } => format!("{val:?}").into(),
+            Value::CellPath { val, .. } => val.to_string().into(),
             // If we fail to collapse the custom value, just print <{type_name}> - failure is not
             // that critical here
             Value::CustomValue { val, .. } => val
                 .to_base_value(span)
                 .map(|val| val.to_expanded_string(separator, config))
-                .unwrap_or_else(|_| format!("<{}>", val.type_name())),
+                .unwrap_or_else(|_| format!("<{}>", val.type_name()).into()),
         }
     }
 
@@ -963,12 +963,12 @@ impl Value {
     /// - "[table {n} rows]"
     /// - "[list {n} items]"
     /// - "[record {n} fields]"
-    pub fn to_abbreviated_string(&self, config: &Config) -> String {
+    pub fn to_abbreviated_string(&self, config: &Config) -> NuString {
         let span = self.span();
         match self {
             Value::Date { val, .. } => match &config.datetime_table_format {
                 Some(format) => self.format_datetime(val, format),
-                None => HumanTime::from(*val).to_string(),
+                None => HumanTime::from(*val).to_string().into(),
             },
             Value::List { ref vals, .. } => {
                 if !vals.is_empty() && vals.iter().all(|x| matches!(x, Value::Record { .. })) {
@@ -976,20 +976,20 @@ impl Value {
                         "[table {} row{}]",
                         vals.len(),
                         if vals.len() == 1 { "" } else { "s" }
-                    )
+                    ).into()
                 } else {
                     format!(
                         "[list {} item{}]",
                         vals.len(),
                         if vals.len() == 1 { "" } else { "s" }
-                    )
+                    ).into()
                 }
             }
             Value::Record { val, .. } => format!(
                 "{{record {} field{}}}",
                 val.len(),
                 if val.len() == 1 { "" } else { "s" }
-            ),
+            ).into(),
             Value::LazyRecord { val, .. } => val
                 .collect()
                 .unwrap_or_else(|err| Value::error(err, span))
@@ -1007,10 +1007,10 @@ impl Value {
     ///
     /// This functions behaves like [`to_expanded_string`](Self::to_expanded_string)
     /// and will recurse into records and lists.
-    pub fn to_parsable_string(&self, separator: &str, config: &Config) -> String {
+    pub fn to_parsable_string(&self, separator: &str, config: &Config) -> NuString {
         match self {
             // give special treatment to the simple types to make them parsable
-            Value::String { val, .. } => format!("'{}'", val),
+            Value::String { val, .. } => format!("'{}'", val).into(),
             // recurse back into this function for recursive formatting
             Value::List { vals: val, .. } => format!(
                 "[{}]",
@@ -1018,14 +1018,14 @@ impl Value {
                     .map(|x| x.to_parsable_string(", ", config))
                     .collect::<Vec<_>>()
                     .join(separator)
-            ),
+            ).into(),
             Value::Record { val, .. } => format!(
                 "{{{}}}",
                 val.iter()
                     .map(|(x, y)| format!("{}: {}", x, y.to_parsable_string(", ", config)))
                     .collect::<Vec<_>>()
                     .join(separator)
-            ),
+            ).into(),
             // defer to standard handling for types where standard representation is parsable
             _ => self.to_expanded_string(separator, config),
         }
@@ -1174,7 +1174,7 @@ impl Value {
                                 });
                             } else {
                                 return Err(ShellError::CantFindColumn {
-                                    col_name: column_name.clone(),
+                                    col_name: column_name.into(),
                                     span: *origin_span,
                                     src_span: span,
                                 });
@@ -1200,7 +1200,7 @@ impl Value {
                                 });
                             } else {
                                 return Err(ShellError::CantFindColumn {
-                                    col_name: column_name.clone(),
+                                    col_name: column_name.into(),
                                     span: *origin_span,
                                     src_span: span,
                                 });
@@ -1235,7 +1235,7 @@ impl Value {
                                                 })
                                             } else {
                                                 Err(ShellError::CantFindColumn {
-                                                    col_name: column_name.clone(),
+                                                    col_name: column_name.into(),
                                                     span: *origin_span,
                                                     src_span: val_span,
                                                 })
@@ -1245,7 +1245,7 @@ impl Value {
                                             Ok(Value::nothing(*origin_span))
                                         }
                                         _ => Err(ShellError::CantFindColumn {
-                                            col_name: column_name.clone(),
+                                            col_name: column_name.into(),
                                             span: *origin_span,
                                             src_span: val_span,
                                         }),
@@ -1258,7 +1258,7 @@ impl Value {
                         Value::CustomValue { ref val, .. } => {
                             current = match val.follow_path_string(
                                 current.span(),
-                                column_name.clone(),
+                                column_name.into(),
                                 *origin_span,
                             ) {
                                 Ok(val) => val,
@@ -1346,7 +1346,7 @@ impl Value {
                                 Value::Error { error, .. } => return Err(*error.clone()),
                                 v => {
                                     return Err(ShellError::CantFindColumn {
-                                        col_name: col_name.clone(),
+                                        col_name: col_name.into(),
                                         span: *span,
                                         src_span: v.span(),
                                     });
@@ -1376,7 +1376,7 @@ impl Value {
                     Value::Error { error, .. } => return Err(*error.clone()),
                     v => {
                         return Err(ShellError::CantFindColumn {
-                            col_name: col_name.clone(),
+                            col_name: col_name.into(),
                             span: *span,
                             src_span: v.span(),
                         });
@@ -1456,7 +1456,7 @@ impl Value {
                                         val.update_data_at_cell_path(path, new_val.clone())?;
                                     } else {
                                         return Err(ShellError::CantFindColumn {
-                                            col_name: col_name.clone(),
+                                            col_name: col_name.into(),
                                             span: *span,
                                             src_span: v_span,
                                         });
@@ -1465,7 +1465,7 @@ impl Value {
                                 Value::Error { error, .. } => return Err(*error.clone()),
                                 v => {
                                     return Err(ShellError::CantFindColumn {
-                                        col_name: col_name.clone(),
+                                        col_name: col_name.into(),
                                         span: *span,
                                         src_span: v.span(),
                                     });
@@ -1478,7 +1478,7 @@ impl Value {
                             val.update_data_at_cell_path(path, new_val)?;
                         } else {
                             return Err(ShellError::CantFindColumn {
-                                col_name: col_name.clone(),
+                                col_name: col_name.into(),
                                 span: *span,
                                 src_span: v_span,
                             });
@@ -1492,7 +1492,7 @@ impl Value {
                     Value::Error { error, .. } => return Err(*error.clone()),
                     v => {
                         return Err(ShellError::CantFindColumn {
-                            col_name: col_name.clone(),
+                            col_name: col_name.into(),
                             span: *span,
                             src_span: v.span(),
                         });
@@ -1546,7 +1546,7 @@ impl Value {
                                     Value::Record { val: record, .. } => {
                                         if record.remove(col_name).is_none() && !optional {
                                             return Err(ShellError::CantFindColumn {
-                                                col_name: col_name.clone(),
+                                                col_name: col_name.into(),
                                                 span: *span,
                                                 src_span: v_span,
                                             });
@@ -1554,7 +1554,7 @@ impl Value {
                                     }
                                     v => {
                                         return Err(ShellError::CantFindColumn {
-                                            col_name: col_name.clone(),
+                                            col_name: col_name.into(),
                                             span: *span,
                                             src_span: v.span(),
                                         });
@@ -1566,7 +1566,7 @@ impl Value {
                         Value::Record { val: record, .. } => {
                             if record.remove(col_name).is_none() && !optional {
                                 return Err(ShellError::CantFindColumn {
-                                    col_name: col_name.clone(),
+                                    col_name: col_name.into(),
                                     span: *span,
                                     src_span: v_span,
                                 });
@@ -1579,7 +1579,7 @@ impl Value {
                             self.remove_data_at_cell_path(cell_path)
                         }
                         v => Err(ShellError::CantFindColumn {
-                            col_name: col_name.clone(),
+                            col_name: col_name.into(),
                             span: *span,
                             src_span: v.span(),
                         }),
@@ -1628,7 +1628,7 @@ impl Value {
                                             val.remove_data_at_cell_path(path)?;
                                         } else if !optional {
                                             return Err(ShellError::CantFindColumn {
-                                                col_name: col_name.clone(),
+                                                col_name: col_name.into(),
                                                 span: *span,
                                                 src_span: v_span,
                                             });
@@ -1636,7 +1636,7 @@ impl Value {
                                     }
                                     v => {
                                         return Err(ShellError::CantFindColumn {
-                                            col_name: col_name.clone(),
+                                            col_name: col_name.into(),
                                             span: *span,
                                             src_span: v.span(),
                                         });
@@ -1650,7 +1650,7 @@ impl Value {
                                 val.remove_data_at_cell_path(path)?;
                             } else if !optional {
                                 return Err(ShellError::CantFindColumn {
-                                    col_name: col_name.clone(),
+                                    col_name: col_name.into(),
                                     span: *span,
                                     src_span: v_span,
                                 });
@@ -1663,7 +1663,7 @@ impl Value {
                             self.remove_data_at_cell_path(cell_path)
                         }
                         v => Err(ShellError::CantFindColumn {
-                            col_name: col_name.clone(),
+                            col_name: col_name.into(),
                             span: *span,
                             src_span: v.span(),
                         }),
@@ -1719,7 +1719,7 @@ impl Value {
                                     if let Some(val) = record.get_mut(col_name) {
                                         if path.is_empty() {
                                             return Err(ShellError::ColumnAlreadyExists {
-                                                col_name: col_name.clone(),
+                                                col_name: col_name.into(),
                                                 span: *span,
                                                 src_span: v_span,
                                             });
@@ -1762,7 +1762,7 @@ impl Value {
                         if let Some(val) = record.get_mut(col_name) {
                             if path.is_empty() {
                                 return Err(ShellError::ColumnAlreadyExists {
-                                    col_name: col_name.clone(),
+                                    col_name: col_name.into(),
                                     span: *span,
                                     src_span: v_span,
                                 });
@@ -1915,7 +1915,7 @@ impl Value {
         matches!(self, Value::Bool { val: false, .. })
     }
 
-    pub fn columns(&self) -> impl Iterator<Item = &String> {
+    pub fn columns(&self) -> impl Iterator<Item = &NuString> {
         let opt = match self {
             Value::Record { val, .. } => Some(val.columns()),
             _ => None,
@@ -1973,7 +1973,7 @@ impl Value {
         }
     }
 
-    pub fn string(val: impl Into<String>, span: Span) -> Value {
+    pub fn string(val: impl Into<NuString>, span: Span) -> Value {
         Value::String {
             val: val.into(),
             internal_span: span,
@@ -2102,7 +2102,7 @@ impl Value {
 
     /// Note: Only use this for test data, *not* live data, as it will point into unknown source
     /// when used in errors.
-    pub fn test_string(val: impl Into<String>) -> Value {
+    pub fn test_string(val: impl Into<NuString>) -> Value {
         Value::string(val, Span::test_data())
     }
 
@@ -3326,11 +3326,11 @@ impl Value {
         match (self, rhs) {
             (lhs, Value::Range { val: rhs, .. }) => Ok(Value::bool(rhs.contains(lhs), span)),
             (Value::String { val: lhs, .. }, Value::String { val: rhs, .. }) => {
-                Ok(Value::bool(rhs.contains(lhs), span))
+                Ok(Value::bool(rhs.contains(lhs.as_str()), span))
             }
             (lhs, Value::List { vals: rhs, .. }) => Ok(Value::bool(rhs.contains(lhs), span)),
             (Value::String { val: lhs, .. }, Value::Record { val: rhs, .. }) => {
-                Ok(Value::bool(rhs.contains(lhs), span))
+                Ok(Value::bool(rhs.contains(lhs.as_str()), span))
             }
             (Value::String { .. } | Value::Int { .. }, Value::CellPath { val: rhs, .. }) => {
                 let val = rhs.members.iter().any(|member| match (self, member) {
@@ -3374,11 +3374,11 @@ impl Value {
         match (self, rhs) {
             (lhs, Value::Range { val: rhs, .. }) => Ok(Value::bool(!rhs.contains(lhs), span)),
             (Value::String { val: lhs, .. }, Value::String { val: rhs, .. }) => {
-                Ok(Value::bool(!rhs.contains(lhs), span))
+                Ok(Value::bool(!rhs.contains(lhs.as_str()), span))
             }
             (lhs, Value::List { vals: rhs, .. }) => Ok(Value::bool(!rhs.contains(lhs), span)),
             (Value::String { val: lhs, .. }, Value::Record { val: rhs, .. }) => {
-                Ok(Value::bool(!rhs.contains(lhs), span))
+                Ok(Value::bool(!rhs.contains(lhs.as_str()), span))
             }
             (Value::String { .. } | Value::Int { .. }, Value::CellPath { val: rhs, .. }) => {
                 let val = rhs.members.iter().any(|member| match (self, member) {
@@ -3434,7 +3434,7 @@ impl Value {
             (Value::String { val: lhs, .. }, Value::String { val: rhs, .. }) => {
                 let is_match = match engine_state.regex_cache.try_lock() {
                     Ok(mut cache) => {
-                        if let Some(regex) = cache.get(rhs) {
+                        if let Some(regex) = cache.get(rhs.as_str()) {
                             regex.is_match(lhs)
                         } else {
                             let regex =
@@ -3445,7 +3445,7 @@ impl Value {
                                     input_span: rhs_span,
                                 })?;
                             let ret = regex.is_match(lhs);
-                            cache.put(rhs.clone(), regex);
+                            cache.put(rhs.into(), regex);
                             ret
                         }
                     }
@@ -3492,7 +3492,7 @@ impl Value {
     pub fn starts_with(&self, op: Span, rhs: &Value, span: Span) -> Result<Value, ShellError> {
         match (self, rhs) {
             (Value::String { val: lhs, .. }, Value::String { val: rhs, .. }) => {
-                Ok(Value::bool(lhs.starts_with(rhs), span))
+                Ok(Value::bool(lhs.starts_with(rhs.as_str()), span))
             }
             (Value::CustomValue { val: lhs, .. }, rhs) => lhs.operation(
                 self.span(),
@@ -3513,7 +3513,7 @@ impl Value {
     pub fn ends_with(&self, op: Span, rhs: &Value, span: Span) -> Result<Value, ShellError> {
         match (self, rhs) {
             (Value::String { val: lhs, .. }, Value::String { val: rhs, .. }) => {
-                Ok(Value::bool(lhs.ends_with(rhs), span))
+                Ok(Value::bool(lhs.ends_with(rhs.as_str()), span))
             }
             (Value::CustomValue { val: lhs, .. }, rhs) => lhs.operation(
                 self.span(),
@@ -3759,7 +3759,7 @@ impl Value {
     }
 }
 
-fn reorder_record_inner(record: &Record) -> (Vec<&String>, Vec<&Value>) {
+fn reorder_record_inner(record: &Record) -> (Vec<&NuString>, Vec<&Value>) {
     let mut kv_pairs = record.iter().collect::<Vec<_>>();
     kv_pairs.sort_by_key(|(col, _)| *col);
     kv_pairs.into_iter().unzip()

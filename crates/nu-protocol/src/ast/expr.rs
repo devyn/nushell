@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     ast::ImportPattern, ast::Unit, engine::EngineState, BlockId, IoStream, Signature, Span,
-    Spanned, VarId,
+    Spanned, VarId, NuString,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,10 +40,10 @@ pub enum Expr {
     Keyword(Vec<u8>, Span, Box<Expression>),
     ValueWithUnit(Box<Expression>, Spanned<Unit>),
     DateTime(chrono::DateTime<FixedOffset>),
-    Filepath(String, bool),
-    Directory(String, bool),
-    GlobPattern(String, bool),
-    String(String),
+    Filepath(NuString, bool),
+    Directory(NuString, bool),
+    GlobPattern(NuString, bool),
+    String(NuString),
     CellPath(CellPath),
     FullCellPath(Box<FullCellPath>),
     ImportPattern(ImportPattern),

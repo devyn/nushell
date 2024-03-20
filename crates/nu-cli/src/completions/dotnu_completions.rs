@@ -1,7 +1,7 @@
 use crate::completions::{file_path_completion, Completer, CompletionOptions, SortBy};
 use nu_protocol::{
     engine::{EngineState, Stack, StateWorkingSet},
-    Span,
+    Span, NuString,
 };
 use reedline::Suggestion;
 use std::{
@@ -35,7 +35,7 @@ impl Completer for DotNuCompletion {
         options: &CompletionOptions,
     ) -> Vec<Suggestion> {
         let prefix_str = String::from_utf8_lossy(&prefix).replace('`', "");
-        let mut search_dirs: Vec<String> = vec![];
+        let mut search_dirs: Vec<NuString> = vec![];
 
         // If prefix_str is only a word we want to search in the current dir
         let (base, partial) = prefix_str

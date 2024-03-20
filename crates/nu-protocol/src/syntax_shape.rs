@@ -1,4 +1,4 @@
-use crate::{DeclId, Type};
+use crate::{DeclId, Type, NuString};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
@@ -98,7 +98,7 @@ pub enum SyntaxShape {
     Range,
 
     /// A record value, eg `{x: 1, y: 2}`
-    Record(Vec<(String, SyntaxShape)>),
+    Record(Vec<(NuString, SyntaxShape)>),
 
     /// A math expression which expands shorthand forms on the lefthand side, eg `foo > 1`
     /// The shorthand allows us to more easily reach columns inside of the row being passed in
@@ -111,7 +111,7 @@ pub enum SyntaxShape {
     String,
 
     /// A table is allowed, eg `[[first, second]; [1, 2]]`
-    Table(Vec<(String, SyntaxShape)>),
+    Table(Vec<(NuString, SyntaxShape)>),
 
     /// A variable with optional type, `x` or `x: int`
     VarWithOptType,
@@ -129,7 +129,7 @@ impl SyntaxShape {
     /// assert_eq!(non_value.to_type(), Type::Any);
     /// ```
     pub fn to_type(&self) -> Type {
-        let mk_ty = |tys: &[(String, SyntaxShape)]| {
+        let mk_ty = |tys: &[(NuString, SyntaxShape)]| {
             tys.iter()
                 .map(|(key, val)| (key.clone(), val.to_type()))
                 .collect()
@@ -179,7 +179,7 @@ impl SyntaxShape {
 
 impl Display for SyntaxShape {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mk_fmt = |tys: &[(String, SyntaxShape)]| -> String {
+        let mk_fmt = |tys: &[(NuString, SyntaxShape)]| -> String {
             tys.iter()
                 .map(|(x, y)| format!("{x}: {y}"))
                 .collect::<Vec<String>>()

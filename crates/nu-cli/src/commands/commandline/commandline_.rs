@@ -143,7 +143,7 @@ impl Command for Commandline {
                         inner: vec![],
                     },
                 );
-                repl.buffer = cmd;
+                repl.buffer = cmd.into();
                 repl.cursor_pos = repl.buffer.len();
             }
             Ok(Value::nothing(call.head).into_pipeline_data())

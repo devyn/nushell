@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Argument, Expr, ExternalArgument, RecordItem};
 use crate::ast::ImportPattern;
-use crate::DeclId;
+use crate::{DeclId, NuString};
 use crate::{engine::StateWorkingSet, BlockId, Signature, Span, Type, VarId, IN_VARIABLE_ID};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -109,7 +109,7 @@ impl Expression {
         }
     }
 
-    pub fn as_string(&self) -> Option<String> {
+    pub fn as_string(&self) -> Option<NuString> {
         match &self.expr {
             Expr::String(string) => Some(string.clone()),
             _ => None,

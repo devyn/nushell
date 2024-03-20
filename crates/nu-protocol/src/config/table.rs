@@ -1,5 +1,5 @@
 use super::helper::ReconstructVal;
-use crate::{record, Config, ShellError, Span, Value};
+use crate::{record, Config, ShellError, Span, Value, NuString};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -178,7 +178,7 @@ pub enum TrimStrategy {
         /// It will be applied only when there's enough room for it.
         /// For example in case where a cell width must be 12 chars, but
         /// the suffix takes 13 chars it won't be used.
-        suffix: Option<String>,
+        suffix: Option<NuString>,
     },
 }
 
@@ -189,7 +189,7 @@ impl TrimStrategy {
         }
     }
 
-    pub fn truncate(suffix: Option<String>) -> Self {
+    pub fn truncate(suffix: Option<NuString>) -> Self {
         Self::Truncate { suffix }
     }
 }

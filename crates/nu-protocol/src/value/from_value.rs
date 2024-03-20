@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use super::NuGlob;
 use crate::ast::{CellPath, PathMember};
 use crate::engine::{Block, Closure};
-use crate::{Range, Record, ShellError, Spanned, Value};
+use crate::{Range, Record, ShellError, Spanned, Value, NuString};
 use chrono::{DateTime, FixedOffset};
 
 pub trait FromValue: Sized {
@@ -167,11 +167,11 @@ impl FromValue for usize {
     }
 }
 
-impl FromValue for String {
+impl FromValue for NuString {
     fn from_value(v: Value) -> Result<Self, ShellError> {
         // FIXME: we may want to fail a little nicer here
         match v {
-            Value::CellPath { val, .. } => Ok(val.to_string()),
+            Value::CellPath { val, .. } => Ok(val.to_string().into()),
             Value::String { val, .. } => Ok(val),
             v => Err(ShellError::CantConvert {
                 to_type: "string".into(),
@@ -183,12 +183,12 @@ impl FromValue for String {
     }
 }
 
-impl FromValue for Spanned<String> {
+impl FromValue for Spanned<NuString> {
     fn from_value(v: Value) -> Result<Self, ShellError> {
         let span = v.span();
         Ok(Spanned {
             item: match v {
-                Value::CellPath { val, .. } => val.to_string(),
+                Value::CellPath { val, .. } => val.to_string().into(),
                 Value::String { val, .. } => val,
                 v => {
                     return Err(ShellError::CantConvert {
@@ -209,7 +209,7 @@ impl FromValue for NuGlob {
         // FIXME: we may want to fail a little nicer here
         match v {
             Value::CellPath { val, .. } => Ok(NuGlob::Expand(val.to_string())),
-            Value::String { val, .. } => Ok(NuGlob::DoNotExpand(val)),
+            Value::String { val, .. } => Ok(NuGlob::DoNotExpand(val.into())),
             Value::Glob {
                 val,
                 no_expand: quoted,
@@ -237,7 +237,7 @@ impl FromValue for Spanned<NuGlob> {
         Ok(Spanned {
             item: match v {
                 Value::CellPath { val, .. } => NuGlob::Expand(val.to_string()),
-                Value::String { val, .. } => NuGlob::DoNotExpand(val),
+                Value::String { val, .. } => NuGlob::DoNotExpand(val.into()),
                 Value::Glob {
                     val,
                     no_expand: quoted,
@@ -263,7 +263,7 @@ impl FromValue for Spanned<NuGlob> {
     }
 }
 
-impl FromValue for Vec<String> {
+impl FromValue for Vec<NuString> {
     fn from_value(v: Value) -> Result<Self, ShellError> {
         // FIXME: we may want to fail a little nicer here
         match v {
@@ -278,7 +278,7 @@ impl FromValue for Vec<String> {
                         help: None,
                     }),
                 })
-                .collect::<Result<Vec<String>, ShellError>>(),
+                .collect::<Result<Vec<NuString>, ShellError>>(),
             v => Err(ShellError::CantConvert {
                 to_type: "string".into(),
                 from_type: v.get_type().to_string(),
@@ -289,7 +289,7 @@ impl FromValue for Vec<String> {
     }
 }
 
-impl FromValue for Vec<Spanned<String>> {
+impl FromValue for Vec<Spanned<NuString>> {
     fn from_value(v: Value) -> Result<Self, ShellError> {
         // FIXME: we may want to fail a little nicer here
         match v {
@@ -310,7 +310,7 @@ impl FromValue for Vec<Spanned<String>> {
                         }),
                     }
                 })
-                .collect::<Result<Vec<Spanned<String>>, ShellError>>(),
+                .collect::<Result<Vec<Spanned<NuString>>, ShellError>>(),
             v => Err(ShellError::CantConvert {
                 to_type: "string".into(),
                 from_type: v.get_type().to_string(),

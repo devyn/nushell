@@ -65,11 +65,11 @@ impl From<CompletionAlgorithm> for MatchAlgorithm {
     }
 }
 
-impl TryFrom<String> for MatchAlgorithm {
+impl TryFrom<&'_ str> for MatchAlgorithm {
     type Error = InvalidMatchAlgorithm;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
+    fn try_from(value: &'_ str) -> Result<Self, Self::Error> {
+        match value {
             "prefix" => Ok(Self::Prefix),
             "fuzzy" => Ok(Self::Fuzzy),
             _ => Err(InvalidMatchAlgorithm::Unknown),
