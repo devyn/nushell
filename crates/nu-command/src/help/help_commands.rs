@@ -55,7 +55,7 @@ pub fn help_commands(
     call: &Call,
 ) -> Result<PipelineData, ShellError> {
     let head = call.head;
-    let find: Option<Spanned<String>> = call.get_flag(engine_state, stack, "find")?;
+    let find: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "find")?;
     let rest: Vec<Spanned<String>> = call.rest(engine_state, stack, 0)?;
 
     // 🚩The following two-lines are copied from filters/find.rs:

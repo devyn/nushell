@@ -167,7 +167,7 @@ impl Command for Do {
                     if *code != 0 {
                         return Err(ShellError::ExternalCommand {
                             label: "External command failed".to_string(),
-                            help: stderr_msg,
+                            help: stderr_msg.into(),
                             span,
                         });
                     }

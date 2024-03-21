@@ -137,7 +137,7 @@ fn command(
         .get_flag(engine_state, stack, "values")?
         .expect("required value");
 
-    let value_name: Option<Spanned<String>> = call.get_flag(engine_state, stack, "value-name")?;
+    let value_name: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "value-name")?;
     let variable_name: Option<Spanned<String>> =
         call.get_flag(engine_state, stack, "variable-name")?;
 

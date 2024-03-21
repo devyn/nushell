@@ -1,6 +1,6 @@
 use crate::{web_tables::WebTable, Query};
 use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, SimplePluginCommand};
-use nu_protocol::{Category, PluginExample, PluginSignature, Record, Span, SyntaxShape, Value};
+use nu_protocol::{Category, PluginExample, PluginSignature, Record, Span, SyntaxShape, Value, NuString};
 use scraper::{Html, Selector as ScraperSelector};
 
 pub struct QueryWeb;
@@ -72,9 +72,9 @@ pub fn web_examples() -> Vec<PluginExample> {
 }
 
 pub struct Selector {
-    pub query: String,
+    pub query: NuString,
     pub as_html: bool,
-    pub attribute: String,
+    pub attribute: NuString,
     pub as_table: Value,
     pub inspect: bool,
 }
@@ -82,9 +82,9 @@ pub struct Selector {
 impl Selector {
     pub fn new() -> Selector {
         Selector {
-            query: String::new(),
+            query: NuString::new(),
             as_html: false,
-            attribute: String::new(),
+            attribute: NuString::new(),
             as_table: Value::string("".to_string(), Span::unknown()),
             inspect: false,
         }
@@ -99,9 +99,9 @@ impl Default for Selector {
 
 pub fn parse_selector_params(call: &EvaluatedCall, input: &Value) -> Result<Value, LabeledError> {
     let head = call.head;
-    let query: String = match call.get_flag("query")? {
+    let query: NuString = match call.get_flag("query")? {
         Some(q2) => q2,
-        None => "".to_string(),
+        None => "".into(),
     };
     let as_html = call.has_flag("as-html")?;
     let attribute = call.get_flag("attribute")?.unwrap_or_default();
@@ -265,13 +265,12 @@ fn retrieve_table(mut table: WebTable, columns: &Value, span: Span) -> Value {
                 .map(|col| {
                     let val = row
                         .get(col)
-                        .unwrap_or(&format!("Missing column: '{}'", &col))
-                        .to_string();
+                        .unwrap_or(&format!("Missing column: '{}'", col));
 
-                    if !at_least_one_row_filled && val != format!("Missing column: '{}'", &col) {
+                    if !at_least_one_row_filled && val != format!("Missing column: '{}'", col) {
                         at_least_one_row_filled = true;
                     }
-                    (col.clone(), Value::string(val, span))
+                    (col.into(), Value::string(val, span))
                 })
                 .collect();
             table_out.push(Value::record(record, span))
@@ -409,9 +408,9 @@ mod tests {
                     .unwrap()
                     .into_iter()
                     .map(|text_nodes| text_nodes.coerce_into_string().unwrap())
-                    .collect::<Vec<String>>()
+                    .collect::<Vec<NuString>>()
             })
-            .collect::<Vec<Vec<String>>>();
+            .collect::<Vec<Vec<NuString>>>();
 
         assert_eq!(
             out,

@@ -48,7 +48,7 @@ impl Command for LoadEnv {
                     let env_var_ = env_var.as_str();
                     if ["FILE_PWD", "CURRENT_FILE", "PWD"].contains(&env_var_) {
                         return Err(ShellError::AutomaticEnvVarSetManually {
-                            envvar_name: env_var,
+                            envvar_name: env_var.into(),
                             span: call.head,
                         });
                     }
@@ -62,7 +62,7 @@ impl Command for LoadEnv {
                         let env_var_ = env_var.as_str();
                         if ["FILE_PWD", "CURRENT_FILE"].contains(&env_var_) {
                             return Err(ShellError::AutomaticEnvVarSetManually {
-                                envvar_name: env_var,
+                                envvar_name: env_var.into(),
                                 span: call.head,
                             });
                         }

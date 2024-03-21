@@ -19,7 +19,7 @@ pub fn do_test(test: &[u8], expected: &str, error_contains: Option<&str>) {
             assert_eq!(pipeline.len(), 1);
             let element = &pipeline.elements[0];
             assert!(element.redirection.is_none());
-            assert_eq!(element.expr.expr, Expr::String(expected.to_string()));
+            assert_eq!(element.expr.expr, Expr::String(expected.into()));
         }
         Some(pev) => match error_contains {
             None => {

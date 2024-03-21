@@ -2,7 +2,7 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type,
+    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, NuString,
 };
 
 #[derive(Clone)]
@@ -50,7 +50,7 @@ impl Command for PluginStop {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let name: Spanned<String> = call.req(engine_state, stack, 0)?;
+        let name: Spanned<NuString> = call.req(engine_state, stack, 0)?;
 
         let mut found = false;
         for plugin in engine_state.plugins() {

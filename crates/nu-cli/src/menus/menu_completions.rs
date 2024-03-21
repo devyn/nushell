@@ -78,12 +78,12 @@ fn convert_to_suggestions(
         Value::Record { val, .. } => {
             let text = val
                 .get("value")
-                .and_then(|val| val.coerce_string().ok())
-                .unwrap_or_else(|| "No value key".to_string());
+                .and_then(|val| val.coerce_string().ok().map(String::from))
+                .unwrap_or_else(|| "No value key".into());
 
             let description = val
                 .get("description")
-                .and_then(|val| val.coerce_string().ok());
+                .and_then(|val| val.coerce_string().ok().map(String::from));
 
             let span = match val.get("span") {
                 Some(Value::Record { val: span, .. }) => {
@@ -130,7 +130,7 @@ fn convert_to_suggestions(
                     let extra: Vec<String> = vals
                         .iter()
                         .filter_map(|extra| match extra {
-                            Value::String { val, .. } => Some(val.clone()),
+                            Value::String { val, .. } => Some(val.into()),
                             _ => None,
                         })
                         .collect();

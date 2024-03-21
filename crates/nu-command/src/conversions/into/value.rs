@@ -4,7 +4,7 @@ use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
     Category, Example, IntoInterruptiblePipelineData, PipelineData, PipelineIterator, ShellError,
-    Signature, Span, SyntaxShape, Type, Value,
+    Signature, Span, SyntaxShape, Type, Value, NuString,
 };
 use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};
@@ -70,12 +70,12 @@ impl Command for IntoValue {
 
         // the columns to update
         let columns: Option<Value> = call.get_flag(&engine_state, stack, "columns")?;
-        let columns: Option<HashSet<String>> = match columns {
+        let columns: Option<HashSet<NuString>> = match columns {
             Some(val) => Some(
                 val.into_list()?
                     .into_iter()
                     .map(Value::coerce_into_string)
-                    .collect::<Result<HashSet<String>, ShellError>>()?,
+                    .collect::<Result<HashSet<NuString>, ShellError>>()?,
             ),
             None => None,
         };
@@ -93,7 +93,7 @@ impl Command for IntoValue {
 
 struct UpdateCellIterator {
     input: PipelineIterator,
-    columns: Option<HashSet<String>>,
+    columns: Option<HashSet<NuString>>,
     display_as_filesizes: bool,
     span: Span,
 }

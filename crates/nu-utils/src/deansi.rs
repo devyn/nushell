@@ -47,17 +47,20 @@ pub fn strip_ansi_likely(string: &str) -> Cow<str> {
 /// Keeps `\n` removes `\r`, `\t` etc.
 ///
 /// If parsing fails silently returns the input string
-pub fn strip_ansi_string_unlikely(string: String) -> String {
+pub fn strip_ansi_string_unlikely<T>(string: T) -> T
+where
+    T: AsRef<str> + From<String>,
+{
     // Check if any ascii control character except LF(0x0A = 10) is present,
     // which will be stripped. Includes the primary start of ANSI sequences ESC
     // (0x1B = decimal 27)
     if string
-        .as_str()
+        .as_ref()
         .bytes()
         .any(|x| matches!(x, 0..=9 | 11..=31))
     {
-        if let Ok(stripped) = String::from_utf8(strip_ansi_escapes::strip(&string)) {
-            return stripped;
+        if let Ok(stripped) = String::from_utf8(strip_ansi_escapes::strip(string.as_ref())) {
+            return stripped.into();
         }
     }
     // Else case includes failures to parse!
@@ -71,12 +74,15 @@ pub fn strip_ansi_string_unlikely(string: String) -> String {
 /// Keeps `\n` removes `\r`, `\t` etc.
 ///
 /// If parsing fails silently returns the input string
-pub fn strip_ansi_string_likely(string: String) -> String {
+pub fn strip_ansi_string_likely<T>(string: T) -> T
+where
+    T: AsRef<str> + From<String>,
+{
     // Check if any ascii control character except LF(0x0A = 10) is present,
     // which will be stripped. Includes the primary start of ANSI sequences ESC
     // (0x1B = decimal 27)
-    if let Ok(stripped) = String::from_utf8(strip_ansi_escapes::strip(&string)) {
-        return stripped;
+    if let Ok(stripped) = String::from_utf8(strip_ansi_escapes::strip(string.as_ref())) {
+        return stripped.into();
     }
     // Else case includes failures to parse!
     string

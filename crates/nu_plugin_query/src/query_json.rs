@@ -1,6 +1,6 @@
 use gjson::Value as gjValue;
 use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, SimplePluginCommand};
-use nu_protocol::{Category, PluginSignature, Record, Span, Spanned, SyntaxShape, Value};
+use nu_protocol::{Category, PluginSignature, Record, Span, Spanned, SyntaxShape, Value, NuString};
 
 use crate::Query;
 
@@ -25,7 +25,7 @@ impl SimplePluginCommand for QueryJson {
         call: &EvaluatedCall,
         input: &Value,
     ) -> Result<Value, LabeledError> {
-        let query: Option<Spanned<String>> = call.opt(0)?;
+        let query: Option<Spanned<NuString>> = call.opt(0)?;
 
         execute_json_query(call, input, query)
     }

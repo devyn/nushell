@@ -52,7 +52,7 @@ impl Command for StorImport {
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let span = call.head;
-        let file_name_opt: Option<String> = call.get_flag(engine_state, stack, "file-name")?;
+        let file_name_opt: Option<NuString> = call.get_flag(engine_state, stack, "file-name")?;
         let file_name = match file_name_opt {
             Some(file_name) => file_name,
             None => {

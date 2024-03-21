@@ -1,5 +1,5 @@
 use nu_plugin::{EvaluatedCall, LabeledError};
-use nu_protocol::Value;
+use nu_protocol::{Value, NuString};
 
 pub struct Example;
 
@@ -24,11 +24,11 @@ impl Example {
         // the ability to call back to NuShell to extract more information
         // Keep this in mind when designing your plugin signatures
         let a: i64 = call.req(0)?;
-        let b: String = call.req(1)?;
+        let b: NuString = call.req(1)?;
         let flag = call.has_flag("flag")?;
         let opt: Option<i64> = call.opt(2)?;
-        let named: Option<String> = call.get_flag("named")?;
-        let rest: Vec<String> = call.rest(3)?;
+        let named: Option<NuString> = call.get_flag("named")?;
+        let rest: Vec<NuString> = call.rest(3)?;
 
         eprintln!("Required values");
         eprintln!("a: {a:}");

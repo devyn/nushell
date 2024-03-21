@@ -117,7 +117,7 @@ pub fn eval_block(
 
     let mut stack = Stack::new().capture();
 
-    stack.add_env_var("PWD".to_string(), Value::test_string(cwd.to_string_lossy()));
+    stack.add_env_var("PWD".into(), Value::test_string(cwd.to_string_lossy()));
 
     match nu_engine::eval_block::<WithoutDebug>(engine_state, &mut stack, &block, input) {
         Err(err) => panic!("test eval error in `{}`: {:?}", "TODO", err),
@@ -133,7 +133,7 @@ pub fn check_example_evaluates_to_expected_output(
     let mut stack = Stack::new().capture();
 
     // Set up PWD
-    stack.add_env_var("PWD".to_string(), Value::test_string(cwd.to_string_lossy()));
+    stack.add_env_var("PWD".into(), Value::test_string(cwd.to_string_lossy()));
 
     engine_state
         .merge_env(&mut stack, cwd)

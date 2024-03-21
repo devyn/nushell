@@ -4,7 +4,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     Category, Example, IntoInterruptiblePipelineData, PipelineData, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value,
+    Spanned, SyntaxShape, Type, Value, NuString,
 };
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -135,7 +135,7 @@ impl Command for Glob {
     ) -> Result<PipelineData, ShellError> {
         let ctrlc = engine_state.ctrlc.clone();
         let span = call.head;
-        let glob_pattern: Spanned<String> = call.req(engine_state, stack, 0)?;
+        let glob_pattern: Spanned<NuString> = call.req(engine_state, stack, 0)?;
         let depth = call.get_flag(engine_state, stack, "depth")?;
         let no_dirs = call.has_flag(engine_state, stack, "no-dir")?;
         let no_files = call.has_flag(engine_state, stack, "no-file")?;
@@ -143,7 +143,7 @@ impl Command for Glob {
 
         let paths_to_exclude: Option<Value> = call.get_flag(engine_state, stack, "exclude")?;
 
-        let (not_patterns, not_pattern_span): (Vec<String>, Span) = match paths_to_exclude {
+        let (not_patterns, not_pattern_span): (Vec<NuString>, Span) = match paths_to_exclude {
             None => (vec![], span),
             Some(f) => {
                 let pat_span = f.span();
@@ -246,7 +246,7 @@ impl Command for Glob {
     }
 }
 
-fn convert_patterns(columns: &[Value]) -> Result<Vec<String>, ShellError> {
+fn convert_patterns(columns: &[Value]) -> Result<Vec<NuString>, ShellError> {
     let res = columns
         .iter()
         .map(|value| match &value {
@@ -256,7 +256,7 @@ fn convert_patterns(columns: &[Value]) -> Result<Vec<String>, ShellError> {
                 span: value.span(),
             }),
         })
-        .collect::<Result<Vec<String>, _>>()?;
+        .collect::<Result<Vec<NuString>, _>>()?;
 
     Ok(res)
 }

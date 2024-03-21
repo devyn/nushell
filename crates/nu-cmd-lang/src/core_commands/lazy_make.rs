@@ -8,7 +8,7 @@ use nu_protocol::debugger::WithoutDebug;
 use nu_protocol::engine::{Closure, Command, EngineState, Stack};
 use nu_protocol::{
     Category, Example, IntoPipelineData, LazyRecord, PipelineData, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value,
+    Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -61,7 +61,7 @@ impl Command for LazyMake {
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let span = call.head;
-        let columns: Vec<Spanned<String>> = call
+        let columns: Vec<Spanned<NuString>> = call
             .get_flag(engine_state, stack, "columns")?
             .expect("required flag");
 
@@ -75,7 +75,7 @@ impl Command for LazyMake {
             match unique.entry(&col.item) {
                 Entry::Occupied(entry) => {
                     return Err(ShellError::ColumnDefinedTwice {
-                        col_name: col.item.clone(),
+                        col_name: col.item.as_str().into(),
                         second_use: col.span,
                         first_use: *entry.get(),
                     });
@@ -122,7 +122,7 @@ impl Command for LazyMake {
 struct NuLazyRecord {
     engine_state: EngineState,
     stack: Arc<Mutex<Stack>>,
-    columns: Vec<String>,
+    columns: Vec<NuString>,
     get_value: Closure,
     span: Span,
 }

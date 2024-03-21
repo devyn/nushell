@@ -120,7 +120,7 @@ impl Command for ExprDatePart {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let part: Spanned<String> = call.req(engine_state, stack, 0)?;
+        let part: Spanned<NuString> = call.req(engine_state, stack, 0)?;
 
         let expr = NuExpression::try_from_pipeline(input, call.head)?;
         let expr_dt = expr.into_polars().dt();

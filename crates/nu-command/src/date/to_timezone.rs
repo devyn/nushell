@@ -5,7 +5,7 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 use chrono::{FixedOffset, TimeZone};
@@ -54,7 +54,7 @@ impl Command for SubCommand {
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
-        let timezone: Spanned<String> = call.req(engine_state, stack, 0)?;
+        let timezone: Spanned<NuString> = call.req(engine_state, stack, 0)?;
 
         // This doesn't match explicit nulls
         if matches!(input, PipelineData::Empty) {
@@ -105,21 +105,21 @@ impl Command for SubCommand {
     }
 }
 
-fn helper(value: Value, head: Span, timezone: &Spanned<String>) -> Value {
+fn helper(value: Value, head: Span, timezone: &Spanned<NuString>) -> Value {
     let val_span = value.span();
     match value {
-        Value::Date { val, .. } => _to_timezone(val, timezone, head),
+        Value::Date { val, .. } => to_timezone(val, timezone, head),
         Value::String { val, .. } => {
             let time = parse_date_from_string(&val, val_span);
             match time {
-                Ok(dt) => _to_timezone(dt, timezone, head),
+                Ok(dt) => to_timezone(dt, timezone, head),
                 Err(e) => e,
             }
         }
 
         Value::Nothing { .. } => {
             let dt = Local::now();
-            _to_timezone(dt.with_timezone(dt.offset()), timezone, head)
+            to_timezone(dt.with_timezone(dt.offset()), timezone, head)
         }
         _ => Value::error(
             ShellError::DatetimeParseError {
@@ -131,7 +131,7 @@ fn helper(value: Value, head: Span, timezone: &Spanned<String>) -> Value {
     }
 }
 
-fn _to_timezone(dt: DateTime<FixedOffset>, timezone: &Spanned<String>, span: Span) -> Value {
+fn to_timezone(dt: DateTime<FixedOffset>, timezone: &Spanned<NuString>, span: Span) -> Value {
     match datetime_in_timezone(&dt, timezone.item.as_str()) {
         Ok(dt) => Value::date(dt, span),
         Err(_) => Value::error(

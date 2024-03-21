@@ -4,7 +4,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value,
+    Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -80,7 +80,7 @@ impl Command for SplitBy {
 }
 
 enum Grouper {
-    ByColumn(Option<Spanned<String>>),
+    ByColumn(Option<Spanned<NuString>>),
 }
 
 pub fn split_by(
@@ -113,7 +113,7 @@ pub fn split_by(
 }
 
 pub fn split(
-    column_name: Option<&Spanned<String>>,
+    column_name: Option<&Spanned<NuString>>,
     values: PipelineData,
     span: Span,
 ) -> Result<PipelineData, ShellError> {
@@ -155,10 +155,10 @@ pub fn split(
 #[allow(clippy::type_complexity)]
 fn data_group(
     values: &Value,
-    grouper: Option<&dyn Fn(usize, &Value) -> Result<String, ShellError>>,
+    grouper: Option<&dyn Fn(usize, &Value) -> Result<NuString, ShellError>>,
     span: Span,
 ) -> Result<Value, ShellError> {
-    let mut groups: IndexMap<String, Vec<Value>> = IndexMap::new();
+    let mut groups: IndexMap<NuString, Vec<Value>> = IndexMap::new();
 
     for (idx, value) in values.clone().into_pipeline_data().into_iter().enumerate() {
         let group_key = if let Some(ref grouper) = grouper {
@@ -183,7 +183,7 @@ fn data_group(
 #[allow(clippy::type_complexity)]
 pub fn data_split(
     value: PipelineData,
-    splitter: Option<&dyn Fn(usize, &Value) -> Result<String, ShellError>>,
+    splitter: Option<&dyn Fn(usize, &Value) -> Result<NuString, ShellError>>,
     dst_span: Span,
 ) -> Result<PipelineData, ShellError> {
     let mut splits = indexmap::IndexMap::new();
@@ -198,7 +198,7 @@ pub fn data_split(
                             Ok(grouped_vals) => {
                                 if let Value::Record { val: sub, .. } = grouped_vals {
                                     for (inner_key, subset) in sub.into_iter() {
-                                        let s: &mut IndexMap<String, Value> =
+                                        let s: &mut IndexMap<NuString, Value> =
                                             splits.entry(inner_key).or_default();
 
                                         s.insert(outer_key.clone(), subset.clone());

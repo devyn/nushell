@@ -3,7 +3,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     did_you_mean, Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape,
-    Type, Value,
+    Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -41,12 +41,12 @@ impl Command for HideEnv {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let env_var_names: Vec<Spanned<String>> = call.rest(engine_state, stack, 0)?;
+        let env_var_names: Vec<Spanned<NuString>> = call.rest(engine_state, stack, 0)?;
         let ignore_errors = call.has_flag(engine_state, stack, "ignore-errors")?;
 
         for name in env_var_names {
             if !stack.remove_env_var(engine_state, &name.item) && !ignore_errors {
-                let all_names: Vec<String> = stack
+                let all_names: Vec<NuString> = stack
                     .get_env_var_names(engine_state)
                     .iter()
                     .cloned()
@@ -59,7 +59,7 @@ impl Command for HideEnv {
                     });
                 } else {
                     return Err(ShellError::EnvVarNotFoundAtRuntime {
-                        envvar_name: name.item,
+                        envvar_name: name.item.into(),
                         span: name.span,
                     });
                 }

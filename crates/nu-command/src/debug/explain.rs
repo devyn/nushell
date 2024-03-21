@@ -4,7 +4,7 @@ use nu_protocol::ast::{Argument, Block, Call, Expr, Expression};
 use nu_protocol::engine::{Closure, Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Example, IntoInterruptiblePipelineData, PipelineData, ShellError, Signature,
-    Span, SyntaxShape, Type, Value,
+    Span, SyntaxShape, Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -252,20 +252,20 @@ fn get_expression_as_value(
     }
 }
 
-pub fn debug_string_without_formatting(value: &Value) -> String {
+pub fn debug_string_without_formatting(value: &Value) -> NuString {
     match value {
-        Value::Bool { val, .. } => val.to_string(),
-        Value::Int { val, .. } => val.to_string(),
-        Value::Float { val, .. } => val.to_string(),
-        Value::Filesize { val, .. } => val.to_string(),
-        Value::Duration { val, .. } => val.to_string(),
-        Value::Date { val, .. } => format!("{val:?}"),
+        Value::Bool { val, .. } => val.to_string().into(),
+        Value::Int { val, .. } => val.to_string().into(),
+        Value::Float { val, .. } => val.to_string().into(),
+        Value::Filesize { val, .. } => val.to_string().into(),
+        Value::Duration { val, .. } => val.to_string().into(),
+        Value::Date { val, .. } => format!("{val:?}").into(),
         Value::Range { val, .. } => {
             format!(
                 "{}..{}",
                 debug_string_without_formatting(&val.from),
                 debug_string_without_formatting(&val.to)
-            )
+            ).into()
         }
         Value::String { val, .. } => val.clone(),
         Value::Glob { val, .. } => val.clone(),
@@ -275,30 +275,30 @@ pub fn debug_string_without_formatting(value: &Value) -> String {
                 .map(debug_string_without_formatting)
                 .collect::<Vec<_>>()
                 .join(" ")
-        ),
+        ).into(),
         Value::Record { val, .. } => format!(
             "{{{}}}",
             val.iter()
                 .map(|(x, y)| format!("{}: {}", x, debug_string_without_formatting(y)))
                 .collect::<Vec<_>>()
                 .join(" ")
-        ),
+        ).into(),
         Value::LazyRecord { val, .. } => match val.collect() {
             Ok(val) => debug_string_without_formatting(&val),
-            Err(error) => format!("{error:?}"),
+            Err(error) => format!("{error:?}").into(),
         },
         //TODO: It would be good to drill in deeper to blocks and closures.
-        Value::Block { val, .. } => format!("<Block {val}>"),
-        Value::Closure { val, .. } => format!("<Closure {}>", val.block_id),
-        Value::Nothing { .. } => String::new(),
-        Value::Error { error, .. } => format!("{error:?}"),
-        Value::Binary { val, .. } => format!("{val:?}"),
-        Value::CellPath { val, .. } => val.to_string(),
+        Value::Block { val, .. } => format!("<Block {val}>").into(),
+        Value::Closure { val, .. } => format!("<Closure {}>", val.block_id).into(),
+        Value::Nothing { .. } => NuString::new(),
+        Value::Error { error, .. } => format!("{error:?}").into(),
+        Value::Binary { val, .. } => format!("{val:?}").into(),
+        Value::CellPath { val, .. } => val.to_string().into(),
         // If we fail to collapse the custom value, just print <{type_name}> - failure is not
         // that critical here
         Value::CustomValue { val, .. } => val
             .to_base_value(value.span())
             .map(|val| debug_string_without_formatting(&val))
-            .unwrap_or_else(|_| format!("<{}>", val.type_name())),
+            .unwrap_or_else(|_| format!("<{}>", val.type_name()).into()),
     }
 }

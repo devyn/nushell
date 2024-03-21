@@ -1,6 +1,7 @@
 use nu_engine::current_dir;
 use nu_engine::CallExt;
 use nu_path::expand_path_with;
+use nu_protocol::NuString;
 use nu_protocol::ast::{Call, Expr, Expression};
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::IntoSpanned;
@@ -339,7 +340,7 @@ fn value_to_bytes(value: Value) -> Result<Vec<u8>, ShellError> {
             let val = vals
                 .into_iter()
                 .map(Value::coerce_into_string)
-                .collect::<Result<Vec<String>, ShellError>>()?
+                .collect::<Result<Vec<NuString>, ShellError>>()?
                 .join("\n")
                 + "\n";
 

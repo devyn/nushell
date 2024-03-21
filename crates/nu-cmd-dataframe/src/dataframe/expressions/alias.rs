@@ -62,7 +62,7 @@ impl Command for ExprAlias {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let alias: String = call.req(engine_state, stack, 0)?;
+        let alias: NuString = call.req(engine_state, stack, 0)?;
 
         let expr = NuExpression::try_from_pipeline(input, call.head)?;
         let expr: NuExpression = expr.into_polars().alias(alias.as_str()).into();

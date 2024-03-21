@@ -1,16 +1,18 @@
 use serde::Deserialize;
 use std::fmt::Display;
 
+use crate::NuString;
+
 // Introduce this `NuGlob` enum rather than using `Value::Glob` directlry
 // So we can handle glob easily without considering too much variant of `Value` enum.
 #[derive(Debug, Clone, Deserialize)]
 pub enum NuGlob {
     /// Don't expand the glob pattern, normally it includes a quoted string(except backtick)
     /// And a variable that doesn't annotated with `glob` type
-    DoNotExpand(String),
+    DoNotExpand(NuString),
     /// A glob pattern that is required to expand, it includes bare word
     /// And a variable which is annotated with `glob` type
-    Expand(String),
+    Expand(NuString),
 }
 
 impl NuGlob {

@@ -1,5 +1,5 @@
 use nu_engine::CallExt;
-use nu_protocol::IntoPipelineData;
+use nu_protocol::{IntoPipelineData, NuString};
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
@@ -160,7 +160,7 @@ pub fn rotate(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let metadata = input.metadata();
-    let col_given_names: Vec<String> = call.rest(engine_state, stack, 0)?;
+    let col_given_names: Vec<NuString> = call.rest(engine_state, stack, 0)?;
     let input_span = input.span().unwrap_or(call.head);
     let mut values = input.into_iter().collect::<Vec<_>>();
     let mut old_column_names = vec![];
@@ -218,7 +218,7 @@ pub fn rotate(
     let mut new_column_names = {
         let mut res = vec![];
         for idx in 0..(total_rows + 1) {
-            res.push(format!("column{idx}"));
+            res.push(format!("column{idx}").into());
         }
         res.to_vec()
     };

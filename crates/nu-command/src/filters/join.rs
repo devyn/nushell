@@ -3,7 +3,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Config, Example, PipelineData, Record, ShellError, Signature, Span,
-    SyntaxShape, Type, Value,
+    SyntaxShape, Type, Value, NuString,
 };
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
@@ -249,8 +249,8 @@ fn join_rows(
     result: &mut Vec<Value>,
     this: &[Value],
     this_join_key: &str,
-    other: HashMap<String, Vec<&Record>>,
-    other_keys: Vec<&String>,
+    other: HashMap<NuString, Vec<&Record>>,
+    other_keys: Vec<&NuString>,
     shared_join_key: Option<&str>,
     join_type: &JoinType,
     include_inner: IncludeInner,
@@ -323,7 +323,7 @@ fn join_rows(
 
 // Return column names (i.e. ordered keys from the first row; we assume that
 // these are the same for all rows).
-fn column_names(table: &[Value]) -> Vec<&String> {
+fn column_names(table: &[Value]) -> Vec<&NuString> {
     table
         .iter()
         .find_map(|val| match val {
@@ -341,8 +341,8 @@ fn lookup_table<'a>(
     sep: &str,
     cap: usize,
     config: &Config,
-) -> HashMap<String, Vec<&'a Record>> {
-    let mut map = HashMap::<String, Vec<&'a Record>>::with_capacity(cap);
+) -> HashMap<NuString, Vec<&'a Record>> {
+    let mut map = HashMap::<NuString, Vec<&'a Record>>::with_capacity(cap);
     for row in rows {
         if let Value::Record { val: record, .. } = row {
             if let Some(val) = record.get(on) {
@@ -372,7 +372,7 @@ fn merge_records(left: &Record, right: &Record, shared_key: Option<&str>) -> Rec
         // Do not output shared join key twice
         if !(k_seen && k_shared) {
             record.push(
-                if k_seen { format!("{}_", k) } else { k.clone() },
+                if k_seen { format!("{}_", k).into() } else { k.clone() },
                 v.clone(),
             );
         }

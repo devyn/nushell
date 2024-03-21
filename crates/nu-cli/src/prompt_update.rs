@@ -2,7 +2,7 @@ use crate::NushellPrompt;
 use log::trace;
 use nu_engine::get_eval_subexpression;
 
-use nu_protocol::report_error;
+use nu_protocol::{report_error, NuString};
 use nu_protocol::{
     engine::{EngineState, Stack, StateWorkingSet},
     Config, PipelineData, Value,
@@ -35,7 +35,7 @@ fn get_prompt_string(
     config: &Config,
     engine_state: &EngineState,
     stack: &mut Stack,
-) -> Option<String> {
+) -> Option<NuString> {
     let eval_subexpression = get_eval_subexpression(engine_state);
 
     stack
@@ -113,7 +113,7 @@ pub(crate) fn update_prompt(
         if let Some(prompt_string) = left_prompt_string {
             Some(format!(
                 "{PRE_PROMPT_MARKER}{prompt_string}{POST_PROMPT_MARKER}"
-            ))
+            ).into())
         } else {
             left_prompt_string
         }

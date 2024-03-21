@@ -74,7 +74,7 @@ fn command(
     call: &Call,
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
-    let sql_query: String = call.req(engine_state, stack, 0)?;
+    let sql_query: NuString = call.req(engine_state, stack, 0)?;
     let df = NuDataFrame::try_from_pipeline(input, call.head)?;
 
     let mut ctx = SQLContext::new();

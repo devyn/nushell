@@ -80,7 +80,7 @@ impl Command for InputList {
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
-        let prompt: Option<String> = call.opt(engine_state, stack, 0)?;
+        let prompt: Option<NuString> = call.opt(engine_state, stack, 0)?;
         let multi = call.has_flag(engine_state, stack, "multi")?;
         let fuzzy = call.has_flag(engine_state, stack, "fuzzy")?;
         let index = call.has_flag(engine_state, stack, "index")?;

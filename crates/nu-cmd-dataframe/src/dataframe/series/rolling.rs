@@ -128,7 +128,7 @@ fn command(
     call: &Call,
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
-    let roll_type: Spanned<String> = call.req(engine_state, stack, 0)?;
+    let roll_type: Spanned<NuString> = call.req(engine_state, stack, 0)?;
     let window_size: i64 = call.req(engine_state, stack, 1)?;
 
     let df = NuDataFrame::try_from_pipeline(input, call.head)?;

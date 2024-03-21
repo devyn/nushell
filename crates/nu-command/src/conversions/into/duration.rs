@@ -4,7 +4,7 @@ use nu_protocol::{
     ast::{Call, CellPath, Expr},
     engine::{Command, EngineState, Stack},
     record, Category, Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Unit,
-    Value,
+    Value, NuString,
 };
 
 const NS_PER_SEC: i64 = 1_000_000_000;
@@ -130,7 +130,7 @@ fn into_duration(
     };
     let column_paths: Vec<CellPath> = call.rest(engine_state, stack, 0)?;
 
-    let unit = match call.get_flag::<String>(engine_state, stack, "unit")? {
+    let unit = match call.get_flag::<NuString>(engine_state, stack, "unit")? {
         Some(sep) => {
             if ["ns", "us", "µs", "ms", "sec", "min", "hr", "day", "wk"]
                 .iter()
@@ -139,7 +139,7 @@ fn into_duration(
                 sep
             } else {
                 return Err(ShellError::CantConvertToDuration {
-                    details: sep,
+                    details: sep.into(),
                     dst_span: span,
                     src_span: span,
                     help: Some(
@@ -148,7 +148,7 @@ fn into_duration(
                 });
             }
         }
-        None => "ns".to_string(),
+        None => "ns".into(),
     };
 
     input.map(

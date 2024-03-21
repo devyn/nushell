@@ -143,14 +143,14 @@ fn add_menu(
             "description" => add_description_menu(line_editor, menu, engine_state, stack, config),
             _ => Err(ShellError::UnsupportedConfigValue {
                 expected: "columnar, list, ide or description".to_string(),
-                value: menu.menu_type.to_abbreviated_string(config),
+                value: menu.menu_type.to_abbreviated_string(config).into(),
                 span: menu.menu_type.span(),
             }),
         }
     } else {
         Err(ShellError::UnsupportedConfigValue {
             expected: "only record type".to_string(),
-            value: menu.menu_type.to_abbreviated_string(config),
+            value: menu.menu_type.to_abbreviated_string(config).into(),
             span: menu.menu_type.span(),
         })
     }
@@ -281,7 +281,7 @@ pub(crate) fn add_columnar_menu(
         }
         _ => Err(ShellError::UnsupportedConfigValue {
             expected: "block or omitted value".to_string(),
-            value: menu.source.to_abbreviated_string(config),
+            value: menu.source.to_abbreviated_string(config).into(),
             span,
         }),
     }
@@ -363,7 +363,7 @@ pub(crate) fn add_list_menu(
         }
         _ => Err(ShellError::UnsupportedConfigValue {
             expected: "block or omitted value".to_string(),
-            value: menu.source.to_abbreviated_string(config),
+            value: menu.source.to_abbreviated_string(config).into(),
             span: menu.source.span(),
         }),
     }
@@ -443,7 +443,7 @@ pub(crate) fn add_ide_menu(
                 } else {
                     return Err(ShellError::UnsupportedConfigValue {
                         expected: "bool or record".to_string(),
-                        value: border.to_abbreviated_string(config),
+                        value: border.to_abbreviated_string(config).into(),
                         span: border.span(),
                     });
                 }
@@ -467,7 +467,7 @@ pub(crate) fn add_ide_menu(
                 _ => {
                     return Err(ShellError::UnsupportedConfigValue {
                         expected: "\"left\", \"right\" or \"prefer_right\"".to_string(),
-                        value: description_mode.to_abbreviated_string(config),
+                        value: description_mode.to_abbreviated_string(config).into(),
                         span: description_mode.span(),
                     });
                 }
@@ -586,7 +586,7 @@ pub(crate) fn add_ide_menu(
         }
         _ => Err(ShellError::UnsupportedConfigValue {
             expected: "block or omitted value".to_string(),
-            value: menu.source.to_abbreviated_string(config),
+            value: menu.source.to_abbreviated_string(config).into(),
             span,
         }),
     }
@@ -704,7 +704,7 @@ pub(crate) fn add_description_menu(
         }
         _ => Err(ShellError::UnsupportedConfigValue {
             expected: "closure or omitted value".to_string(),
-            value: menu.source.to_abbreviated_string(config),
+            value: menu.source.to_abbreviated_string(config).into(),
             span: menu.source.span(),
         }),
     }
@@ -843,7 +843,7 @@ fn add_keybinding(
         }
         v => Err(ShellError::UnsupportedConfigValue {
             expected: "string or list of strings".to_string(),
-            value: v.to_abbreviated_string(config),
+            value: v.to_abbreviated_string(config).into(),
             span: v.span(),
         }),
     }
@@ -873,7 +873,7 @@ fn add_parsed_keybinding(
         _ => {
             return Err(ShellError::UnsupportedConfigValue {
                 expected: "CONTROL, SHIFT, ALT or NONE".to_string(),
-                value: keybinding.modifier.to_abbreviated_string(config),
+                value: keybinding.modifier.to_abbreviated_string(config).into(),
                 span: keybinding.modifier.span(),
             })
         }
@@ -934,7 +934,7 @@ fn add_parsed_keybinding(
         _ => {
             return Err(ShellError::UnsupportedConfigValue {
                 expected: "crossterm KeyCode".to_string(),
-                value: keybinding.keycode.to_abbreviated_string(config),
+                value: keybinding.keycode.to_abbreviated_string(config).into(),
                 span: keybinding.keycode.span(),
             })
         }
@@ -1014,7 +1014,7 @@ fn parse_event(value: &Value, config: &Config) -> Result<Option<ReedlineEvent>, 
                 }
                 v => Err(ShellError::UnsupportedConfigValue {
                     expected: "list of events".to_string(),
-                    value: v.to_abbreviated_string(config),
+                    value: v.to_abbreviated_string(config).into(),
                     span: v.span(),
                 }),
             },
@@ -1040,7 +1040,7 @@ fn parse_event(value: &Value, config: &Config) -> Result<Option<ReedlineEvent>, 
         Value::Nothing { .. } => Ok(None),
         v => Err(ShellError::UnsupportedConfigValue {
             expected: "record or list of records, null to unbind key".to_string(),
-            value: v.to_abbreviated_string(config),
+            value: v.to_abbreviated_string(config).into(),
             span: v.span(),
         }),
     }
@@ -1083,11 +1083,11 @@ fn event_from_record(
         "openeditor" => ReedlineEvent::OpenEditor,
         "menu" => {
             let menu = extract_value("name", record, span)?;
-            ReedlineEvent::Menu(menu.to_expanded_string("", config))
+            ReedlineEvent::Menu(menu.to_expanded_string("", config).into())
         }
         "executehostcommand" => {
             let cmd = extract_value("cmd", record, span)?;
-            ReedlineEvent::ExecuteHostCommand(cmd.to_expanded_string("", config))
+            ReedlineEvent::ExecuteHostCommand(cmd.to_expanded_string("", config).into())
         }
         v => {
             return Err(ShellError::UnsupportedConfigValue {
@@ -1192,7 +1192,7 @@ fn edit_from_record(
         }
         "insertstring" => {
             let value = extract_value("value", record, span)?;
-            EditCommand::InsertString(value.to_expanded_string("", config))
+            EditCommand::InsertString(value.to_expanded_string("", config).into())
         }
         "insertnewline" => EditCommand::InsertNewline,
         "backspace" => EditCommand::Backspace,

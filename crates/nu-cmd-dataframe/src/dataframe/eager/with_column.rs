@@ -148,7 +148,7 @@ fn command_eager(
     } else {
         let mut other = NuDataFrame::try_from_value(new_column)?.as_series(column_span)?;
 
-        let name = match call.get_flag::<String>(engine_state, stack, "name")? {
+        let name = match call.get_flag::<NuString>(engine_state, stack, "name")? {
             Some(name) => name,
             None => other.name().to_string(),
         };

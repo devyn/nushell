@@ -3,7 +3,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, Spanned,
-    SyntaxShape, Type, Value,
+    SyntaxShape, Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -84,7 +84,7 @@ fn default(
 ) -> Result<PipelineData, ShellError> {
     let metadata = input.metadata();
     let value: Value = call.req(engine_state, stack, 0)?;
-    let column: Option<Spanned<String>> = call.opt(engine_state, stack, 1)?;
+    let column: Option<Spanned<NuString>> = call.opt(engine_state, stack, 1)?;
 
     let ctrlc = engine_state.ctrlc.clone();
 

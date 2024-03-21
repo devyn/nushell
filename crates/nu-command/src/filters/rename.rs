@@ -5,7 +5,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Closure, Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Example, IntoPipelineData, PipelineData, Record, ShellError, Signature,
-    SyntaxShape, Type, Value,
+    SyntaxShape, Type, Value, NuString,
 };
 use std::collections::HashSet;
 
@@ -113,7 +113,7 @@ fn rename(
 ) -> Result<PipelineData, ShellError> {
     let specified_column: Option<Record> = call.get_flag(engine_state, stack, "column")?;
     // convert from Record to HashMap for easily query.
-    let specified_column: Option<IndexMap<String, String>> = match specified_column {
+    let specified_column: Option<IndexMap<NuString, NuString>> = match specified_column {
         Some(query) => {
             let mut columns = IndexMap::new();
             for (col, val) in query {
@@ -152,7 +152,7 @@ fn rename(
             None
         };
 
-    let columns: Vec<String> = call.rest(engine_state, stack, 0)?;
+    let columns: Vec<NuString> = call.rest(engine_state, stack, 0)?;
     let metadata = input.metadata();
 
     let eval_block_with_early_return = get_eval_block_with_early_return(engine_state);
@@ -196,7 +196,7 @@ fn rename(
                         } else {
                             match &specified_column {
                                 Some(c) => {
-                                    let mut column_to_rename: HashSet<String> = HashSet::from_iter(c.keys().cloned());
+                                    let mut column_to_rename: HashSet<NuString> = HashSet::from_iter(c.keys().cloned());
                                     for val in record.cols.iter_mut() {
                                         if c.contains_key(val) {
                                             column_to_rename.remove(val);

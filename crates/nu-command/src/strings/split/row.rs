@@ -122,7 +122,7 @@ fn split_row(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let name_span = call.head;
-    let separator: Spanned<String> = call.req(engine_state, stack, 0)?;
+    let separator: Spanned<NuString> = call.req(engine_state, stack, 0)?;
     let regex = if call.has_flag(engine_state, stack, "regex")? {
         Regex::new(&separator.item)
     } else {

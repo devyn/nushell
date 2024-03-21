@@ -220,7 +220,7 @@ impl Command for LazyJoin {
             }
         }
 
-        let suffix: Option<String> = call.get_flag(engine_state, stack, "suffix")?;
+        let suffix: Option<NuString> = call.get_flag(engine_state, stack, "suffix")?;
         let suffix = suffix.unwrap_or_else(|| "_x".into());
 
         let value = input.into_value(call.head);

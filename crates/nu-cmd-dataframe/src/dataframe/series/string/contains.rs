@@ -74,7 +74,7 @@ fn command(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let df = NuDataFrame::try_from_pipeline(input, call.head)?;
-    let pattern: String = call.req(engine_state, stack, 0)?;
+    let pattern: NuString = call.req(engine_state, stack, 0)?;
 
     let series = df.as_series(call.head)?;
     let chunked = series.str().map_err(|e| ShellError::GenericError {

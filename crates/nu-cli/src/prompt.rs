@@ -1,4 +1,5 @@
 use crate::prompt_update::{POST_PROMPT_MARKER, PRE_PROMPT_MARKER};
+use nu_protocol::NuString;
 #[cfg(windows)]
 use nu_utils::enable_vt_processing;
 use reedline::DefaultPrompt;
@@ -13,12 +14,12 @@ use {
 #[derive(Clone)]
 pub struct NushellPrompt {
     shell_integration: bool,
-    left_prompt_string: Option<String>,
-    right_prompt_string: Option<String>,
-    default_prompt_indicator: Option<String>,
-    default_vi_insert_prompt_indicator: Option<String>,
-    default_vi_normal_prompt_indicator: Option<String>,
-    default_multiline_indicator: Option<String>,
+    left_prompt_string: Option<NuString>,
+    right_prompt_string: Option<NuString>,
+    default_prompt_indicator: Option<NuString>,
+    default_vi_insert_prompt_indicator: Option<NuString>,
+    default_vi_normal_prompt_indicator: Option<NuString>,
+    default_multiline_indicator: Option<NuString>,
     render_right_prompt_on_last_line: bool,
 }
 
@@ -36,42 +37,42 @@ impl NushellPrompt {
         }
     }
 
-    pub fn update_prompt_left(&mut self, prompt_string: Option<String>) {
+    pub fn update_prompt_left(&mut self, prompt_string: Option<NuString>) {
         self.left_prompt_string = prompt_string;
     }
 
     pub fn update_prompt_right(
         &mut self,
-        prompt_string: Option<String>,
+        prompt_string: Option<NuString>,
         render_right_prompt_on_last_line: bool,
     ) {
         self.right_prompt_string = prompt_string;
         self.render_right_prompt_on_last_line = render_right_prompt_on_last_line;
     }
 
-    pub fn update_prompt_indicator(&mut self, prompt_indicator_string: Option<String>) {
+    pub fn update_prompt_indicator(&mut self, prompt_indicator_string: Option<NuString>) {
         self.default_prompt_indicator = prompt_indicator_string;
     }
 
-    pub fn update_prompt_vi_insert(&mut self, prompt_vi_insert_string: Option<String>) {
+    pub fn update_prompt_vi_insert(&mut self, prompt_vi_insert_string: Option<NuString>) {
         self.default_vi_insert_prompt_indicator = prompt_vi_insert_string;
     }
 
-    pub fn update_prompt_vi_normal(&mut self, prompt_vi_normal_string: Option<String>) {
+    pub fn update_prompt_vi_normal(&mut self, prompt_vi_normal_string: Option<NuString>) {
         self.default_vi_normal_prompt_indicator = prompt_vi_normal_string;
     }
 
-    pub fn update_prompt_multiline(&mut self, prompt_multiline_indicator_string: Option<String>) {
+    pub fn update_prompt_multiline(&mut self, prompt_multiline_indicator_string: Option<NuString>) {
         self.default_multiline_indicator = prompt_multiline_indicator_string;
     }
 
     pub fn update_all_prompt_strings(
         &mut self,
-        left_prompt_string: Option<String>,
-        right_prompt_string: Option<String>,
-        prompt_indicator_string: Option<String>,
-        prompt_multiline_indicator_string: Option<String>,
-        prompt_vi: (Option<String>, Option<String>),
+        left_prompt_string: Option<NuString>,
+        right_prompt_string: Option<NuString>,
+        prompt_indicator_string: Option<NuString>,
+        prompt_multiline_indicator_string: Option<NuString>,
+        prompt_vi: (Option<NuString>, Option<NuString>),
         render_right_prompt_on_last_line: bool,
     ) {
         let (prompt_vi_insert_string, prompt_vi_normal_string) = prompt_vi;
@@ -88,7 +89,7 @@ impl NushellPrompt {
     }
 
     fn default_wrapped_custom_string(&self, str: String) -> String {
-        format!("({str})")
+        format!("({str})").into()
     }
 }
 

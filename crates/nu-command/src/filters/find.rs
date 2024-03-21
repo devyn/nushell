@@ -8,7 +8,7 @@ use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
     record, Category, Config, Example, IntoInterruptiblePipelineData, IntoPipelineData, ListStream,
-    PipelineData, Record, ShellError, Signature, Span, SyntaxShape, Type, Value,
+    PipelineData, Record, ShellError, Signature, Span, SyntaxShape, Type, Value, NuString,
 };
 use nu_utils::IgnoreCaseExt;
 
@@ -200,7 +200,7 @@ impl Command for Find {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let regex = call.get_flag::<String>(engine_state, stack, "regex")?;
+        let regex = call.get_flag::<NuString>(engine_state, stack, "regex")?;
 
         if let Some(regex) = regex {
             find_with_regex(regex, engine_state, stack, call, input)
@@ -212,7 +212,7 @@ impl Command for Find {
 }
 
 fn find_with_regex(
-    regex: String,
+    regex: NuString,
     engine_state: &EngineState,
     stack: &mut Stack,
     call: &Call,
@@ -303,7 +303,7 @@ fn highlight_terms_in_string(
 
 #[allow(clippy::too_many_arguments)]
 fn highlight_terms_in_record_with_search_columns(
-    search_cols: &[String],
+    search_cols: &[NuString],
     record: &Record,
     span: Span,
     config: &Config,
@@ -513,7 +513,7 @@ fn value_should_be_printed(
     filter_config: &Config,
     lower_terms: &[Value],
     span: Span,
-    columns_to_search: &[String],
+    columns_to_search: &[NuString],
     invert: bool,
 ) -> bool {
     let lower_value = Value::string(
@@ -570,7 +570,7 @@ fn term_equals_value(term: &Value, value: &Value, span: Span) -> bool {
 
 fn record_matches_term(
     record: &Record,
-    columns_to_search: &[String],
+    columns_to_search: &[NuString],
     filter_config: &Config,
     term: &Value,
     span: Span,

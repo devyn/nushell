@@ -208,7 +208,7 @@ impl FromValue for NuGlob {
     fn from_value(v: Value) -> Result<Self, ShellError> {
         // FIXME: we may want to fail a little nicer here
         match v {
-            Value::CellPath { val, .. } => Ok(NuGlob::Expand(val.to_string())),
+            Value::CellPath { val, .. } => Ok(NuGlob::Expand(val.to_string().into())),
             Value::String { val, .. } => Ok(NuGlob::DoNotExpand(val.into())),
             Value::Glob {
                 val,
@@ -236,7 +236,7 @@ impl FromValue for Spanned<NuGlob> {
         let span = v.span();
         Ok(Spanned {
             item: match v {
-                Value::CellPath { val, .. } => NuGlob::Expand(val.to_string()),
+                Value::CellPath { val, .. } => NuGlob::Expand(val.to_string().into()),
                 Value::String { val, .. } => NuGlob::DoNotExpand(val.into()),
                 Value::Glob {
                     val,
@@ -318,6 +318,21 @@ impl FromValue for Vec<Spanned<NuString>> {
                 help: None,
             }),
         }
+    }
+}
+
+impl FromValue for String {
+    fn from_value(v: Value) -> Result<Self, ShellError> {
+        NuString::from_value(v).map(String::from)
+    }
+}
+
+impl FromValue for Spanned<String> {
+    fn from_value(v: Value) -> Result<Self, ShellError> {
+        Spanned::<NuString>::from_value(v).map(|s| Spanned {
+            item: s.item.into(),
+            span: s.span,
+        })
     }
 }
 

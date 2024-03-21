@@ -3,7 +3,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     Category, Example, IntoInterruptiblePipelineData, PipelineData, ShellError, Signature, Span,
-    Type, Value,
+    Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -93,7 +93,7 @@ fn getcol(
                 Value::List {
                     vals: input_vals, ..
                 } => {
-                    let input_cols = get_columns(&input_vals);
+                    let input_cols = get_columns::<NuString>(&input_vals);
                     Ok(input_cols
                         .into_iter()
                         .map(move |x| Value::string(x, span))
@@ -104,7 +104,7 @@ fn getcol(
                     // TODO: should we get CustomValue to expose columns in a more efficient way?
                     // Would be nice to be able to get columns without generating the whole value
                     let input_as_base_value = val.to_base_value(span)?;
-                    let input_cols = get_columns(&[input_as_base_value]);
+                    let input_cols = get_columns::<NuString>(&[input_as_base_value]);
                     Ok(input_cols
                         .into_iter()
                         .map(move |x| Value::string(x, span))
@@ -140,7 +140,7 @@ fn getcol(
         }
         PipelineData::ListStream(stream, ..) => {
             let v: Vec<_> = stream.into_iter().collect();
-            let input_cols = get_columns(&v);
+            let input_cols = get_columns::<NuString>(&v);
 
             Ok(input_cols
                 .into_iter()

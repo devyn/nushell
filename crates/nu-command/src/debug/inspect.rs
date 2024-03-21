@@ -40,7 +40,7 @@ impl Command for Inspect {
             });
         }
         let original_input = input_val.clone();
-        let description = input_val.get_type().to_string();
+        let description = input_val.get_type().to_string().into();
 
         let (cols, _rows) = match terminal_size() {
             Some((w, h)) => (Width(w.0), Height(h.0)),

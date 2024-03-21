@@ -5,7 +5,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     Category, Example, IntoPipelineData, PipelineData, Record, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value,
+    Spanned, SyntaxShape, Type, Value, NuString,
 };
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -88,18 +88,18 @@ impl Command for IntoSqliteDb {
 
 struct Table {
     conn: rusqlite::Connection,
-    table_name: String,
+    table_name: NuString,
 }
 
 impl Table {
     pub fn new(
-        db_path: &Spanned<String>,
-        table_name: Option<Spanned<String>>,
+        db_path: &Spanned<NuString>,
+        table_name: Option<Spanned<NuString>>,
     ) -> Result<Self, nu_protocol::ShellError> {
         let table_name = if let Some(table_name) = table_name {
             table_name.item
         } else {
-            DEFAULT_TABLE_NAME.to_string()
+            DEFAULT_TABLE_NAME.into()
         };
 
         // create the sqlite database table
@@ -108,7 +108,7 @@ impl Table {
         Ok(Self { conn, table_name })
     }
 
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> &NuString {
         &self.table_name
     }
 
@@ -161,8 +161,8 @@ fn operate(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let span = call.head;
-    let file_name: Spanned<String> = call.req(engine_state, stack, 0)?;
-    let table_name: Option<Spanned<String>> = call.get_flag(engine_state, stack, "table-name")?;
+    let file_name: Spanned<NuString> = call.req(engine_state, stack, 0)?;
+    let table_name: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "table-name")?;
     let table = Table::new(&file_name, table_name)?;
     let ctrl_c = engine_state.ctrlc.clone();
 
@@ -394,8 +394,8 @@ fn nu_value_to_sqlite_type(val: &Value) -> Result<&'static str, ShellError> {
 
 fn get_columns_with_sqlite_types(
     record: &Record,
-) -> Result<Vec<(String, &'static str)>, ShellError> {
-    let mut columns: Vec<(String, &'static str)> = vec![];
+) -> Result<Vec<(NuString, &'static str)>, ShellError> {
+    let mut columns: Vec<(NuString, &'static str)> = vec![];
 
     for (c, v) in record {
         if !columns.iter().any(|(name, _)| name == c) {

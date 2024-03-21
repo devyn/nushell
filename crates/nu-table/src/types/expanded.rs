@@ -118,7 +118,7 @@ fn expanded_table_list(input: &[Value], cfg: Cfg<'_>) -> TableResult {
                 .as_record()
                 .ok()
                 .and_then(|val| val.get(INDEX_COLUMN_NAME))
-                .map(|value| value.to_expanded_string("", cfg.opts.config))
+                .map(|value| value.to_expanded_string("", cfg.opts.config).into())
                 .unwrap_or_else(|| index.to_string());
 
             let row = row + with_header as usize;
@@ -368,7 +368,7 @@ fn expanded_table_kv(record: &Record, cfg: Cfg<'_>) -> StringResult {
         // we want to have a key being aligned to 2nd line,
         // we could use Padding for it but,
         // the easiest way to do so is just push a new_line char before
-        let mut key = key.to_owned();
+        let mut key = String::from(key);
         if !key.is_empty() && is_expanded && theme.has_top_line() {
             key.insert(0, '\n');
         }

@@ -67,7 +67,7 @@ pub enum Category {
     Platform,
     Random,
     Shells,
-    NuStrings,
+    Strings,
     System,
     Viewers,
 }
@@ -101,7 +101,7 @@ impl std::fmt::Display for Category {
             Category::Platform => "platform",
             Category::Random => "random",
             Category::Shells => "shells",
-            Category::NuStrings => "strings",
+            Category::Strings => "strings",
             Category::System => "system",
             Category::Viewers => "viewers",
         };

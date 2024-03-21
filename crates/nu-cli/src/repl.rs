@@ -19,7 +19,7 @@ use nu_protocol::{
     engine::{EngineState, Stack, StateWorkingSet},
     eval_const::create_nu_constant,
     report_error_new, HistoryConfig, HistoryFileFormat, PipelineData, ShellError, Span, Spanned,
-    Value, NU_VARIABLE_ID,
+    Value, NU_VARIABLE_ID, NuString,
 };
 use nu_utils::utils::perf;
 use reedline::{
@@ -34,7 +34,7 @@ use std::{
     path::Path,
     path::PathBuf,
     sync::{atomic::Ordering, Arc},
-    time::{Duration, Instant},
+    time::{Duration, Instant}, borrow::Cow,
 };
 use sysinfo::System;
 
@@ -663,7 +663,7 @@ fn prepare_history_metadata(
                 c.start_timestamp = Some(chrono::Utc::now());
                 c.hostname = hostname.clone();
 
-                c.cwd = Some(StateWorkingSet::new(engine_state).get_cwd());
+                c.cwd = Some(StateWorkingSet::new(engine_state).get_cwd().into());
                 c
             })
             .into_diagnostic();
@@ -702,14 +702,14 @@ enum ReplOperation {
     /// "auto-cd": change directory by typing it in directly
     AutoCd {
         /// the current working directory
-        cwd: String,
+        cwd: NuString,
         /// the target
         target: PathBuf,
         /// span information for debugging
         span: Span,
     },
     /// run a command
-    RunCommand(String),
+    RunCommand(NuString),
     /// do nothing (usually through an empty string)
     DoNothing,
 }
@@ -731,7 +731,7 @@ fn parse_operation(
     let cwd = nu_engine::env::current_dir_str(engine_state, stack)?;
     let mut orig = s.clone();
     if orig.starts_with('`') {
-        orig = trim_quotes_str(&orig).to_string()
+        orig = trim_quotes_str(&orig).into()
     }
 
     let path = nu_path::expand_path_with(&orig, &cwd);
@@ -742,7 +742,7 @@ fn parse_operation(
             span: tokens.0[0].span,
         })
     } else if !s.trim().is_empty() {
-        Ok(ReplOperation::RunCommand(s))
+        Ok(ReplOperation::RunCommand(s.into()))
     } else {
         Ok(ReplOperation::DoNothing)
     }
@@ -753,7 +753,7 @@ fn parse_operation(
 ///
 fn do_auto_cd(
     path: PathBuf,
-    cwd: String,
+    cwd: NuString,
     stack: &mut Stack,
     engine_state: &mut EngineState,
     span: Span,
@@ -770,7 +770,7 @@ fn do_auto_cd(
         }
         let path = nu_path::canonicalize_with(path, &cwd)
             .expect("internal error: cannot canonicalize known path");
-        path.to_string_lossy().to_string()
+        NuString::from(path.to_string_lossy())
     };
 
     stack.add_env_var("OLDPWD".into(), Value::string(cwd.clone(), Span::unknown()));
@@ -852,10 +852,10 @@ fn do_run_cmd(
             match cwd.coerce_into_string() {
                 Ok(path) => {
                     // Try to abbreviate string for windows title
-                    let maybe_abbrev_path = if let Some(p) = nu_path::home_dir() {
-                        path.replace(&p.as_path().display().to_string(), "~")
+                    let maybe_abbrev_path: Cow<str> = if let Some(p) = nu_path::home_dir() {
+                        path.replace(&p.as_path().display().to_string(), "~").into()
                     } else {
-                        path
+                        path.as_str().into()
                     };
                     let binary_name = s.split_whitespace().next();
 
@@ -919,10 +919,10 @@ fn do_shell_integration_finalize_command(
                 }
 
                 // Try to abbreviate string for windows title
-                let maybe_abbrev_path = if let Some(p) = nu_path::home_dir() {
-                    path.replace(&p.as_path().display().to_string(), "~")
+                let maybe_abbrev_path: Cow<str> = if let Some(p) = nu_path::home_dir() {
+                    path.replace(&p.as_path().display().to_string(), "~").into()
                 } else {
-                    path
+                    path.as_str().into()
                 };
 
                 // Set window title too

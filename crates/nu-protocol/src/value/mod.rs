@@ -98,7 +98,7 @@ pub enum Value {
         internal_span: Span,
     },
     Glob {
-        val: String,
+        val: NuString,
         no_expand: bool,
         // note: spans are being refactored out of Value
         // please use .span() instead of matching this span value
@@ -1980,7 +1980,7 @@ impl Value {
         }
     }
 
-    pub fn glob(val: impl Into<String>, no_expand: bool, span: Span) -> Value {
+    pub fn glob(val: impl Into<NuString>, no_expand: bool, span: Span) -> Value {
         Value::Glob {
             val: val.into(),
             no_expand,
@@ -2108,7 +2108,7 @@ impl Value {
 
     /// Note: Only use this for test data, *not* live data, as it will point into unknown source
     /// when used in errors.
-    pub fn test_glob(val: impl Into<String>) -> Value {
+    pub fn test_glob(val: impl Into<NuString>) -> Value {
         Value::glob(val, false, Span::test_data())
     }
 

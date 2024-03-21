@@ -78,8 +78,8 @@ fn seq_char(
     stack: &mut Stack,
     call: &Call,
 ) -> Result<PipelineData, ShellError> {
-    let start: Spanned<String> = call.req(engine_state, stack, 0)?;
-    let end: Spanned<String> = call.req(engine_state, stack, 1)?;
+    let start: Spanned<NuString> = call.req(engine_state, stack, 0)?;
+    let end: Spanned<NuString> = call.req(engine_state, stack, 1)?;
 
     if !is_single_character(&start.item) {
         return Err(ShellError::GenericError {

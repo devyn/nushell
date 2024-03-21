@@ -95,7 +95,7 @@ impl Command for CastDF {
             let df = NuDataFrame::try_from_value(value)?;
             command_eager(call, column_nm, dtype, df)
         } else {
-            let dtype: String = call.req(engine_state, stack, 0)?;
+            let dtype: NuString = call.req(engine_state, stack, 0)?;
             let dtype = str_to_dtype(&dtype, call.head)?;
 
             let expr = NuExpression::try_from_value(value)?;
@@ -129,7 +129,7 @@ fn dtype_arg(
     stack: &mut Stack,
     call: &Call,
 ) -> Result<DataType, ShellError> {
-    let dtype: String = call.req(engine_state, stack, 0)?;
+    let dtype: NuString = call.req(engine_state, stack, 0)?;
     str_to_dtype(&dtype, call.head)
 }
 

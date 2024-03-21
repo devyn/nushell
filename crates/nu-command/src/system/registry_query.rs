@@ -90,9 +90,9 @@ fn registry_query(
 
     let skip_expand = call.has_flag(engine_state, stack, "no-expand")?;
 
-    let registry_key: Spanned<String> = call.req(engine_state, stack, 0)?;
+    let registry_key: Spanned<NuString> = call.req(engine_state, stack, 0)?;
     let registry_key_span = &registry_key.clone().span;
-    let registry_value: Option<Spanned<String>> = call.opt(engine_state, stack, 1)?;
+    let registry_value: Option<Spanned<NuString>> = call.opt(engine_state, stack, 1)?;
 
     let reg_hive = get_reg_hive(engine_state, stack, call)?;
     let reg_key = reg_hive.open_subkey(registry_key.item)?;

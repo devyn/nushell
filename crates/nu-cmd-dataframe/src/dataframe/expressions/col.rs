@@ -52,7 +52,7 @@ impl Command for ExprCol {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let name: String = call.req(engine_state, stack, 0)?;
+        let name: NuString = call.req(engine_state, stack, 0)?;
         let expr: NuExpression = col(name.as_str()).into();
 
         Ok(PipelineData::Value(expr.into_value(call.head), None))

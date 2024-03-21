@@ -58,7 +58,7 @@ impl Command for StorCreate {
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let span = call.head;
-        let table_name: Option<String> = call.get_flag(engine_state, stack, "table-name")?;
+        let table_name: Option<NuString> = call.get_flag(engine_state, stack, "table-name")?;
         let columns: Option<Record> = call.get_flag(engine_state, stack, "columns")?;
         let db = Box::new(SQLiteDatabase::new(std::path::Path::new(MEMORY_DB), None));
 

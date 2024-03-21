@@ -253,7 +253,7 @@ fn parse_table_config(
     let expand_limit: Option<usize> = call.get_flag(state, stack, "expand-deep")?;
     let collapse: bool = call.has_flag(state, stack, "collapse")?;
     let flatten: bool = call.has_flag(state, stack, "flatten")?;
-    let flatten_separator: Option<String> = call.get_flag(state, stack, "flatten-separator")?;
+    let flatten_separator: Option<NuString> = call.get_flag(state, stack, "flatten-separator")?;
     let abbrivation: Option<usize> = call
         .get_flag(state, stack, "abbreviated")?
         .or_else(|| get_config(state, stack).table_abbreviation_threshold);

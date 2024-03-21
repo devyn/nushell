@@ -117,7 +117,7 @@ fn split_column(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let name_span = call.head;
-    let separator: Spanned<String> = call.req(engine_state, stack, 0)?;
+    let separator: Spanned<NuString> = call.req(engine_state, stack, 0)?;
     let rest: Vec<Spanned<String>> = call.rest(engine_state, stack, 1)?;
     let collapse_empty = call.has_flag(engine_state, stack, "collapse-empty")?;
 

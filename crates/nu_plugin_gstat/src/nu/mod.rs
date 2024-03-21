@@ -2,7 +2,7 @@ use crate::GStat;
 use nu_plugin::{
     EngineInterface, EvaluatedCall, LabeledError, Plugin, PluginCommand, SimplePluginCommand,
 };
-use nu_protocol::{Category, PluginSignature, Spanned, SyntaxShape, Value};
+use nu_protocol::{Category, PluginSignature, Spanned, SyntaxShape, Value, NuString};
 
 pub struct GStatPlugin;
 
@@ -19,7 +19,7 @@ impl SimplePluginCommand for GStat {
         PluginSignature::build("gstat")
             .usage("Get the git status of a repo")
             .optional("path", SyntaxShape::Filepath, "path to repo")
-            .category(Category::Custom("prompt".to_string()))
+            .category(Category::Custom("prompt".into()))
     }
 
     fn run(
@@ -29,7 +29,7 @@ impl SimplePluginCommand for GStat {
         call: &EvaluatedCall,
         input: &Value,
     ) -> Result<Value, LabeledError> {
-        let repo_path: Option<Spanned<String>> = call.opt(0)?;
+        let repo_path: Option<Spanned<NuString>> = call.opt(0)?;
         // eprintln!("input value: {:#?}", &input);
         let current_dir = engine.get_current_dir()?;
         self.gstat(input, &current_dir, repo_path, call.head)

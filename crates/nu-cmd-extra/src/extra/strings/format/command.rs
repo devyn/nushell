@@ -7,7 +7,7 @@ use nu_protocol::ast::{Call, PathMember};
 use nu_protocol::engine::{Command, EngineState, Stack, StateWorkingSet};
 use nu_protocol::{
     Category, Example, ListStream, PipelineData, ShellError, Signature, Span, SyntaxShape, Type,
-    Value,
+    Value, NuString,
 };
 
 #[derive(Clone)]
@@ -121,7 +121,7 @@ enum FormatOperation {
 /// FormatOperation::ValueNeedEval contains expression which need to eval, it has the following form:
 /// "$it.column1.column2" or "$variable"
 fn extract_formatting_operations(
-    input: String,
+    input: NuString,
     error_span: Span,
     span_start: usize,
 ) -> Result<Vec<FormatOperation>, ShellError> {
@@ -282,7 +282,7 @@ fn format_record(
                 let path_members: Vec<PathMember> = col_name
                     .split('.')
                     .map(|path| PathMember::String {
-                        val: path.to_string(),
+                        val: path.into(),
                         span: *span,
                         optional: false,
                     })

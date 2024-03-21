@@ -1,4 +1,4 @@
-use std::{sync::Arc, fmt, ops::Deref, cmp::Ordering, hash::Hash, borrow::{Cow, Borrow}, path::{PathBuf, Path}};
+use std::{sync::Arc, fmt, ops::{Deref, self}, cmp::Ordering, hash::Hash, borrow::{Cow, Borrow}, path::{PathBuf, Path}, ffi::OsStr};
 
 use serde::{Serialize, Deserialize};
 
@@ -16,10 +16,8 @@ const SHARED_STRING_MAX_LEN: usize = 255;
 /// This is intended to be mostly a drop-in replacement for `String`, but it may be missing some
 /// methods. The trait implementations should generally work identically.
 #[repr(transparent)]
-#[derive(Clone)]
 pub struct NuString(Variant);
 
-#[derive(Clone)]
 enum Variant {
     Empty,
     Owned(String),
@@ -79,6 +77,11 @@ impl NuString {
     pub fn into_bytes(self) -> Vec<u8> {
         String::from(self).into_bytes()
     }
+
+    /// Remove the last character from the string and return it.
+    pub fn pop(&mut self) -> Option<char> {
+        self.string_mut().pop()
+    }
 }
 
 impl Deref for NuString {
@@ -86,6 +89,24 @@ impl Deref for NuString {
 
     fn deref(&self) -> &Self::Target {
         self.as_str()
+    }
+}
+
+impl Clone for NuString {
+    fn clone(&self) -> Self {
+        // The clone implementation is a little special. A string that gets cloned once might get
+        // cloned again, so we could return a Shared string if it's small enough
+        match &self.0 {
+            Variant::Empty => NuString(Variant::Empty),
+            Variant::Owned(s) => {
+                if s.len() <= SHARED_STRING_MAX_LEN {
+                    NuString(Variant::Shared(s.as_str().into()))
+                } else {
+                    NuString(Variant::Owned(s.clone()))
+                }
+            },
+            Variant::Shared(s) => NuString(Variant::Shared(s.clone())),
+        }
     }
 }
 
@@ -246,14 +267,14 @@ impl<'a> From<&'a str> for NuString {
 }
 
 impl From<char> for NuString {
-    fn from(value: char) -> Self {
-        String::from(value).into()
+    fn from(ch: char) -> Self {
+        String::from(ch).into()
     }
 }
 
 impl<'a> From<&'a String> for NuString {
-    fn from(value: &'a String) -> Self {
-        value.as_str().into()
+    fn from(s: &'a String) -> Self {
+        s.as_str().into()
     }
 }
 
@@ -267,14 +288,14 @@ impl<'a> From<Cow<'a, str>> for NuString {
 }
 
 impl<'a> From<&'a NuString> for NuString {
-    fn from(value: &'a NuString) -> Self {
-        value.clone()
+    fn from(s: &'a NuString) -> Self {
+        s.clone()
     }
 }
 
 impl From<NuString> for String {
-    fn from(value: NuString) -> Self {
-        match value.0 {
+    fn from(s: NuString) -> Self {
+        match s.0 {
             Variant::Empty => String::new(),
             Variant::Owned(s) => s,
             Variant::Shared(s) => s.deref().into(),
@@ -283,20 +304,32 @@ impl From<NuString> for String {
 }
 
 impl<'a> From<&'a NuString> for String {
-    fn from(value: &'a NuString) -> Self {
-        value.as_str().into()
+    fn from(s: &'a NuString) -> Self {
+        s.as_str().into()
     }
 }
 
 impl<'a> From<NuString> for Cow<'a, str> {
-    fn from(value: NuString) -> Self {
-        Cow::Owned(String::from(value))
+    fn from(s: NuString) -> Self {
+        Cow::Owned(String::from(s))
+    }
+}
+
+impl<'a> From<&'a NuString> for Cow<'a, str> {
+    fn from(s: &'a NuString) -> Self {
+        Cow::Borrowed(s.as_str())
+    }
+}
+
+impl<'a> From<&'a NuString> for &'a str {
+    fn from(value: &'a NuString) -> Self {
+        value.as_str()
     }
 }
 
 impl From<NuString> for PathBuf {
-    fn from(value: NuString) -> Self {
-        String::from(value).into()
+    fn from(s: NuString) -> Self {
+        String::from(s).into()
     }
 }
 
@@ -308,6 +341,12 @@ impl<'a> Extend<&'a str> for NuString {
 
 impl Extend<String> for NuString {
     fn extend<T: IntoIterator<Item = String>>(&mut self, iter: T) {
+        self.string_mut().extend(iter)
+    }
+}
+
+impl Extend<char> for NuString {
+    fn extend<T: IntoIterator<Item = char>>(&mut self, iter: T) {
         self.string_mut().extend(iter)
     }
 }
@@ -336,14 +375,20 @@ impl AsRef<str> for NuString {
     }
 }
 
-impl AsRef<std::ffi::OsStr> for NuString {
-    fn as_ref(&self) -> &std::ffi::OsStr {
+impl AsRef<OsStr> for NuString {
+    fn as_ref(&self) -> &OsStr {
         self.as_str().as_ref()
     }
 }
 
 impl AsRef<Path> for NuString {
     fn as_ref(&self) -> &Path {
+        self.as_str().as_ref()
+    }
+}
+
+impl AsRef<[u8]> for NuString {
+    fn as_ref(&self) -> &[u8] {
         self.as_str().as_ref()
     }
 }
@@ -358,5 +403,29 @@ impl fmt::Write for NuString {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.push_str(s);
         Ok(())
+    }
+}
+
+impl ops::Add for NuString {
+    type Output = NuString;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        (String::from(self) + rhs.as_str()).into()
+    }
+}
+
+impl ops::Add<String> for NuString {
+    type Output = NuString;
+
+    fn add(self, rhs: String) -> Self::Output {
+        (String::from(self) + rhs.as_str()).into()
+    }
+}
+
+impl<'a> ops::Add<&'a str> for NuString {
+    type Output = NuString;
+
+    fn add(self, rhs: &'a str) -> Self::Output {
+        (String::from(self) + rhs).into()
     }
 }

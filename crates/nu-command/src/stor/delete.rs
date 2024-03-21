@@ -67,7 +67,7 @@ impl Command for StorDelete {
     ) -> Result<PipelineData, ShellError> {
         let span = call.head;
         // For dropping/deleting an entire table
-        let table_name_opt: Option<String> = call.get_flag(engine_state, stack, "table-name")?;
+        let table_name_opt: Option<NuString> = call.get_flag(engine_state, stack, "table-name")?;
 
         // For deleting rows from a table
         let where_clause_opt: Option<String> =

@@ -123,7 +123,7 @@ fn into_record(
             _ => Value::record(
                 vals.into_iter()
                     .enumerate()
-                    .map(|(idx, val)| (format!("{idx}"), val))
+                    .map(|(idx, val)| (format!("{idx}").into(), val))
                     .collect(),
                 span,
             ),
@@ -131,7 +131,7 @@ fn into_record(
         Value::Range { val, .. } => Value::record(
             val.into_range_iter(engine_state.ctrlc.clone())?
                 .enumerate()
-                .map(|(idx, val)| (format!("{idx}"), val))
+                .map(|(idx, val)| (format!("{idx}").into(), val))
                 .collect(),
             span,
         ),

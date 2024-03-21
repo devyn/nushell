@@ -1,5 +1,5 @@
 use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, SimplePluginCommand};
-use nu_protocol::{record, Category, PluginSignature, Record, Span, Spanned, SyntaxShape, Value};
+use nu_protocol::{record, Category, PluginSignature, Record, Span, Spanned, SyntaxShape, Value, NuString};
 use sxd_document::parser;
 use sxd_xpath::{Context, Factory};
 
@@ -24,7 +24,7 @@ impl SimplePluginCommand for QueryXml {
         call: &EvaluatedCall,
         input: &Value,
     ) -> Result<Value, LabeledError> {
-        let query: Option<Spanned<String>> = call.opt(0)?;
+        let query: Option<Spanned<NuString>> = call.opt(0)?;
 
         execute_xpath_query(call, input, query)
     }
@@ -33,7 +33,7 @@ impl SimplePluginCommand for QueryXml {
 pub fn execute_xpath_query(
     call: &EvaluatedCall,
     input: &Value,
-    query: Option<Spanned<String>>,
+    query: Option<Spanned<NuString>>,
 ) -> Result<Value, LabeledError> {
     let (query_string, span) = match &query {
         Some(v) => (&v.item, v.span),

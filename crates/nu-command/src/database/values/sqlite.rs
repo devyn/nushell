@@ -2,7 +2,7 @@ use super::definitions::{
     db_column::DbColumn, db_constraint::DbConstraint, db_foreignkey::DbForeignKey,
     db_index::DbIndex, db_table::DbTable,
 };
-use nu_protocol::{CustomValue, PipelineData, Record, ShellError, Span, Spanned, Value};
+use nu_protocol::{CustomValue, PipelineData, Record, ShellError, Span, Spanned, Value, NuString};
 use rusqlite::{
     types::ValueRef, Connection, DatabaseName, Error as SqliteError, OpenFlags, Row, Statement,
 };
@@ -99,7 +99,7 @@ impl SQLiteDatabase {
         Value::custom_value(db, span)
     }
 
-    pub fn query(&self, sql: &Spanned<String>, call_span: Span) -> Result<Value, ShellError> {
+    pub fn query(&self, sql: &Spanned<NuString>, call_span: Span) -> Result<Value, ShellError> {
         let conn = open_sqlite_db(&self.path, call_span)?;
 
         let stream =
@@ -385,12 +385,12 @@ impl CustomValue for SQLiteDatabase {
     fn follow_path_string(
         &self,
         _self_span: Span,
-        _column_name: String,
+        column_name: NuString,
         path_span: Span,
     ) -> Result<Value, ShellError> {
         let db = open_sqlite_db(&self.path, path_span)?;
 
-        read_single_table(db, _column_name, path_span, self.ctrlc.clone()).map_err(|e| {
+        read_single_table(db, column_name, path_span, self.ctrlc.clone()).map_err(|e| {
             ShellError::GenericError {
                 error: "Failed to read from SQLite database".into(),
                 msg: e.to_string(),
@@ -427,7 +427,7 @@ pub fn open_sqlite_db(path: &Path, call_span: Span) -> Result<Connection, ShellE
 
 fn run_sql_query(
     conn: Connection,
-    sql: &Spanned<String>,
+    sql: &Spanned<NuString>,
     ctrlc: Option<Arc<AtomicBool>>,
 ) -> Result<Value, SqliteError> {
     let stmt = conn.prepare(&sql.item)?;
@@ -436,7 +436,7 @@ fn run_sql_query(
 
 fn read_single_table(
     conn: Connection,
-    table_name: String,
+    table_name: NuString,
     call_span: Span,
     ctrlc: Option<Arc<AtomicBool>>,
 ) -> Result<Value, SqliteError> {
@@ -507,7 +507,7 @@ pub fn convert_sqlite_row_to_nu_value(row: &Row, span: Span, column_names: &[Str
         .enumerate()
         .map(|(i, col)| {
             (
-                col.clone(),
+                col.into(),
                 convert_sqlite_value_to_nu_value(row.get_ref_unwrap(i), span),
             )
         })

@@ -45,7 +45,7 @@ impl Command for NuCheck {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let path_arg: Option<Spanned<String>> = call.opt(engine_state, stack, 0)?;
+        let path_arg: Option<Spanned<NuString>> = call.opt(engine_state, stack, 0)?;
         let as_module = call.has_flag(engine_state, stack, "as-module")?;
         let is_debug = call.has_flag(engine_state, stack, "debug")?;
 

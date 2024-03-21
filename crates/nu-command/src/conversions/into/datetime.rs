@@ -4,6 +4,7 @@ use chrono::{DateTime, FixedOffset, Local, TimeZone, Utc};
 use human_date_parser::{from_human_time, ParseResult};
 use nu_cmd_base::input_handler::{operate, CmdArgument};
 use nu_engine::CallExt;
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::{Call, CellPath},
     engine::{Command, EngineState, Stack},
@@ -125,7 +126,7 @@ impl Command for SubCommand {
             let cell_paths = (!cell_paths.is_empty()).then_some(cell_paths);
 
             // if zone-offset is specified, then zone will be neglected
-            let timezone = call.get_flag::<Spanned<String>>(engine_state, stack, "timezone")?;
+            let timezone = call.get_flag::<Spanned<NuString>>(engine_state, stack, "timezone")?;
             let zone_options =
                 match &call.get_flag::<Spanned<i64>>(engine_state, stack, "offset")? {
                     Some(zone_offset) => Some(Spanned {
@@ -133,13 +134,13 @@ impl Command for SubCommand {
                         span: zone_offset.span,
                     }),
                     None => timezone.as_ref().map(|zone| Spanned {
-                        item: Zone::from_string(zone.item.clone()),
+                        item: Zone::from_string(zone.item.into()),
                         span: zone.span,
                     }),
                 };
 
             let format_options = call
-                .get_flag::<String>(engine_state, stack, "format")?
+                .get_flag::<NuString>(engine_state, stack, "format")?
                 .as_ref()
                 .map(|fmt| DatetimeFormat(fmt.to_string()));
 

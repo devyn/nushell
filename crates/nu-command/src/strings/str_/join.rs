@@ -44,7 +44,7 @@ impl Command for StrJoin {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let separator: Option<String> = call.opt(engine_state, stack, 0)?;
+        let separator: Option<NuString> = call.opt(engine_state, stack, 0)?;
 
         let config = engine_state.get_config();
 

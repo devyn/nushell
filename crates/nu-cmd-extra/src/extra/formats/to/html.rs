@@ -5,7 +5,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Config, DataSource, Example, IntoPipelineData, PipelineData,
-    PipelineMetadata, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    PipelineMetadata, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value, NuString,
 };
 use nu_utils::IgnoreCaseExt;
 use rust_embed::RustEmbed;
@@ -166,7 +166,7 @@ impl Command for ToHtml {
 
 fn get_theme_from_asset_file(
     is_dark: bool,
-    theme: Option<&Spanned<String>>,
+    theme: Option<&Spanned<NuString>>,
 ) -> Result<HashMap<&'static str, String>, ShellError> {
     let theme_name = match theme {
         Some(s) => &s.item,
@@ -245,7 +245,7 @@ fn to_html(
     let dark = call.has_flag(engine_state, stack, "dark")?;
     let partial = call.has_flag(engine_state, stack, "partial")?;
     let list = call.has_flag(engine_state, stack, "list")?;
-    let theme: Option<Spanned<String>> = call.get_flag(engine_state, stack, "theme")?;
+    let theme: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "theme")?;
     let config = engine_state.get_config();
 
     let vec_of_values = input.into_iter().collect::<Vec<Value>>();
@@ -390,7 +390,7 @@ fn html_list(list: Vec<Value>, config: &Config) -> String {
     output_string
 }
 
-fn html_table(table: Vec<Value>, headers: Vec<String>, config: &Config) -> String {
+fn html_table(table: Vec<Value>, headers: Vec<NuString>, config: &Config) -> String {
     let mut output_string = String::new();
 
     output_string.push_str("<table>");

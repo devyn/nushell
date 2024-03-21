@@ -1,3 +1,4 @@
+use nu_protocol::NuString;
 use nu_protocol::ast::{Argument, Expr, Expression, RecordItem};
 use nu_protocol::debugger::WithoutDebug;
 use nu_protocol::{
@@ -16,7 +17,7 @@ pub fn get_full_help(
     engine_state: &EngineState,
     stack: &mut Stack,
     is_parser_keyword: bool,
-) -> String {
+) -> NuString {
     let config = engine_state.get_config();
     let doc_config = DocumentationConfig {
         no_subcommands: false,
@@ -44,7 +45,7 @@ struct DocumentationConfig {
 }
 
 // Utility returns nu-highlighted string
-fn nu_highlight_string(code_string: &str, engine_state: &EngineState, stack: &mut Stack) -> String {
+fn nu_highlight_string(code_string: &str, engine_state: &EngineState, stack: &mut Stack) -> NuString {
     if let Some(highlighter) = engine_state.find_decl(b"nu-highlight", &[]) {
         let decl = engine_state.get_decl(highlighter);
 
@@ -71,22 +72,22 @@ fn get_documentation(
     stack: &mut Stack,
     config: &DocumentationConfig,
     is_parser_keyword: bool,
-) -> String {
+) -> NuString {
     // Create ansi colors
     //todo make these configurable -- pull from enginestate.config
-    let help_section_name: String =
+    let help_section_name: NuString =
         get_ansi_color_for_component_or_default(engine_state, "shape_string", "\x1b[32m"); // default: green
 
-    let help_subcolor_one: String =
+    let help_subcolor_one: NuString =
         get_ansi_color_for_component_or_default(engine_state, "shape_external", "\x1b[36m"); // default: cyan
                                                                                              // was const bb: &str = "\x1b[1;34m"; // bold blue
-    let help_subcolor_two: String =
+    let help_subcolor_two: NuString =
         get_ansi_color_for_component_or_default(engine_state, "shape_block", "\x1b[94m"); // default: light blue (nobold, should be bolding the *names*)
 
     const RESET: &str = "\x1b[0m"; // reset
 
     let cmd_name = &sig.name;
-    let mut long_desc = String::new();
+    let mut long_desc = NuString::new();
 
     let usage = &sig.usage;
     if !usage.is_empty() {
@@ -339,7 +340,7 @@ fn get_ansi_color_for_component_or_default(
     engine_state: &EngineState,
     theme_component: &str,
     default: &str,
-) -> String {
+) -> NuString {
     if let Some(color) = &engine_state.get_config().color_config.get(theme_component) {
         let caller_stack = &mut Stack::new().capture();
         let span = Span::unknown();
@@ -432,14 +433,14 @@ pub fn get_flags_section<F>(
     engine_state_opt: Option<&EngineState>,
     signature: &Signature,
     mut value_formatter: F, // format default Value (because some calls cant access config or nu-highlight)
-) -> String
+) -> NuString
 where
-    F: FnMut(&nu_protocol::Value) -> String,
+    F: FnMut(&nu_protocol::Value) -> NuString,
 {
     //todo make these configurable -- pull from enginestate.config
-    let help_section_name: String;
-    let help_subcolor_one: String;
-    let help_subcolor_two: String;
+    let help_section_name: NuString;
+    let help_subcolor_one: NuString;
+    let help_subcolor_two: NuString;
 
     // Sometimes we want to get the flags without engine_state
     // For example, in nu-plugin. In that case, we fall back on default values
@@ -453,15 +454,15 @@ where
             get_ansi_color_for_component_or_default(engine_state, "shape_block", "\x1b[94m");
     // default: light blue (nobold, should be bolding the *names*)
     } else {
-        help_section_name = "\x1b[32m".to_string();
-        help_subcolor_one = "\x1b[36m".to_string();
-        help_subcolor_two = "\x1b[94m".to_string();
+        help_section_name = "\x1b[32m".into();
+        help_subcolor_one = "\x1b[36m".into();
+        help_subcolor_two = "\x1b[94m".into();
     }
 
     const RESET: &str = "\x1b[0m"; // reset
     const D: &str = "\x1b[39m"; // default
 
-    let mut long_desc = String::new();
+    let mut long_desc = NuString::new();
     let _ = write!(long_desc, "\n{help_section_name}Flags{RESET}:\n");
     for flag in &signature.named {
         let default_str = if let Some(value) = &flag.default_value {

@@ -194,7 +194,7 @@ impl Command for Ls {
 
         let glob_path = Spanned {
             // use NeedExpand, the relative escaping logic is handled previously
-            item: NuGlob::Expand(path.clone()),
+            item: NuGlob::Expand(path.into()),
             span: p_tag,
         };
 

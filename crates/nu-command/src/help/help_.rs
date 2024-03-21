@@ -52,7 +52,7 @@ impl Command for Help {
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
-        let find: Option<Spanned<String>> = call.get_flag(engine_state, stack, "find")?;
+        let find: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "find")?;
         let rest: Vec<Spanned<String>> = call.rest(engine_state, stack, 0)?;
 
         if rest.is_empty() && find.is_none() {

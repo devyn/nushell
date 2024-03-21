@@ -71,7 +71,7 @@ impl Command for StorUpdate {
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let span = call.head;
-        let table_name: Option<String> = call.get_flag(engine_state, stack, "table-name")?;
+        let table_name: Option<NuString> = call.get_flag(engine_state, stack, "table-name")?;
         let columns: Option<Record> = call.get_flag(engine_state, stack, "update-record")?;
         let where_clause_opt: Option<Spanned<String>> =
             call.get_flag(engine_state, stack, "where-clause")?;

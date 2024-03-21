@@ -8,8 +8,8 @@ use nu_protocol::{
 
 #[derive(Clone, Debug)]
 enum BeforeOrAfter {
-    Before(String),
-    After(String),
+    Before(NuString),
+    After(NuString),
 }
 
 #[derive(Clone)]

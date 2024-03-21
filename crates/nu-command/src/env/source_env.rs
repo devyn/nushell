@@ -8,7 +8,7 @@ use nu_protocol::ast::Call;
 
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value,
+    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 /// Source a file for environment variables.
@@ -42,7 +42,7 @@ impl Command for SourceEnv {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let source_filename: Spanned<String> = call.req(engine_state, caller_stack, 0)?;
+        let source_filename: Spanned<NuString> = call.req(engine_state, caller_stack, 0)?;
 
         // Note: this hidden positional is the block_id that corresponded to the 0th position
         // it is put here by the parser
@@ -58,7 +58,7 @@ impl Command for SourceEnv {
             PathBuf::from(&path)
         } else {
             return Err(ShellError::FileNotFound {
-                file: source_filename.item,
+                file: source_filename.item.into(),
                 span: source_filename.span,
             });
         };
@@ -66,11 +66,11 @@ impl Command for SourceEnv {
         if let Some(parent) = file_path.parent() {
             let file_pwd = Value::string(parent.to_string_lossy(), call.head);
 
-            caller_stack.add_env_var("FILE_PWD".to_string(), file_pwd);
+            caller_stack.add_env_var("FILE_PWD".into(), file_pwd);
         }
 
         caller_stack.add_env_var(
-            "CURRENT_FILE".to_string(),
+            "CURRENT_FILE".into(),
             Value::string(file_path.to_string_lossy(), call.head),
         );
 

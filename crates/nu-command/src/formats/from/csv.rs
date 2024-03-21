@@ -137,7 +137,7 @@ fn from_csv(
         });
     }
 
-    let separator = match call.get_flag::<String>(engine_state, stack, "separator")? {
+    let separator = match call.get_flag::<NuString>(engine_state, stack, "separator")? {
         Some(sep) => {
             if sep.len() == 1 {
                 sep.chars().next().unwrap_or(',')

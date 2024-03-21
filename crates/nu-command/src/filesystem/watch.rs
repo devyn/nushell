@@ -15,7 +15,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Closure, Command, EngineState, Stack, StateWorkingSet};
 use nu_protocol::{
     format_error, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature,
-    Spanned, SyntaxShape, Type, Value,
+    Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 // durations chosen mostly arbitrarily
@@ -75,7 +75,7 @@ impl Command for Watch {
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let cwd = current_dir(engine_state, stack)?;
-        let path_arg: Spanned<String> = call.req(engine_state, stack, 0)?;
+        let path_arg: Spanned<NuString> = call.req(engine_state, stack, 0)?;
 
         let path_no_whitespace = &path_arg
             .item
@@ -114,7 +114,7 @@ impl Command for Watch {
             None => DEFAULT_WATCH_DEBOUNCE_DURATION,
         };
 
-        let glob_flag: Option<Spanned<String>> = call.get_flag(engine_state, stack, "glob")?;
+        let glob_flag: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "glob")?;
         let glob_pattern = match glob_flag {
             Some(glob) => {
                 let absolute_path = path.join(glob.item);

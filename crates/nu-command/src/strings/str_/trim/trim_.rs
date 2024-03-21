@@ -84,7 +84,7 @@ impl Command for SubCommand {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let character = call.get_flag::<Spanned<String>>(engine_state, stack, "char")?;
+        let character = call.get_flag::<Spanned<NuString>>(engine_state, stack, "char")?;
         let to_trim = match character.as_ref() {
             Some(v) => {
                 if v.item.chars().count() > 1 {

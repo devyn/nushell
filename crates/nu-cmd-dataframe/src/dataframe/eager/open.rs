@@ -108,7 +108,7 @@ fn command(
 ) -> Result<PipelineData, ShellError> {
     let file: Spanned<PathBuf> = call.req(engine_state, stack, 0)?;
 
-    let type_option: Option<Spanned<String>> = call.get_flag(engine_state, stack, "type")?;
+    let type_option: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "type")?;
 
     let type_id = match &type_option {
         Some(ref t) => Some((t.item.to_owned(), "Invalid type", t.span)),
@@ -148,7 +148,7 @@ fn from_parquet(
     call: &Call,
 ) -> Result<Value, ShellError> {
     if call.has_flag(engine_state, stack, "lazy")? {
-        let file: String = call.req(engine_state, stack, 0)?;
+        let file: NuString = call.req(engine_state, stack, 0)?;
         let args = ScanArgsParquet {
             n_rows: None,
             cache: true,
@@ -174,7 +174,7 @@ fn from_parquet(
         df.into_value(call.head)
     } else {
         let file: Spanned<PathBuf> = call.req(engine_state, stack, 0)?;
-        let columns: Option<Vec<String>> = call.get_flag(engine_state, stack, "columns")?;
+        let columns: Option<Vec<NuString>> = call.get_flag(engine_state, stack, "columns")?;
 
         let r = File::open(&file.item).map_err(|e| ShellError::GenericError {
             error: "Error opening file".into(),
@@ -211,7 +211,7 @@ fn from_avro(
     call: &Call,
 ) -> Result<Value, ShellError> {
     let file: Spanned<PathBuf> = call.req(engine_state, stack, 0)?;
-    let columns: Option<Vec<String>> = call.get_flag(engine_state, stack, "columns")?;
+    let columns: Option<Vec<NuString>> = call.get_flag(engine_state, stack, "columns")?;
 
     let r = File::open(&file.item).map_err(|e| ShellError::GenericError {
         error: "Error opening file".into(),
@@ -247,7 +247,7 @@ fn from_ipc(
     call: &Call,
 ) -> Result<Value, ShellError> {
     if call.has_flag(engine_state, stack, "lazy")? {
-        let file: String = call.req(engine_state, stack, 0)?;
+        let file: NuString = call.req(engine_state, stack, 0)?;
         let args = ScanArgsIpc {
             n_rows: None,
             cache: true,
@@ -269,7 +269,7 @@ fn from_ipc(
         df.into_value(call.head)
     } else {
         let file: Spanned<PathBuf> = call.req(engine_state, stack, 0)?;
-        let columns: Option<Vec<String>> = call.get_flag(engine_state, stack, "columns")?;
+        let columns: Option<Vec<NuString>> = call.get_flag(engine_state, stack, "columns")?;
 
         let r = File::open(&file.item).map_err(|e| ShellError::GenericError {
             error: "Error opening file".into(),
@@ -388,11 +388,11 @@ fn from_csv(
     stack: &mut Stack,
     call: &Call,
 ) -> Result<Value, ShellError> {
-    let delimiter: Option<Spanned<String>> = call.get_flag(engine_state, stack, "delimiter")?;
+    let delimiter: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "delimiter")?;
     let no_header: bool = call.has_flag(engine_state, stack, "no-header")?;
     let infer_schema: Option<usize> = call.get_flag(engine_state, stack, "infer-schema")?;
     let skip_rows: Option<usize> = call.get_flag(engine_state, stack, "skip-rows")?;
-    let columns: Option<Vec<String>> = call.get_flag(engine_state, stack, "columns")?;
+    let columns: Option<Vec<NuString>> = call.get_flag(engine_state, stack, "columns")?;
 
     let maybe_schema = call
         .get_flag(engine_state, stack, "schema")?
@@ -400,7 +400,7 @@ fn from_csv(
         .transpose()?;
 
     if call.has_flag(engine_state, stack, "lazy")? {
-        let file: String = call.req(engine_state, stack, 0)?;
+        let file: NuString = call.req(engine_state, stack, 0)?;
         let csv_reader = LazyCsvReader::new(file);
 
         let csv_reader = match delimiter {

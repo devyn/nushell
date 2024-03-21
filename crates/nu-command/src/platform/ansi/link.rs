@@ -90,7 +90,7 @@ fn operate(
     call: &Call,
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
-    let text: Option<Spanned<String>> = call.get_flag(engine_state, stack, "text")?;
+    let text: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "text")?;
     let text = text.map(|e| e.item);
     let column_paths: Vec<CellPath> = call.rest(engine_state, stack, 0)?;
 

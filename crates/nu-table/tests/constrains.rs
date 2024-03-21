@@ -1,6 +1,6 @@
 mod common;
 
-use nu_protocol::TrimStrategy;
+use nu_protocol::{TrimStrategy, NuString};
 use nu_table::{NuTable, NuTableConfig, TableTheme as theme};
 
 use common::{create_row, test_table, TestCase};
@@ -65,8 +65,8 @@ fn termwidth_too_small() {
 
     for case in [
         TrimStrategy::truncate(None),
-        TrimStrategy::truncate(Some(String::from("**"))),
-        TrimStrategy::truncate(Some(String::from(""))),
+        TrimStrategy::truncate(Some(NuString::from("**"))),
+        TrimStrategy::truncate(Some(NuString::from(""))),
         TrimStrategy::wrap(false),
         TrimStrategy::wrap(true),
     ] {
@@ -172,7 +172,7 @@ fn truncate_with_suffix_test() {
         (49, Some("┏━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━┓\n┃ 123 45678 ┃ qweqw eqwe ┃ xxx xx xx x... ┃ ... ┃\n┣━━━━━━━━━━━╋━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━╋━━━━━┫\n┃ 0         ┃ 1          ┃ 2              ┃ ... ┃\n┃ 0         ┃ 1          ┃ 2              ┃ ... ┃\n┗━━━━━━━━━━━┻━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━┻━━━━━┛")),
     ];
 
-    test_trim(&tests, TrimStrategy::truncate(Some(String::from("..."))));
+    test_trim(&tests, TrimStrategy::truncate(Some(NuString::from("..."))));
 }
 
 #[test]
@@ -198,7 +198,7 @@ fn width_control_test_0() {
 fn test_width(data: Vec<Vec<CellInfo<String>>>, tests: &[(usize, &str)]) {
     let config = NuTableConfig {
         theme: theme::heavy(),
-        trim: TrimStrategy::truncate(Some(String::from("..."))),
+        trim: TrimStrategy::truncate(Some(NuString::from("..."))),
         with_header: true,
         ..Default::default()
     };

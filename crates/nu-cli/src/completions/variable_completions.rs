@@ -2,7 +2,7 @@ use crate::completions::{Completer, CompletionOptions};
 use nu_engine::{column::get_columns, eval_variable};
 use nu_protocol::{
     engine::{EngineState, Stack, StateWorkingSet},
-    Span, Value,
+    Span, Value, NuString,
 };
 
 use reedline::Suggestion;
@@ -69,7 +69,7 @@ impl Completer for VariableCompletion {
                     let nested_levels: Vec<Vec<u8>> =
                         self.var_context.1.clone().into_iter().skip(1).collect();
 
-                    if let Some(val) = env_vars.get(&target_var_str) {
+                    if let Some(val) = env_vars.get(target_var_str.as_str()) {
                         for suggestion in
                             nested_suggestions(val.clone(), nested_levels, current_span)
                         {
@@ -93,7 +93,7 @@ impl Completer for VariableCompletion {
                             &prefix,
                         ) {
                             output.push(Suggestion {
-                                value: env_var.0,
+                                value: env_var.0.into(),
                                 description: None,
                                 style: None,
                                 extra: None,
@@ -241,7 +241,7 @@ fn nested_suggestions(
             // Add all the columns as completion
             for (col, _) in val.into_iter() {
                 output.push(Suggestion {
-                    value: col,
+                    value: col.into(),
                     description: None,
                     style: None,
                     extra: None,
@@ -256,7 +256,7 @@ fn nested_suggestions(
             // Add all the columns as completion
             for column_name in val.column_names() {
                 output.push(Suggestion {
-                    value: column_name.to_string(),
+                    value: column_name.into(),
                     description: None,
                     style: None,
                     extra: None,
@@ -305,7 +305,7 @@ fn recursive_value(val: Value, sublevels: Vec<Vec<u8>>) -> Value {
             }
             Value::LazyRecord { val, .. } => {
                 for col in val.column_names() {
-                    if col.as_bytes().to_vec() == next_sublevel {
+                    if col.as_bytes() == next_sublevel {
                         return recursive_value(
                             val.get_column_value(col).unwrap_or_default(),
                             sublevels.into_iter().skip(1).collect(),
@@ -317,8 +317,8 @@ fn recursive_value(val: Value, sublevels: Vec<Vec<u8>>) -> Value {
                 return Value::nothing(span);
             }
             Value::List { vals, .. } => {
-                for col in get_columns(vals.as_slice()) {
-                    if col.as_bytes().to_vec() == next_sublevel {
+                for col in get_columns::<NuString>(vals.as_slice()) {
+                    if col.as_bytes() == next_sublevel {
                         return recursive_value(
                             Value::list(vals, span)
                                 .get_data_by_key(&col)

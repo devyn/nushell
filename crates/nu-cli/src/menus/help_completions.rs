@@ -100,7 +100,7 @@ impl NuHelpCompleter {
                     .collect();
 
                 Suggestion {
-                    value: sig.name.clone(),
+                    value: String::from(&sig.name),
                     description: Some(long_desc),
                     style: None,
                     extra: Some(extra),

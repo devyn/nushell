@@ -2,7 +2,7 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type,
+    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, NuString,
 };
 
 #[derive(Clone)]
@@ -49,7 +49,7 @@ This command is a parser keyword. For details, check:
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let name_arg: Spanned<String> = call.req(engine_state, stack, 0)?;
+        let name_arg: Spanned<NuString> = call.req(engine_state, stack, 0)?;
 
         stack.add_overlay(name_arg.item);
 

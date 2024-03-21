@@ -4,7 +4,7 @@ use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack, StateWorkingSet},
     record, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value,
+    Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -40,7 +40,7 @@ impl Command for Ast {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let pipeline: Spanned<String> = call.req(engine_state, stack, 0)?;
+        let pipeline: Spanned<NuString> = call.req(engine_state, stack, 0)?;
         let to_json = call.has_flag(engine_state, stack, "json")?;
         let minify = call.has_flag(engine_state, stack, "minify")?;
         let mut working_set = StateWorkingSet::new(engine_state);

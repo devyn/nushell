@@ -2,7 +2,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Config, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span,
-    Type, Value,
+    Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -118,7 +118,7 @@ fn extract_headers(
                 .map(|(idx, value)| {
                     let col = value.to_expanded_string("", config);
                     if col.is_empty() {
-                        format!("column{idx}")
+                        format!("column{idx}").into()
                     } else {
                         col
                     }
@@ -143,8 +143,8 @@ fn is_valid_header(value: &Value) -> bool {
 fn replace_headers(
     rows: Vec<Value>,
     span: Span,
-    old_headers: &[String],
-    new_headers: &[String],
+    old_headers: &[NuString],
+    new_headers: &[NuString],
 ) -> Result<Value, ShellError> {
     rows.into_iter()
         .skip(1)

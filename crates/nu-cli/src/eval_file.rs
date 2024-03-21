@@ -94,15 +94,15 @@ pub fn evaluate_file(
     });
 
     stack.add_env_var(
-        "FILE_PWD".to_string(),
+        "FILE_PWD".into(),
         Value::string(parent.to_string_lossy(), Span::unknown()),
     );
     stack.add_env_var(
-        "CURRENT_FILE".to_string(),
+        "CURRENT_FILE".into(),
         Value::string(file_path.to_string_lossy(), Span::unknown()),
     );
     stack.add_env_var(
-        "PROCESS_PATH".to_string(),
+        "PROCESS_PATH".into(),
         Value::string(path, Span::unknown()),
     );
 
@@ -121,10 +121,10 @@ pub fn evaluate_file(
 
     for block in working_set.delta.blocks.iter_mut().map(Arc::make_mut) {
         if block.signature.name == "main" {
-            block.signature.name = source_filename.to_string_lossy().to_string();
+            block.signature.name = source_filename.to_string_lossy().into();
         } else if block.signature.name.starts_with("main ") {
             block.signature.name =
-                source_filename.to_string_lossy().to_string() + " " + &block.signature.name[5..];
+                format!("{} {}", source_filename.to_string_lossy(), &block.signature.name[5..]).into();
         }
     }
 

@@ -5,7 +5,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value,
+    Spanned, SyntaxShape, Type, Value, NuString,
 };
 use std::collections::HashMap;
 
@@ -85,8 +85,8 @@ impl Command for Histogram {
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         // input check.
-        let column_name: Option<Spanned<String>> = call.opt(engine_state, stack, 0)?;
-        let frequency_name_arg = call.opt::<Spanned<String>>(engine_state, stack, 1)?;
+        let column_name: Option<Spanned<NuString>> = call.opt(engine_state, stack, 0)?;
+        let frequency_name_arg = call.opt::<Spanned<NuString>>(engine_state, stack, 1)?;
         let frequency_column_name = match frequency_name_arg {
             Some(inner) => {
                 let forbidden_column_names = ["value", "count", "quantile", "percentage"];
@@ -105,10 +105,10 @@ impl Command for Histogram {
                 }
                 inner.item
             }
-            None => "frequency".to_string(),
+            None => "frequency".into(),
         };
 
-        let calc_method: Option<Spanned<String>> =
+        let calc_method: Option<Spanned<NuString>> =
             call.get_flag(engine_state, stack, "percentage-type")?;
         let calc_method = match calc_method {
             None => PercentageCalcMethod::Normalize,
@@ -143,8 +143,8 @@ impl Command for Histogram {
 
 fn run_histogram(
     values: Vec<Value>,
-    column_name: Option<Spanned<String>>,
-    freq_column: String,
+    column_name: Option<Spanned<NuString>>,
+    freq_column: NuString,
     calc_method: PercentageCalcMethod,
     head_span: Span,
     list_span: Span,
@@ -198,7 +198,7 @@ fn run_histogram(
 
             if inputs.is_empty() {
                 return Err(ShellError::CantFindColumn {
-                    col_name: col_name.clone(),
+                    col_name: col_name.into(),
                     span: head_span,
                     src_span: list_span,
                 });
@@ -208,7 +208,7 @@ fn run_histogram(
 
     let value_column_name = column_name
         .map(|x| x.item)
-        .unwrap_or_else(|| "value".to_string());
+        .unwrap_or_else(|| "value".into());
     Ok(histogram_impl(
         inputs,
         &value_column_name,

@@ -1,4 +1,4 @@
-use nu_protocol::Value;
+use nu_protocol::{Value, NuString};
 use nu_table::{string_width, string_wrap};
 use tabled::{
     grid::config::ColoredConfig,
@@ -10,7 +10,7 @@ use crate::debug::inspect_table::{
     global_horizontal_char::SetHorizontalChar, set_widths::SetWidths,
 };
 
-pub fn build_table(value: Value, description: String, termsize: usize) -> String {
+pub fn build_table(value: Value, description: NuString, termsize: usize) -> NuString {
     let (head, mut data) = util::collect_input(value);
     let count_columns = head.len();
     data.insert(0, head);
@@ -38,11 +38,11 @@ pub fn build_table(value: Value, description: String, termsize: usize) -> String
         let delete_width = desc_table_width - termsize;
         if delete_width >= desc_width {
             // we can't fit in a description; we consider it's no point in showing then?
-            return String::new();
+            return NuString::new();
         }
 
         desc_width -= delete_width;
-        desc = string_wrap(&desc, desc_width, false);
+        desc = string_wrap(&desc, desc_width, false).into();
         desc_table_width = termsize;
     }
 
@@ -50,7 +50,7 @@ pub fn build_table(value: Value, description: String, termsize: usize) -> String
 
     let width = val_table_width.max(desc_table_width).min(termsize);
 
-    let mut desc_table = Table::from_iter([[String::from("description"), desc]]);
+    let mut desc_table = Table::from_iter([[String::from("description"), desc.into()]]);
     desc_table.with(Style::rounded().remove_bottom().remove_horizontals());
 
     let mut val_table = Table::from_iter(data);
@@ -62,10 +62,10 @@ pub fn build_table(value: Value, description: String, termsize: usize) -> String
             .with(SetHorizontalChar::new('┼', '┴', 11 + 2 + 1)),
     );
 
-    format!("{desc_table}\n{val_table}")
+    format!("{desc_table}\n{val_table}").into()
 }
 
-fn get_data_widths(data: &[Vec<String>], count_columns: usize) -> Vec<usize> {
+fn get_data_widths(data: &[Vec<NuString>], count_columns: usize) -> Vec<usize> {
     let mut widths = vec![0; count_columns];
     for row in data {
         for col in 0..count_columns {
@@ -98,7 +98,7 @@ fn increase_widths(widths: &mut [usize], need: usize) {
     }
 }
 
-fn increase_data_width(data: &mut Vec<Vec<String>>, widths: &[usize]) {
+fn increase_data_width(data: &mut Vec<Vec<NuString>>, widths: &[usize]) {
     for row in data {
         for (col, max_width) in widths.iter().enumerate() {
             let text = &mut row[col];
@@ -107,7 +107,7 @@ fn increase_data_width(data: &mut Vec<Vec<String>>, widths: &[usize]) {
     }
 }
 
-fn increase_string_width(text: &mut String, total: usize) {
+fn increase_string_width(text: &mut NuString, total: usize) {
     let width = string_width(text);
     let rest = total - width;
 
@@ -123,7 +123,7 @@ fn get_total_width_2_column_table(col1: usize, col2: usize) -> usize {
 }
 
 fn truncate_data(
-    data: &mut Vec<Vec<String>>,
+    data: &mut Vec<Vec<NuString>>,
     widths: &mut Vec<usize>,
     cfg: &ColoredConfig,
     expected_width: usize,
@@ -162,7 +162,7 @@ fn truncate_data(
     widths.push(1);
 }
 
-fn remove_columns(data: &mut Vec<Vec<String>>, peak_count: usize) {
+fn remove_columns(data: &mut Vec<Vec<NuString>>, peak_count: usize) {
     if peak_count == 0 {
         for row in data {
             row.clear();
@@ -183,8 +183,8 @@ fn get_total_width2(widths: &[usize], cfg: &ColoredConfig) -> usize {
     total + countv + margin.left.size + margin.right.size
 }
 
-fn push_empty_column(data: &mut Vec<Vec<String>>) {
-    let empty_cell = String::from("‥");
+fn push_empty_column(data: &mut Vec<Vec<NuString>>) {
+    let empty_cell = NuString::from("‥");
     for row in data {
         row.push(empty_cell.clone());
     }
@@ -193,10 +193,10 @@ fn push_empty_column(data: &mut Vec<Vec<String>>) {
 mod util {
     use crate::debug::explain::debug_string_without_formatting;
     use nu_engine::get_columns;
-    use nu_protocol::Value;
+    use nu_protocol::{Value, NuString};
 
     /// Try to build column names and a table grid.
-    pub fn collect_input(value: Value) -> (Vec<String>, Vec<Vec<String>>) {
+    pub fn collect_input(value: Value) -> (Vec<NuString>, Vec<Vec<NuString>>) {
         let span = value.span();
         match value {
             Value::Record { val: record, .. } => {
@@ -214,7 +214,7 @@ mod util {
                 let data = convert_records_to_dataset(&columns, vals);
 
                 if columns.is_empty() {
-                    columns = vec![String::from("")];
+                    columns = vec![NuString::from("")];
                 }
 
                 (columns, data)
@@ -226,17 +226,17 @@ mod util {
                     .map(|val| vec![debug_string_without_formatting(&val)])
                     .collect();
 
-                (vec![String::from("")], lines)
+                (vec![NuString::from("")], lines)
             }
             Value::Nothing { .. } => (vec![], vec![]),
             value => (
-                vec![String::from("")],
+                vec![NuString::from("")],
                 vec![vec![debug_string_without_formatting(&value)]],
             ),
         }
     }
 
-    fn convert_records_to_dataset(cols: &[String], records: Vec<Value>) -> Vec<Vec<String>> {
+    fn convert_records_to_dataset(cols: &[NuString], records: Vec<Value>) -> Vec<Vec<NuString>> {
         if !cols.is_empty() {
             create_table_for_record(cols, &records)
         } else if cols.is_empty() && records.is_empty() {
@@ -254,7 +254,7 @@ mod util {
         }
     }
 
-    fn create_table_for_record(headers: &[String], items: &[Value]) -> Vec<Vec<String>> {
+    fn create_table_for_record(headers: &[NuString], items: &[Value]) -> Vec<Vec<NuString>> {
         let mut data = vec![Vec::new(); items.len()];
 
         for (i, item) in items.iter().enumerate() {
@@ -265,20 +265,20 @@ mod util {
         data
     }
 
-    fn record_create_row(headers: &[String], item: &Value) -> Vec<String> {
+    fn record_create_row(headers: &[NuString], item: &Value) -> Vec<NuString> {
         if let Value::Record { val, .. } = item {
             headers
                 .iter()
                 .map(|col| {
                     val.get(col)
                         .map(debug_string_without_formatting)
-                        .unwrap_or_else(String::new)
+                        .unwrap_or_else(NuString::new)
                 })
                 .collect()
         } else {
             // should never reach here due to `get_columns` above which will return
             // empty columns if any value in the list is not a record
-            vec![String::new(); headers.len()]
+            vec![NuString::new(); headers.len()]
         }
     }
 }

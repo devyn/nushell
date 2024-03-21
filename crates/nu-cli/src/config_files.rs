@@ -5,7 +5,7 @@ use nu_protocol::engine::{EngineState, Stack, StateWorkingSet};
 use nu_protocol::report_error;
 use nu_protocol::{HistoryFileFormat, PipelineData};
 #[cfg(feature = "plugin")]
-use nu_protocol::{ParseError, Spanned};
+use nu_protocol::{NuString, ParseError, Spanned};
 #[cfg(feature = "plugin")]
 use nu_utils::utils::perf;
 use std::path::PathBuf;
@@ -20,11 +20,11 @@ const HISTORY_FILE_SQLITE: &str = "history.sqlite3";
 pub fn read_plugin_file(
     engine_state: &mut EngineState,
     stack: &mut Stack,
-    plugin_file: Option<Spanned<String>>,
+    plugin_file: Option<Spanned<NuString>>,
     storage_path: &str,
 ) {
     let start_time = std::time::Instant::now();
-    let mut plug_path = String::new();
+    let mut plug_path = NuString::new();
     // Reading signatures from signature file
     // The plugin.nu file stores the parsed signature collected from each registered plugin
     add_plugin_file(engine_state, plugin_file, storage_path);
@@ -32,7 +32,7 @@ pub fn read_plugin_file(
     let plugin_path = engine_state.plugin_signatures.clone();
     if let Some(plugin_path) = plugin_path {
         let plugin_filename = plugin_path.to_string_lossy();
-        plug_path = plugin_filename.to_string();
+        plug_path = plugin_filename.as_ref().into();
         if let Ok(contents) = std::fs::read(&plugin_path) {
             eval_source(
                 engine_state,
@@ -58,7 +58,7 @@ pub fn read_plugin_file(
 #[cfg(feature = "plugin")]
 pub fn add_plugin_file(
     engine_state: &mut EngineState,
-    plugin_file: Option<Spanned<String>>,
+    plugin_file: Option<Spanned<NuString>>,
     storage_path: &str,
 ) {
     let working_set = StateWorkingSet::new(engine_state);

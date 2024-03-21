@@ -2,6 +2,7 @@ use nu_cmd_base::hook::eval_hook;
 use nu_engine::env_to_strings;
 use nu_engine::get_eval_expression;
 use nu_engine::CallExt;
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::{Call, Expr},
     did_you_mean,
@@ -156,12 +157,12 @@ pub fn create_external_command(
     stack: &mut Stack,
     call: &Call,
 ) -> Result<ExternalCommand, ShellError> {
-    let name: Spanned<String> = call.req(engine_state, stack, 0)?;
+    let name: Spanned<NuString> = call.req(engine_state, stack, 0)?;
 
     // Translate environment variables from Values to Strings
     let env_vars_str = env_to_strings(engine_state, stack)?;
 
-    fn value_as_spanned(value: Value) -> Result<Spanned<String>, ShellError> {
+    fn value_as_spanned(value: Value) -> Result<Spanned<NuString>, ShellError> {
         let span = value.span();
 
         value
@@ -229,12 +230,12 @@ pub fn create_external_command(
 
 #[derive(Clone)]
 pub struct ExternalCommand {
-    pub name: Spanned<String>,
-    pub args: Vec<Spanned<String>>,
+    pub name: Spanned<NuString>,
+    pub args: Vec<Spanned<NuString>>,
     pub arg_keep_raw: Vec<bool>,
     pub out: IoStream,
     pub err: IoStream,
-    pub env_vars: HashMap<String, String>,
+    pub env_vars: HashMap<NuString, NuString>,
 }
 
 impl ExternalCommand {
@@ -693,7 +694,7 @@ impl ExternalCommand {
             // https://stackoverflow.com/questions/1200235/how-to-pass-a-quoted-pipe-character-to-cmd-exe
             // cmd.exe needs to have a caret to escape a pipe
             let arg = Spanned {
-                item: arg.item.replace('|', "^|"),
+                item: arg.item.replace('|', "^|").into(),
                 span: arg.span,
             };
 
@@ -706,7 +707,7 @@ impl ExternalCommand {
 
 fn trim_expand_and_apply_arg(
     process: &mut CommandSys,
-    arg: &Spanned<String>,
+    arg: &Spanned<NuString>,
     arg_keep_raw: &bool,
     cwd: &str,
 ) {

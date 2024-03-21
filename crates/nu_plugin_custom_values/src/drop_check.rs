@@ -1,6 +1,6 @@
 use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, SimplePluginCommand};
 use nu_protocol::{
-    record, Category, CustomValue, PluginSignature, ShellError, Span, SyntaxShape, Value,
+    record, Category, CustomValue, PluginSignature, ShellError, Span, SyntaxShape, Value, NuString,
 };
 use serde::{Deserialize, Serialize};
 
@@ -8,11 +8,11 @@ use crate::CustomValuePlugin;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DropCheckValue {
-    pub(crate) msg: String,
+    pub(crate) msg: NuString,
 }
 
 impl DropCheckValue {
-    pub(crate) fn new(msg: String) -> DropCheckValue {
+    pub(crate) fn new(msg: NuString) -> DropCheckValue {
         DropCheckValue { msg }
     }
 

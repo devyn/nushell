@@ -3,7 +3,7 @@ use nu_protocol::ast::{Call, CellPath};
 use nu_protocol::engine::{Closure, Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Example, IntoPipelineData, PipelineData, Record, ShellError, Signature, Span,
-    SyntaxShape, Type, Value,
+    SyntaxShape, Type, Value, NuString,
 };
 
 use indexmap::IndexMap;
@@ -197,8 +197,8 @@ pub fn group_by(
 pub fn group_cell_path(
     column_name: CellPath,
     values: Vec<Value>,
-) -> Result<IndexMap<String, Vec<Value>>, ShellError> {
-    let mut groups: IndexMap<String, Vec<Value>> = IndexMap::new();
+) -> Result<IndexMap<NuString, Vec<Value>>, ShellError> {
+    let mut groups: IndexMap<NuString, Vec<Value>> = IndexMap::new();
 
     for value in values.into_iter() {
         let group_key = value
@@ -216,8 +216,8 @@ pub fn group_cell_path(
     Ok(groups)
 }
 
-pub fn group_no_grouper(values: Vec<Value>) -> Result<IndexMap<String, Vec<Value>>, ShellError> {
-    let mut groups: IndexMap<String, Vec<Value>> = IndexMap::new();
+pub fn group_no_grouper(values: Vec<Value>) -> Result<IndexMap<NuString, Vec<Value>>, ShellError> {
+    let mut groups: IndexMap<NuString, Vec<Value>> = IndexMap::new();
 
     for value in values.into_iter() {
         let group_key = value.coerce_string()?;
@@ -234,9 +234,9 @@ fn group_closure(
     block: Option<Closure>,
     stack: &mut Stack,
     engine_state: &EngineState,
-) -> Result<IndexMap<String, Vec<Value>>, ShellError> {
+) -> Result<IndexMap<NuString, Vec<Value>>, ShellError> {
     let error_key = "error";
-    let mut groups: IndexMap<String, Vec<Value>> = IndexMap::new();
+    let mut groups: IndexMap<NuString, Vec<Value>> = IndexMap::new();
     let eval_block = get_eval_block(engine_state);
 
     if let Some(capture_block) = &block {
@@ -283,7 +283,7 @@ fn group_closure(
     Ok(groups)
 }
 
-fn groups_to_record(groups: IndexMap<String, Vec<Value>>, span: Span) -> Value {
+fn groups_to_record(groups: IndexMap<NuString, Vec<Value>>, span: Span) -> Value {
     Value::record(
         groups
             .into_iter()
@@ -293,7 +293,7 @@ fn groups_to_record(groups: IndexMap<String, Vec<Value>>, span: Span) -> Value {
     )
 }
 
-fn groups_to_table(groups: IndexMap<String, Vec<Value>>, span: Span) -> Value {
+fn groups_to_table(groups: IndexMap<NuString, Vec<Value>>, span: Span) -> Value {
     Value::list(
         groups
             .into_iter()

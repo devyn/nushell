@@ -127,7 +127,7 @@ impl Command for SeqDate {
             call.get_flag(engine_state, stack, "input-format")?;
         let begin_date: Option<Spanned<String>> =
             call.get_flag(engine_state, stack, "begin-date")?;
-        let end_date: Option<Spanned<String>> = call.get_flag(engine_state, stack, "end-date")?;
+        let end_date: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "end-date")?;
         let increment: Option<Spanned<i64>> = call.get_flag(engine_state, stack, "increment")?;
         let days: Option<Spanned<i64>> = call.get_flag(engine_state, stack, "days")?;
         let reverse = call.has_flag(engine_state, stack, "reverse")?;

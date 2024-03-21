@@ -3,7 +3,7 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value,
+    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -60,7 +60,7 @@ impl Command for BitsXor {
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
         let target: Value = call.req(engine_state, stack, 0)?;
-        let endian = call.get_flag::<Spanned<String>>(engine_state, stack, "endian")?;
+        let endian = call.get_flag::<Spanned<NuString>>(engine_state, stack, "endian")?;
 
         let little_endian = if let Some(endian) = endian {
             match endian.item.as_str() {

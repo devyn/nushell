@@ -3,7 +3,7 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::{Call, CellPath},
     engine::{Command, EngineState, Stack},
-    Category, Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Value,
+    Category, Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Value, NuString,
 };
 use print_positions::print_positions;
 
@@ -13,7 +13,7 @@ pub struct Fill;
 struct Arguments {
     width: usize,
     alignment: FillAlignment,
-    character: String,
+    character: NuString,
     cell_paths: Option<Vec<CellPath>>,
 }
 
@@ -137,8 +137,8 @@ fn fill(
     input: PipelineData,
 ) -> Result<nu_protocol::PipelineData, nu_protocol::ShellError> {
     let width_arg: Option<usize> = call.get_flag(engine_state, stack, "width")?;
-    let alignment_arg: Option<String> = call.get_flag(engine_state, stack, "alignment")?;
-    let character_arg: Option<String> = call.get_flag(engine_state, stack, "character")?;
+    let alignment_arg: Option<NuString> = call.get_flag(engine_state, stack, "alignment")?;
+    let character_arg: Option<NuString> = call.get_flag(engine_state, stack, "character")?;
     let cell_paths: Vec<CellPath> = call.rest(engine_state, stack, 0)?;
     let cell_paths = (!cell_paths.is_empty()).then_some(cell_paths);
 
@@ -159,7 +159,7 @@ fn fill(
     let character = if let Some(arg) = character_arg {
         arg
     } else {
-        " ".to_string()
+        " ".into()
     };
 
     let arg = Arguments {

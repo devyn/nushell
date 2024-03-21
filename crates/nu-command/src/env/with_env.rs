@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use nu_engine::{eval_block, CallExt};
+use nu_protocol::NuString;
 use nu_protocol::debugger::WithoutDebug;
 use nu_protocol::{
     ast::Call,
@@ -87,7 +88,7 @@ fn with_env(
     let block = engine_state.get_block(capture_block.block_id);
     let mut stack = stack.captures_to_stack_preserve_stdio(capture_block.captures);
 
-    let mut env: HashMap<String, Value> = HashMap::new();
+    let mut env: HashMap<NuString, Value> = HashMap::new();
 
     match &variable {
         Value::List { vals: table, .. } => {
@@ -96,7 +97,7 @@ fn with_env(
                 match &table[0] {
                     Value::Record { val, .. } => {
                         for (k, v) in val {
-                            env.insert(k.to_string(), v.clone());
+                            env.insert(k.clone(), v.clone());
                         }
                     }
                     x => {

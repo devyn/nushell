@@ -2,7 +2,7 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type,
+    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, NuString,
 };
 
 #[derive(Clone)]
@@ -51,7 +51,7 @@ impl Command for OverlayHide {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let overlay_name: Spanned<String> = if let Some(name) = call.opt(engine_state, stack, 0)? {
+        let overlay_name: Spanned<NuString> = if let Some(name) = call.opt(engine_state, stack, 0)? {
             name
         } else {
             Spanned {
@@ -62,12 +62,12 @@ impl Command for OverlayHide {
 
         if !stack.is_overlay_active(&overlay_name.item) {
             return Err(ShellError::OverlayNotFoundAtRuntime {
-                overlay_name: overlay_name.item,
+                overlay_name: overlay_name.item.into(),
                 span: overlay_name.span,
             });
         }
 
-        let keep_env: Option<Vec<Spanned<String>>> =
+        let keep_env: Option<Vec<Spanned<NuString>>> =
             call.get_flag(engine_state, stack, "keep-env")?;
 
         let env_vars_to_keep = if let Some(env_var_names_to_keep) = keep_env {
@@ -78,7 +78,7 @@ impl Command for OverlayHide {
                     Some(val) => env_vars_to_keep.push((name.item, val.clone())),
                     None => {
                         return Err(ShellError::EnvVarNotFoundAtRuntime {
-                            envvar_name: name.item,
+                            envvar_name: name.item.into(),
                             span: name.span,
                         })
                     }

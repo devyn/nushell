@@ -41,13 +41,13 @@ impl Completer for DotNuCompletion {
         let (base, partial) = prefix_str
             .rsplit_once(is_separator)
             .unwrap_or((".", &prefix_str));
-        let base_dir = base.replace(is_separator, MAIN_SEPARATOR_STR);
-        let mut partial = partial.to_string();
+        let base_dir: NuString = base.replace(is_separator, MAIN_SEPARATOR_STR).into();
+        let mut partial: NuString = partial.into();
         // On windows, this standardizes paths to use \
         let mut is_current_folder = false;
 
         // Fetch the lib dirs
-        let lib_dirs: Vec<String> =
+        let lib_dirs: Vec<NuString> =
             if let Some(lib_dirs) = self.engine_state.get_env_var("NU_LIB_DIRS") {
                 lib_dirs
                     .as_list()
@@ -59,9 +59,9 @@ impl Completer for DotNuCompletion {
                         })
                     })
                     .map(|it| {
-                        it.into_os_string()
-                            .into_string()
+                        it.to_str()
                             .expect("internal error: failed to convert OS path")
+                            .into()
                     })
                     .collect()
             } else {

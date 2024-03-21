@@ -100,7 +100,7 @@ fn convert_nu_value_to_table_value(value: Value, config: &Config) -> TableValue 
             }
         }
         value => {
-            let mut text = value.to_abbreviated_string(config);
+            let mut text = String::from(value.to_abbreviated_string(config));
             if string_width(&text) > 50 {
                 text = string_wrap(&text, 30, false);
             }
@@ -114,7 +114,7 @@ fn build_vertical_map(record: Record, config: &Config) -> TableValue {
     let mut rows = Vec::with_capacity(record.len());
     for (key, value) in record {
         let val = convert_nu_value_to_table_value(value, config);
-        let row = TableValue::Row(vec![TableValue::Cell(key), val]);
+        let row = TableValue::Row(vec![TableValue::Cell(key.into()), val]);
         rows.push(row);
     }
 
@@ -212,7 +212,7 @@ fn build_map_from_record(vals: Vec<Value>, config: &Config) -> TableValue {
 
 fn get_columns_in_record(vals: &[Value]) -> Vec<String> {
     match vals.iter().next() {
-        Some(Value::Record { val, .. }) => val.columns().cloned().collect(),
+        Some(Value::Record { val, .. }) => val.columns().map(String::from).collect(),
         _ => vec![],
     }
 }

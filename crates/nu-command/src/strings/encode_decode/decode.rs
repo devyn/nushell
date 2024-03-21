@@ -60,7 +60,7 @@ documentation link at https://docs.rs/encoding_rs/latest/encoding_rs/#statics"#
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
-        let encoding: Option<Spanned<String>> = call.opt(engine_state, stack, 0)?;
+        let encoding: Option<Spanned<NuString>> = call.opt(engine_state, stack, 0)?;
 
         match input {
             PipelineData::ExternalStream { stdout: None, .. } => Ok(PipelineData::empty()),

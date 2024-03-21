@@ -119,7 +119,7 @@ fn get_table_columns(
             t.fields()
                 .into_iter()
                 .zip(t.columns())
-                .map(|(k, v)| (k, Value::string(v, span)))
+                .map(|(k, v)| (k.into(), Value::string(v, span)))
                 .collect(),
             span,
         ));
@@ -150,7 +150,7 @@ fn get_table_constraints(
                 .fields()
                 .into_iter()
                 .zip(constraint.columns())
-                .map(|(k, v)| (k, Value::string(v, span)))
+                .map(|(k, v)| (k.into(), Value::string(v, span)))
                 .collect(),
             span,
         ));
@@ -180,7 +180,7 @@ fn get_table_foreign_keys(
             fk.fields()
                 .into_iter()
                 .zip(fk.columns())
-                .map(|(k, v)| (k, Value::string(v, span)))
+                .map(|(k, v)| (k.into(), Value::string(v, span)))
                 .collect(),
             span,
         ));
@@ -211,7 +211,7 @@ fn get_table_indexes(
                 .fields()
                 .into_iter()
                 .zip(index.columns())
-                .map(|(k, v)| (k, Value::string(v, span)))
+                .map(|(k, v)| (k.into(), Value::string(v, span)))
                 .collect(),
             span,
         ));

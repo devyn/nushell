@@ -3,7 +3,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 use std::collections::HashSet;
@@ -146,7 +146,7 @@ fn drop_cols(
     }
 }
 
-fn drop_cols_set(val: &mut Value, head: Span, drop: usize) -> Result<HashSet<String>, ShellError> {
+fn drop_cols_set(val: &mut Value, head: Span, drop: usize) -> Result<HashSet<NuString>, ShellError> {
     if let Value::Record { val: record, .. } = val {
         let len = record.len().saturating_sub(drop);
         Ok(record.drain(len..).map(|(col, _)| col).collect())
@@ -158,7 +158,7 @@ fn drop_cols_set(val: &mut Value, head: Span, drop: usize) -> Result<HashSet<Str
 fn drop_record_cols(
     val: &mut Value,
     head: Span,
-    drop_cols: &HashSet<String>,
+    drop_cols: &HashSet<NuString>,
 ) -> Result<(), ShellError> {
     if let Value::Record { val, .. } = val {
         val.retain(|col, _| !drop_cols.contains(col));

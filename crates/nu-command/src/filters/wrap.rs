@@ -38,7 +38,7 @@ impl Command for Wrap {
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let span = call.head;
-        let name: String = call.req(engine_state, stack, 0)?;
+        let name: NuString = call.req(engine_state, stack, 0)?;
         let metadata = input.metadata();
 
         match input {

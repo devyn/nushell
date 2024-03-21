@@ -1,21 +1,21 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use nu_protocol::{IoStream, Span, Spanned};
+use nu_protocol::{IoStream, Span, Spanned, NuString};
 
 use crate::ExternalCommand;
 
 pub(crate) fn gen_command(
     span: Span,
     config_path: PathBuf,
-    item: String,
-    config_args: Vec<String>,
-    env_vars_str: HashMap<String, String>,
+    item: NuString,
+    config_args: Vec<NuString>,
+    env_vars_str: HashMap<NuString, NuString>,
 ) -> ExternalCommand {
     let name = Spanned { item, span };
 
     let mut args = vec![Spanned {
-        item: config_path.to_string_lossy().to_string(),
+        item: config_path.to_string_lossy().into(),
         span: Span::unknown(),
     }];
 

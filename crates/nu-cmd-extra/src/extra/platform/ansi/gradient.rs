@@ -106,7 +106,7 @@ fn value_to_color(v: Option<Value>) -> Result<Option<Rgb>, ShellError> {
         None => return Ok(None),
         Some(x) => x.coerce_into_string()?,
     };
-    Ok(Some(Rgb::from_hex_string(s)))
+    Ok(Some(Rgb::from_hex_string(s.into())))
 }
 
 fn operate(

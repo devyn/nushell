@@ -5,7 +5,7 @@ use nu_protocol::ast::{Call, CellPath, PathMember};
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Example, PipelineData, Record, ShellError, Signature, Span, SyntaxShape,
-    Type, Value,
+    Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -141,7 +141,7 @@ fn flatten(
 enum TableInside {
     // handle for a column which contains a single list(but not list of records)
     // it contains (column, span, values in the column, column index).
-    Entries(String, Vec<Value>, usize),
+    Entries(NuString, Vec<Value>, usize),
     // handle for a column which contains a table, we can flatten the inner column to outer level
     // `records` is the nested/inner table to flatten to the outer level
     // `parent_column_name` is handled for conflicting column name, the nested table may contains columns which has the same name
@@ -149,7 +149,7 @@ enum TableInside {
     // `parent_column_index` is the column index in original table.
     FlattenedRows {
         records: Vec<Record>,
-        parent_column_name: String,
+        parent_column_name: NuString,
         parent_column_index: usize,
     },
 }
@@ -159,7 +159,7 @@ fn flat_value(columns: &[CellPath], item: Value, all: bool) -> Vec<Value> {
 
     match item {
         Value::Record { val, .. } => {
-            let mut out = IndexMap::<String, Value>::new();
+            let mut out = IndexMap::<NuString, Value>::new();
             let mut inner_table = None;
 
             for (column_index, (column, value)) in val.into_iter().enumerate() {
@@ -172,13 +172,13 @@ fn flat_value(columns: &[CellPath], item: Value, all: bool) -> Vec<Value> {
                         if need_flatten {
                             for (col, val) in val {
                                 if out.contains_key(&col) {
-                                    out.insert(format!("{column}_{col}"), val);
+                                    out.insert(format!("{column}_{col}").into(), val);
                                 } else {
                                     out.insert(col, val);
                                 }
                             }
                         } else if out.contains_key(&column) {
-                            out.insert(format!("{column}_{column}"), Value::record(val, span));
+                            out.insert(format!("{column}_{column}").into(), Value::record(val, span));
                         } else {
                             out.insert(column, Value::record(val, span));
                         }
@@ -210,7 +210,7 @@ fn flat_value(columns: &[CellPath], item: Value, all: bool) -> Vec<Value> {
                                     parent_column_index: column_index,
                                 });
                             } else if out.contains_key(&column) {
-                                out.insert(format!("{column}_{column}"), Value::list(vals, span));
+                                out.insert(format!("{column}_{column}").into(), Value::list(vals, span));
                             } else {
                                 out.insert(column, Value::list(vals, span));
                             }

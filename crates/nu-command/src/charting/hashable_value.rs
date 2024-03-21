@@ -1,5 +1,5 @@
 use chrono::{DateTime, FixedOffset};
-use nu_protocol::{ShellError, Span, Value};
+use nu_protocol::{ShellError, Span, Value, NuString};
 use std::hash::{Hash, Hasher};
 
 /// A subset of [Value](crate::Value), which is hashable.
@@ -40,7 +40,7 @@ pub enum HashableValue {
         span: Span,
     },
     String {
-        val: String,
+        val: NuString,
         span: Span,
     },
     Binary {
@@ -216,9 +216,9 @@ mod test {
                 },
             ),
             (
-                Value::string("1".to_string(), span),
+                Value::string("1", span),
                 HashableValue::String {
-                    val: "1".to_string(),
+                    val: "1".into(),
                     span,
                 },
             ),

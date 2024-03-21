@@ -4,7 +4,7 @@ use nu_protocol::ast::{Block, Call};
 use nu_protocol::engine::{Closure, Command, EngineState, Stack};
 use nu_protocol::{
     record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    PipelineIterator, ShellError, Signature, Span, SyntaxShape, Type, Value,
+    PipelineIterator, ShellError, Signature, Span, SyntaxShape, Type, Value, NuString,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -112,12 +112,12 @@ impl Command for UpdateCells {
 
         // the columns to update
         let columns: Option<Value> = call.get_flag(&engine_state, &mut stack, "columns")?;
-        let columns: Option<HashSet<String>> = match columns {
+        let columns: Option<HashSet<NuString>> = match columns {
             Some(val) => Some(
                 val.into_list()?
                     .into_iter()
                     .map(Value::coerce_into_string)
-                    .collect::<Result<HashSet<String>, ShellError>>()?,
+                    .collect::<Result<HashSet<NuString>, ShellError>>()?,
             ),
             None => None,
         };
@@ -138,7 +138,7 @@ impl Command for UpdateCells {
 
 struct UpdateCellIterator {
     input: PipelineIterator,
-    columns: Option<HashSet<String>>,
+    columns: Option<HashSet<NuString>>,
     engine_state: EngineState,
     stack: Stack,
     block: Arc<Block>,

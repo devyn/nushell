@@ -121,7 +121,7 @@ fn operate(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let head = call.head;
-    let pattern: Spanned<String> = call.req(engine_state, stack, 0)?;
+    let pattern: Spanned<NuString> = call.req(engine_state, stack, 0)?;
     let regex: bool = call.has_flag(engine_state, stack, "regex")?;
     let ctrlc = engine_state.ctrlc.clone();
 

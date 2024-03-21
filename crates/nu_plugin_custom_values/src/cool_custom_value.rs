@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use nu_protocol::{ast, CustomValue, ShellError, Span, Value};
+use nu_protocol::{ast, CustomValue, ShellError, Span, Value, NuString};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -80,14 +80,14 @@ impl CustomValue for CoolCustomValue {
     fn follow_path_string(
         &self,
         self_span: Span,
-        column_name: String,
+        column_name: NuString,
         path_span: Span,
     ) -> Result<Value, ShellError> {
         if column_name == "cool" {
             Ok(Value::string(&self.cool, path_span))
         } else {
             Err(ShellError::CantFindColumn {
-                col_name: column_name,
+                col_name: column_name.into(),
                 span: path_span,
                 src_span: self_span,
             })

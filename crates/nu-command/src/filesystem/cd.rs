@@ -4,7 +4,7 @@ use nu_engine::{current_dir, CallExt};
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value,
+    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value, NuString,
 };
 use std::path::Path;
 
@@ -59,7 +59,7 @@ impl Command for Cd {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let path_val: Option<Spanned<String>> = call.opt(engine_state, stack, 0)?;
+        let path_val: Option<Spanned<NuString>> = call.opt(engine_state, stack, 0)?;
         let cwd = current_dir(engine_state, stack)?;
 
         let path_val = {

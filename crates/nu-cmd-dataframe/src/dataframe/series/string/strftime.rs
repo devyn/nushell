@@ -70,7 +70,7 @@ fn command(
     call: &Call,
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
-    let fmt: String = call.req(engine_state, stack, 0)?;
+    let fmt: NuString = call.req(engine_state, stack, 0)?;
 
     let df = NuDataFrame::try_from_pipeline(input, call.head)?;
     let series = df.as_series(call.head)?;

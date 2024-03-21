@@ -759,7 +759,7 @@ mod string {
         assert_eq!(pipeline.len(), 1);
         let element = &pipeline.elements[0];
         assert!(element.redirection.is_none());
-        assert_eq!(element.expr.expr, Expr::String("hello nushell".to_string()))
+        assert_eq!(element.expr.expr, Expr::String("hello nushell".into()))
     }
 
     mod interpolation {
@@ -791,7 +791,7 @@ mod string {
 
             assert_eq!(subexprs.len(), 2);
 
-            assert_eq!(subexprs[0], &Expr::String("hello ".to_string()));
+            assert_eq!(subexprs[0], &Expr::String("hello ".into()));
 
             assert!(matches!(subexprs[1], &Expr::FullCellPath(..)));
         }
@@ -820,7 +820,7 @@ mod string {
 
             assert_eq!(subexprs.len(), 1);
 
-            assert_eq!(subexprs[0], &Expr::String("hello (39 + 3)".to_string()));
+            assert_eq!(subexprs[0], &Expr::String("hello (39 + 3)".into()));
         }
 
         #[test]
@@ -847,7 +847,7 @@ mod string {
 
             assert_eq!(subexprs.len(), 2);
 
-            assert_eq!(subexprs[0], &Expr::String("hello \\".to_string()));
+            assert_eq!(subexprs[0], &Expr::String("hello \\".into()));
 
             assert!(matches!(subexprs[1], &Expr::FullCellPath(..)));
         }
@@ -875,7 +875,7 @@ mod string {
             };
 
             assert_eq!(subexprs.len(), 1);
-            assert_eq!(subexprs[0], &Expr::String("(1 + 3)(7 - 5)".to_string()));
+            assert_eq!(subexprs[0], &Expr::String("(1 + 3)(7 - 5)".into()));
         }
 
         #[test]

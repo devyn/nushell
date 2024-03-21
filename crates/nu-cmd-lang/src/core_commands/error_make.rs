@@ -173,10 +173,10 @@ fn make_other_error(value: &Value, throw_span: Option<Span>) -> ShellError {
         // correct return: no label
         None => {
             return ShellError::GenericError {
-                error: msg,
+                error: msg.into(),
                 msg: "originates from here".into(),
                 span: throw_span,
-                help,
+                help: help.map(String::from),
                 inner: vec![],
             }
         }
@@ -229,10 +229,10 @@ fn make_other_error(value: &Value, throw_span: Option<Span>) -> ShellError {
         // correct return: label, no span
         None => {
             return ShellError::GenericError {
-                error: msg,
-                msg: text,
+                error: msg.into(),
+                msg: text.into(),
                 span: throw_span,
-                help,
+                help: help.map(String::from),
                 inner: vec![],
             }
         }
@@ -259,10 +259,10 @@ fn make_other_error(value: &Value, throw_span: Option<Span>) -> ShellError {
 
     // correct return: everything present
     ShellError::GenericError {
-        error: msg,
-        msg: text,
+        error: msg.into(),
+        msg: text.into(),
         span: Some(Span::new(span_start as usize, span_end as usize)),
-        help,
+        help: help.map(String::from),
         inner: vec![],
     }
 }

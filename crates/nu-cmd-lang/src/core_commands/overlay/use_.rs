@@ -3,7 +3,7 @@ use nu_parser::trim_quotes_str;
 use nu_protocol::ast::{Call, Expr};
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value,
+    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value, NuString,
 };
 
 use std::path::Path;
@@ -63,8 +63,8 @@ impl Command for OverlayUse {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let mut name_arg: Spanned<String> = call.req(engine_state, caller_stack, 0)?;
-        name_arg.item = trim_quotes_str(&name_arg.item).to_string();
+        let mut name_arg: Spanned<NuString> = call.req(engine_state, caller_stack, 0)?;
+        name_arg.item = trim_quotes_str(&name_arg.item).into();
 
         let maybe_origin_module_id =
             if let Some(overlay_expr) = call.get_parser_info("overlay_expr") {
@@ -94,7 +94,7 @@ impl Command for OverlayUse {
             name_arg.item.clone()
         } else if let Some(os_str) = Path::new(&name_arg.item).file_stem() {
             if let Some(name) = os_str.to_str() {
-                name.to_string()
+                name.into()
             } else {
                 return Err(ShellError::NonUtf8 {
                     span: name_arg.span,
@@ -102,7 +102,7 @@ impl Command for OverlayUse {
             }
         } else {
             return Err(ShellError::OverlayNotFoundAtRuntime {
-                overlay_name: name_arg.item,
+                overlay_name: name_arg.item.into(),
                 span: name_arg.span,
             });
         };
@@ -135,12 +135,12 @@ impl Command for OverlayUse {
 
                     let file_pwd = Value::string(parent.to_string_lossy(), call.head);
 
-                    callee_stack.add_env_var("FILE_PWD".to_string(), file_pwd);
+                    callee_stack.add_env_var("FILE_PWD".into(), file_pwd);
                 }
 
                 if let Some(file_path) = &maybe_path {
                     let file_path = Value::string(file_path.to_string_lossy(), call.head);
-                    callee_stack.add_env_var("CURRENT_FILE".to_string(), file_path);
+                    callee_stack.add_env_var("CURRENT_FILE".into(), file_path);
                 }
 
                 let eval_block = get_eval_block(engine_state);

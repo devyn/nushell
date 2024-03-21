@@ -75,7 +75,7 @@ pub fn get_brief_subcommand_help() -> String {
     }
 
     help.push_str(&get_flags_section(None, &sigs[0].sig, |v| {
-        format!("{:#?}", v)
+        format!("{:#?}", v).into()
     }));
     help
 }

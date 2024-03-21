@@ -1,7 +1,7 @@
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, PipelineData, ShellError, Signature, Span, Type, Value,
+    record, Category, Example, PipelineData, ShellError, Signature, Span, Type, Value, NuString,
 };
 
 #[derive(Clone)]
@@ -50,7 +50,7 @@ impl Command for FromUrl {
 fn from_url(input: PipelineData, head: Span) -> Result<PipelineData, ShellError> {
     let (concat_string, span, metadata) = input.collect_string_strict(head)?;
 
-    let result = serde_urlencoded::from_str::<Vec<(String, String)>>(&concat_string);
+    let result = serde_urlencoded::from_str::<Vec<(NuString, NuString)>>(&concat_string);
 
     match result {
         Ok(result) => {

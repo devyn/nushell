@@ -1,14 +1,14 @@
 use nu_color_config::{Alignment, StyleComputer, TextStyle};
-use nu_protocol::{Config, FooterMode, ShellError, Span, Value, NuString};
+use nu_protocol::{Config, FooterMode, ShellError, Span, Value};
 use nu_protocol::{TableMode, TrimStrategy};
 
 use crate::{
     clean_charset, colorize_space_str, string_wrap, NuTableConfig, TableOutput, TableTheme,
 };
 
-pub type NuText = (NuString, TextStyle);
+pub type NuText = (String, TextStyle);
 pub type TableResult = Result<Option<TableOutput>, ShellError>;
-pub type StringResult = Result<Option<NuString>, ShellError>;
+pub type StringResult = Result<Option<String>, ShellError>;
 
 pub const INDEX_COLUMN_NAME: &str = "index";
 
@@ -31,14 +31,14 @@ pub fn create_nu_table_config(
     }
 }
 
-pub fn nu_value_to_string_colored(val: &Value, cfg: &Config, style: &StyleComputer) -> NuString {
+pub fn nu_value_to_string_colored(val: &Value, cfg: &Config, style: &StyleComputer) -> String {
     let (mut text, value_style) = nu_value_to_string(val, cfg, style);
     if let Some(color) = value_style.color_style {
-        text = color.paint(text).to_string().into();
+        text = color.paint(text).to_string();
     }
 
     if matches!(val, Value::String { .. }) {
-        text = clean_charset(&text).into();
+        text = clean_charset(&text);
         colorize_space_str(&mut text, style);
     }
 
@@ -47,7 +47,7 @@ pub fn nu_value_to_string_colored(val: &Value, cfg: &Config, style: &StyleComput
 
 pub fn nu_value_to_string(val: &Value, cfg: &Config, style: &StyleComputer) -> NuText {
     let float_precision = cfg.float_precision as usize;
-    let text = val.to_abbreviated_string(cfg);
+    let text = val.to_abbreviated_string(cfg).into();
     make_styled_string(style, text, Some(val), float_precision)
 }
 
@@ -59,8 +59,8 @@ pub fn nu_value_to_string_clean(val: &Value, cfg: &Config, style_comp: &StyleCom
     (text, style)
 }
 
-pub fn error_sign(style_computer: &StyleComputer) -> (NuString, TextStyle) {
-    make_styled_string(style_computer, NuString::from("❎"), None, 0)
+pub fn error_sign(style_computer: &StyleComputer) -> (String, TextStyle) {
+    make_styled_string(style_computer, String::from("❎"), None, 0)
 }
 
 pub fn wrap_text(text: &str, width: usize, config: &Config) -> String {
@@ -99,7 +99,7 @@ pub fn get_value_style(value: &Value, config: &Config, style_computer: &StyleCom
             style_computer.style_primitive(value),
         ),
         _ => (
-            value.to_abbreviated_string(config),
+            value.to_abbreviated_string(config).into(),
             style_computer.style_primitive(value),
         ),
     }
@@ -117,7 +117,7 @@ pub fn get_empty_style(style_computer: &StyleComputer) -> NuText {
 
 fn make_styled_string(
     style_computer: &StyleComputer,
-    text: NuString,
+    text: String,
     value: Option<&Value>, // None represents table holes.
     float_precision: usize,
 ) -> NuText {

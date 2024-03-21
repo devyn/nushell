@@ -1,7 +1,7 @@
 use nu_protocol::{Value, NuString};
 use std::collections::HashSet;
 
-pub fn get_columns(input: &[Value]) -> Vec<NuString> {
+pub fn get_columns<'a, T>(input: &'a [Value]) -> Vec<T> where T: From<&'a NuString> + AsRef<str> {
     let mut columns = vec![];
     for item in input {
         let Value::Record { val, .. } = item else {
@@ -9,7 +9,7 @@ pub fn get_columns(input: &[Value]) -> Vec<NuString> {
         };
 
         for col in val.columns() {
-            if !columns.contains(col) {
+            if !columns.iter().any(|c: &T| col.as_str() == c.as_ref()) {
                 columns.push(col.into());
             }
         }

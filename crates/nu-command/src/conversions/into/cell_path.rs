@@ -66,8 +66,8 @@ impl Command for IntoCellPath {
                 example: "'some.path' | split row '.' | into cell-path",
                 result: Some(Value::test_cell_path(CellPath {
                     members: vec![
-                        PathMember::test_string("some".into(), false),
-                        PathMember::test_string("path".into(), false),
+                        PathMember::test_string("some", false),
+                        PathMember::test_string("path", false),
                     ],
                 })),
             },
@@ -77,9 +77,9 @@ impl Command for IntoCellPath {
                 result: Some(Value::test_cell_path(CellPath {
                     members: vec![
                         PathMember::test_int(5, false),
-                        PathMember::test_string("c".into(), false),
+                        PathMember::test_string("c", false),
                         PathMember::test_int(7, false),
-                        PathMember::test_string("h".into(), false),
+                        PathMember::test_string("h", false),
                     ],
                 })),
             },
@@ -89,7 +89,7 @@ impl Command for IntoCellPath {
                 result: Some(Value::test_cell_path(CellPath {
                     members: vec![
                         PathMember::test_int(5, true),
-                        PathMember::test_string("c".into(), false),
+                        PathMember::test_string("c", false),
                     ],
                 })),
             },
@@ -197,7 +197,7 @@ fn value_to_path_member(val: &Value, span: Span) -> Result<PathMember, ShellErro
         Value::String {
             val,
             internal_span: span,
-        } => PathMember::string(val.into(), false, *span),
+        } => PathMember::string(val, false, *span),
         Value::Record { val, internal_span } => record_to_path_member(val, *internal_span, span)?,
         other => {
             return Err(ShellError::CantConvert {

@@ -133,7 +133,7 @@ fn command(
     call: &Call,
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
-    let format: String = call.req(engine_state, stack, 0)?;
+    let format: NuString = call.req(engine_state, stack, 0)?;
     let not_exact = call.has_flag(engine_state, stack, "not-exact")?;
 
     let df = NuDataFrame::try_from_pipeline(input, call.head)?;

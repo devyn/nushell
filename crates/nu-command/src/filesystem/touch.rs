@@ -7,7 +7,7 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type,
+    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, NuString,
 };
 
 #[derive(Clone)]
@@ -63,7 +63,7 @@ impl Command for Touch {
     ) -> Result<PipelineData, ShellError> {
         let mut change_mtime: bool = call.has_flag(engine_state, stack, "modified")?;
         let mut change_atime: bool = call.has_flag(engine_state, stack, "access")?;
-        let reference: Option<Spanned<String>> = call.get_flag(engine_state, stack, "reference")?;
+        let reference: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "reference")?;
         let no_create: bool = call.has_flag(engine_state, stack, "no-create")?;
         let files: Vec<String> = call.rest(engine_state, stack, 0)?;
 

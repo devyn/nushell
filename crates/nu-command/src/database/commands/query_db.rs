@@ -3,7 +3,7 @@ use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
     Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Spanned, SyntaxShape,
-    Type,
+    Type, NuString,
 };
 
 use super::super::SQLiteDatabase;
@@ -50,7 +50,7 @@ impl Command for QueryDb {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let sql: Spanned<String> = call.req(engine_state, stack, 0)?;
+        let sql: Spanned<NuString> = call.req(engine_state, stack, 0)?;
 
         let db = SQLiteDatabase::try_from_pipeline(input, call.head)?;
         db.query(&sql, call.head)

@@ -1,6 +1,6 @@
 use git2::{Branch, BranchType, DescribeOptions, Repository};
 use nu_plugin::LabeledError;
-use nu_protocol::{record, IntoSpanned, Span, Spanned, Value};
+use nu_protocol::{record, IntoSpanned, Span, Spanned, Value, NuString};
 use std::fmt::Write;
 use std::ops::BitAnd;
 use std::path::Path;
@@ -27,7 +27,7 @@ impl GStat {
         &self,
         value: &Value,
         current_dir: &str,
-        path: Option<Spanned<String>>,
+        path: Option<Spanned<NuString>>,
         span: Span,
     ) -> Result<Value, LabeledError> {
         // use std::any::Any;
@@ -41,7 +41,7 @@ impl GStat {
                 if !value.is_nothing() {
                     value.coerce_string()?.into_spanned(value.span())
                 } else {
-                    String::from(".").into_spanned(span)
+                    NuString::from(".").into_spanned(span)
                 }
             }
         };

@@ -83,7 +83,7 @@ impl Command for Mktemp {
             .first()
             .cloned()
             .map(|i: Spanned<String>| i.item)
-            .unwrap_or("tmp.XXXXXXXXXX".to_string()); // same as default in coreutils
+            .unwrap_or_else(|| "tmp.XXXXXXXXXX".into()); // same as default in coreutils
         let directory = call.has_flag(engine_state, stack, "directory")?;
         let suffix = call.get_flag(engine_state, stack, "suffix")?;
         let tmpdir = call.has_flag(engine_state, stack, "tmpdir")?;
