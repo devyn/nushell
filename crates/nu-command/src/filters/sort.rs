@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    Record, ShellError, Signature, Span, Type, Value,
+    record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, NuString,
+    PipelineData, Record, ShellError, Signature, Span, Type, Value,
 };
 use nu_utils::IgnoreCaseExt;
 use std::cmp::Ordering;
@@ -186,7 +186,7 @@ fn sort_record(
     insensitive: bool,
     natural: bool,
 ) -> Value {
-    let mut input_pairs: Vec<(String, Value)> = record.into_iter().collect();
+    let mut input_pairs: Vec<(NuString, Value)> = record.into_iter().collect();
     input_pairs.sort_by(|a, b| {
         // Extract the data (if sort_by_value) or the column names for comparison
         let left_res = if sort_by_value {
@@ -224,12 +224,12 @@ fn sort_record(
 
         // Fold case if case-insensitive
         let left = if insensitive {
-            left_res.to_folded_case()
+            left_res.to_folded_case().into()
         } else {
             left_res
         };
         let right = if insensitive {
-            right_res.to_folded_case()
+            right_res.to_folded_case().into()
         } else {
             right_res
         };
@@ -256,7 +256,7 @@ pub fn sort(
 ) -> Result<(), ShellError> {
     match vec.first() {
         Some(Value::Record { val, .. }) => {
-            let columns: Vec<String> = val.columns().cloned().collect();
+            let columns: Vec<NuString> = val.columns().cloned().collect();
             vec.sort_by(|a, b| process(a, b, &columns, span, insensitive, natural));
         }
         _ => {
@@ -304,7 +304,7 @@ pub fn sort(
 pub fn process(
     left: &Value,
     right: &Value,
-    columns: &[String],
+    columns: &[NuString],
     span: Span,
     insensitive: bool,
     natural: bool,

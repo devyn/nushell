@@ -3,15 +3,15 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoInterruptiblePipelineData, PipelineData, Record, ShellError,
-    Signature, Spanned, SyntaxShape, Type, Value,
+    record, Category, Example, IntoInterruptiblePipelineData, NuString, PipelineData, Record,
+    ShellError, Signature, Spanned, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
 pub struct Transpose;
 
 pub struct TransposeArgs {
-    rest: Vec<Spanned<String>>,
+    rest: Vec<Spanned<NuString>>,
     header_row: bool,
     ignore_titles: bool,
     as_record: bool,
@@ -184,9 +184,9 @@ pub fn transpose(
     let metadata = input.metadata();
     let input: Vec<_> = input.into_iter().collect();
 
-    let descs = get_columns(&input);
+    let descs: Vec<NuString> = get_columns(&input);
 
-    let mut headers: Vec<String> = Vec::with_capacity(input.len());
+    let mut headers: Vec<NuString> = Vec::with_capacity(input.len());
 
     if args.header_row {
         for i in input.iter() {
@@ -230,7 +230,7 @@ pub fn transpose(
             if let Some(name) = args.rest.get(i) {
                 headers.push(name.item.clone())
             } else {
-                headers.push(format!("column{i}"));
+                headers.push(format!("column{i}").into());
             }
         }
     }

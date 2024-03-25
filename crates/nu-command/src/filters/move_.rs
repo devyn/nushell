@@ -2,8 +2,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    Record, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, NuString,
+    PipelineData, Record, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone, Debug)]
@@ -177,7 +177,7 @@ impl Command for Move {
                 )
             }
             _ => Err(ShellError::PipelineMismatch {
-                exp_input_type: "record or table".to_string(),
+                exp_input_type: "record or table".into(),
                 dst_span: call.head,
                 src_span: Span::new(call.head.start, call.head.start),
             }),
@@ -228,9 +228,9 @@ fn move_record_columns(
         // check if column is also pivot
         if &column_as_string == pivot {
             return Err(ShellError::IncompatibleParameters {
-                left_message: "Column cannot be moved".to_string(),
+                left_message: "Column cannot be moved".into(),
                 left_span: column.span(),
-                right_message: "relative to itself".to_string(),
+                right_message: "relative to itself".into(),
                 right_span: before_or_after.span,
             });
         }
@@ -249,8 +249,8 @@ fn move_record_columns(
                     out.push(col.clone(), val.clone());
                 } else {
                     return Err(ShellError::NushellFailedSpanned {
-                        msg: "Error indexing input columns".to_string(),
-                        label: "originates from here".to_string(),
+                        msg: "Error indexing input columns".into(),
+                        label: "originates from here".into(),
                         span,
                     });
                 }
@@ -275,8 +275,8 @@ mod test {
     fn get_test_record(columns: Vec<&str>, values: Vec<i64>) -> Record {
         let test_span = Span::test_data();
         Record::from_raw_cols_vals(
-            columns.iter().map(|col| col.to_string()).collect(),
-            values.iter().map(|val| Value::test_int(*val)).collect(),
+            columns.into_iter().map(NuString::from).collect(),
+            values.into_iter().map(Value::test_int).collect(),
             test_span,
             test_span,
         )
@@ -295,7 +295,7 @@ mod test {
         let test_span = Span::test_data();
         let test_record = get_test_record(vec!["a", "b", "c", "d"], vec![1, 2, 3, 4]);
         let after: Spanned<BeforeOrAfter> = Spanned {
-            item: BeforeOrAfter::After("c".to_string()),
+            item: BeforeOrAfter::After("c".into()),
             span: test_span,
         };
         let columns = [Value::test_string("a")];
@@ -308,10 +308,10 @@ mod test {
         let result_rec_tmp = result.unwrap();
         let result_record = result_rec_tmp.as_record().unwrap();
 
-        assert_eq!(*result_record.get_index(0).unwrap().0, "b".to_string());
-        assert_eq!(*result_record.get_index(1).unwrap().0, "c".to_string());
-        assert_eq!(*result_record.get_index(2).unwrap().0, "a".to_string());
-        assert_eq!(*result_record.get_index(3).unwrap().0, "d".to_string());
+        assert_eq!(*result_record.get_index(0).unwrap().0, "b");
+        assert_eq!(*result_record.get_index(1).unwrap().0, "c");
+        assert_eq!(*result_record.get_index(2).unwrap().0, "a");
+        assert_eq!(*result_record.get_index(3).unwrap().0, "d");
     }
 
     #[test]
@@ -319,7 +319,7 @@ mod test {
         let test_span = Span::test_data();
         let test_record = get_test_record(vec!["a", "b", "c", "d", "e"], vec![1, 2, 3, 4, 5]);
         let after: Spanned<BeforeOrAfter> = Spanned {
-            item: BeforeOrAfter::After("c".to_string()),
+            item: BeforeOrAfter::After("c".into()),
             span: test_span,
         };
         let columns = [Value::test_string("b"), Value::test_string("e")];
@@ -332,11 +332,11 @@ mod test {
         let result_rec_tmp = result.unwrap();
         let result_record = result_rec_tmp.as_record().unwrap();
 
-        assert_eq!(*result_record.get_index(0).unwrap().0, "a".to_string());
-        assert_eq!(*result_record.get_index(1).unwrap().0, "c".to_string());
-        assert_eq!(*result_record.get_index(2).unwrap().0, "b".to_string());
-        assert_eq!(*result_record.get_index(3).unwrap().0, "e".to_string());
-        assert_eq!(*result_record.get_index(4).unwrap().0, "d".to_string());
+        assert_eq!(*result_record.get_index(0).unwrap().0, "a");
+        assert_eq!(*result_record.get_index(1).unwrap().0, "c");
+        assert_eq!(*result_record.get_index(2).unwrap().0, "b");
+        assert_eq!(*result_record.get_index(3).unwrap().0, "e");
+        assert_eq!(*result_record.get_index(4).unwrap().0, "d");
     }
 
     #[test]
@@ -344,7 +344,7 @@ mod test {
         let test_span = Span::test_data();
         let test_record = get_test_record(vec!["a", "b", "c", "d"], vec![1, 2, 3, 4]);
         let after: Spanned<BeforeOrAfter> = Spanned {
-            item: BeforeOrAfter::Before("b".to_string()),
+            item: BeforeOrAfter::Before("b".into()),
             span: test_span,
         };
         let columns = [Value::test_string("d")];
@@ -357,10 +357,10 @@ mod test {
         let result_rec_tmp = result.unwrap();
         let result_record = result_rec_tmp.as_record().unwrap();
 
-        assert_eq!(*result_record.get_index(0).unwrap().0, "a".to_string());
-        assert_eq!(*result_record.get_index(1).unwrap().0, "d".to_string());
-        assert_eq!(*result_record.get_index(2).unwrap().0, "b".to_string());
-        assert_eq!(*result_record.get_index(3).unwrap().0, "c".to_string());
+        assert_eq!(*result_record.get_index(0).unwrap().0, "a");
+        assert_eq!(*result_record.get_index(1).unwrap().0, "d");
+        assert_eq!(*result_record.get_index(2).unwrap().0, "b");
+        assert_eq!(*result_record.get_index(3).unwrap().0, "c");
     }
 
     #[test]
@@ -368,7 +368,7 @@ mod test {
         let test_span = Span::test_data();
         let test_record = get_test_record(vec!["a", "b", "c", "d", "e"], vec![1, 2, 3, 4, 5]);
         let after: Spanned<BeforeOrAfter> = Spanned {
-            item: BeforeOrAfter::Before("b".to_string()),
+            item: BeforeOrAfter::Before("b".into()),
             span: test_span,
         };
         let columns = [Value::test_string("c"), Value::test_string("e")];
@@ -381,11 +381,11 @@ mod test {
         let result_rec_tmp = result.unwrap();
         let result_record = result_rec_tmp.as_record().unwrap();
 
-        assert_eq!(*result_record.get_index(0).unwrap().0, "a".to_string());
-        assert_eq!(*result_record.get_index(1).unwrap().0, "c".to_string());
-        assert_eq!(*result_record.get_index(2).unwrap().0, "e".to_string());
-        assert_eq!(*result_record.get_index(3).unwrap().0, "b".to_string());
-        assert_eq!(*result_record.get_index(4).unwrap().0, "d".to_string());
+        assert_eq!(*result_record.get_index(0).unwrap().0, "a");
+        assert_eq!(*result_record.get_index(1).unwrap().0, "c");
+        assert_eq!(*result_record.get_index(2).unwrap().0, "e");
+        assert_eq!(*result_record.get_index(3).unwrap().0, "b");
+        assert_eq!(*result_record.get_index(4).unwrap().0, "d");
     }
 
     #[test]
@@ -393,7 +393,7 @@ mod test {
         let test_span = Span::test_data();
         let test_record = get_test_record(vec!["a", "b", "c", "d", "e"], vec![1, 2, 3, 4, 5]);
         let after: Spanned<BeforeOrAfter> = Spanned {
-            item: BeforeOrAfter::After("e".to_string()),
+            item: BeforeOrAfter::After("e".into()),
             span: test_span,
         };
         let columns = [
@@ -410,11 +410,11 @@ mod test {
         let result_rec_tmp = result.unwrap();
         let result_record = result_rec_tmp.as_record().unwrap();
 
-        assert_eq!(*result_record.get_index(0).unwrap().0, "b".to_string());
-        assert_eq!(*result_record.get_index(1).unwrap().0, "e".to_string());
-        assert_eq!(*result_record.get_index(2).unwrap().0, "d".to_string());
-        assert_eq!(*result_record.get_index(3).unwrap().0, "c".to_string());
-        assert_eq!(*result_record.get_index(4).unwrap().0, "a".to_string());
+        assert_eq!(*result_record.get_index(0).unwrap().0, "b");
+        assert_eq!(*result_record.get_index(1).unwrap().0, "e");
+        assert_eq!(*result_record.get_index(2).unwrap().0, "d");
+        assert_eq!(*result_record.get_index(3).unwrap().0, "c");
+        assert_eq!(*result_record.get_index(4).unwrap().0, "a");
     }
 
     #[test]
@@ -422,7 +422,7 @@ mod test {
         let test_span = Span::test_data();
         let test_record = get_test_record(vec!["a", "b"], vec![1, 2]);
         let after: Spanned<BeforeOrAfter> = Spanned {
-            item: BeforeOrAfter::Before("non-existent".to_string()),
+            item: BeforeOrAfter::Before("non-existent".into()),
             span: test_span,
         };
         let columns = [Value::test_string("a")];
@@ -437,7 +437,7 @@ mod test {
         let test_span = Span::test_data();
         let test_record = get_test_record(vec!["a", "b"], vec![1, 2]);
         let after: Spanned<BeforeOrAfter> = Spanned {
-            item: BeforeOrAfter::Before("b".to_string()),
+            item: BeforeOrAfter::Before("b".into()),
             span: test_span,
         };
         let columns = [Value::test_string("a"), Value::test_string("non-existent")];
@@ -452,7 +452,7 @@ mod test {
         let test_span = Span::test_data();
         let test_record = get_test_record(vec!["a", "b", "c", "d"], vec![1, 2, 3, 4]);
         let after: Spanned<BeforeOrAfter> = Spanned {
-            item: BeforeOrAfter::After("b".to_string()),
+            item: BeforeOrAfter::After("b".into()),
             span: test_span,
         };
         let columns = [Value::test_string("b"), Value::test_string("d")];

@@ -1,8 +1,8 @@
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Config, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span,
-    Type, Value, NuString,
+    record, Category, Config, Example, IntoPipelineData, NuString, PipelineData, ShellError,
+    Signature, Span, Type, Value,
 };
 
 #[derive(Clone)]
@@ -89,7 +89,7 @@ fn extract_headers(
     table: &[Value],
     span: Span,
     config: &Config,
-) -> Result<(Vec<String>, Vec<String>), ShellError> {
+) -> Result<(Vec<NuString>, Vec<NuString>), ShellError> {
     table
         .first()
         .ok_or_else(|| ShellError::GenericError {

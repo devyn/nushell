@@ -572,7 +572,7 @@ fn handle_row_stream(
                 )?),
                 None => None,
             };
-            let ls_colors = get_ls_colors(ls_colors_env_str);
+            let ls_colors = get_ls_colors(&ls_colors_env_str);
 
             ListStream::from_stream(
                 stream.map(move |mut x| match &mut x {

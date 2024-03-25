@@ -1,7 +1,10 @@
-use nu_protocol::{Value, NuString};
-use std::collections::HashSet;
+use nu_protocol::{NuString, Value};
+use std::{borrow::Borrow, collections::HashSet, hash::Hash};
 
-pub fn get_columns<'a, T>(input: &'a [Value]) -> Vec<T> where T: From<&'a NuString> + AsRef<str> {
+pub fn get_columns<'a, T>(input: &'a [Value]) -> Vec<T>
+where
+    T: From<&'a NuString> + AsRef<str>,
+{
     let mut columns = vec![];
     for item in input {
         let Value::Record { val, .. } = item else {
@@ -19,14 +22,16 @@ pub fn get_columns<'a, T>(input: &'a [Value]) -> Vec<T> where T: From<&'a NuStri
 }
 
 // If a column doesn't exist in the input, return it.
-pub fn nonexistent_column<'a, I>(inputs: &[String], columns: I) -> Option<String>
+pub fn nonexistent_column<I, S>(inputs: &[NuString], columns: I) -> Option<NuString>
 where
-    I: IntoIterator<Item = &'a String>,
+    I: IntoIterator<Item = S>,
+    NuString: Borrow<S>,
+    S: Hash + Eq,
 {
-    let set: HashSet<&String> = HashSet::from_iter(columns);
+    let set: HashSet<S> = HashSet::from_iter(columns);
 
     for input in inputs {
-        if set.contains(input) {
+        if set.contains(input.borrow()) {
             continue;
         }
         return Some(input.clone());
