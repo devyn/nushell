@@ -144,7 +144,7 @@ fn split_column(
 fn split_column_helper(
     v: &Value,
     separator: &Regex,
-    rest: &[Spanned<String>],
+    rest: &[Spanned<NuString>],
     collapse_empty: bool,
     head: Span,
 ) -> Vec<Value> {

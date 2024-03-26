@@ -5,8 +5,8 @@ use base64::{alphabet, Engine};
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{EngineState, Stack};
 use nu_protocol::{
-    record, BufferedReader, IntoPipelineData, PipelineData, RawStream, ShellError, Span, Spanned,
-    Value,
+    record, BufferedReader, IntoPipelineData, NuString, PipelineData, RawStream, ShellError, Span,
+    Spanned, Value,
 };
 use ureq::{Error, ErrorKind, Request, Response};
 
@@ -72,7 +72,7 @@ pub fn http_parse_url(
     call: &Call,
     span: Span,
     raw_url: Value,
-) -> Result<(String, Url), ShellError> {
+) -> Result<(NuString, Url), ShellError> {
     let requested_url = raw_url.coerce_into_string()?;
     let url = match url::Url::parse(&requested_url) {
         Ok(u) => u,
@@ -219,7 +219,7 @@ pub fn send_request(
             send_cancellable_request(&request_url, Box::new(|| request.send_json(data)), ctrl_c)
         }
         Value::Record { val, .. } if body_type == BodyType::Form => {
-            let mut data: Vec<(String, String)> = Vec::with_capacity(val.len());
+            let mut data: Vec<(NuString, NuString)> = Vec::with_capacity(val.len());
 
             for (col, val) in val {
                 data.push((col, val.coerce_into_string()?))
@@ -245,7 +245,7 @@ pub fn send_request(
             let data = vals
                 .chunks(2)
                 .map(|it| Ok((it[0].coerce_string()?, it[1].coerce_string()?)))
-                .collect::<Result<Vec<(String, String)>, ShellErrorOrRequestError>>()?;
+                .collect::<Result<Vec<(NuString, NuString)>, ShellErrorOrRequestError>>()?;
 
             let request_fn = move || {
                 // coerce `data` into a shape that send_form() is happy with
@@ -331,12 +331,12 @@ pub fn request_add_custom_headers(
     mut request: Request,
 ) -> Result<Request, ShellError> {
     if let Some(headers) = headers {
-        let mut custom_headers: HashMap<String, Value> = HashMap::new();
+        let mut custom_headers: HashMap<NuString, Value> = HashMap::new();
 
         match &headers {
             Value::Record { val, .. } => {
                 for (k, v) in val {
-                    custom_headers.insert(k.to_string(), v.clone());
+                    custom_headers.insert(k.clone(), v.clone());
                 }
             }
 
@@ -346,7 +346,7 @@ pub fn request_add_custom_headers(
                     match &table[0] {
                         Value::Record { val, .. } => {
                             for (k, v) in val {
-                                custom_headers.insert(k.to_string(), v.clone());
+                                custom_headers.insert(k.clone(), v.clone());
                             }
                         }
 
@@ -681,7 +681,7 @@ pub fn request_handle_response_headers(
     }
 }
 
-fn retrieve_http_proxy_from_env(engine_state: &EngineState, stack: &mut Stack) -> Option<String> {
+fn retrieve_http_proxy_from_env(engine_state: &EngineState, stack: &mut Stack) -> Option<NuString> {
     stack
         .get_env_var(engine_state, "http_proxy")
         .or(stack.get_env_var(engine_state, "HTTP_PROXY"))

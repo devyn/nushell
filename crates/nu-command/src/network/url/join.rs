@@ -1,7 +1,8 @@
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, Type, Value,
+    Category, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature, Span, Type,
+    Value,
 };
 
 #[derive(Clone)]
@@ -98,7 +99,7 @@ impl Command for SubCommand {
                         let url_components = val
                             .into_iter()
                             .try_fold(UrlComponents::new(), |url, (k, v)| {
-                                url.add_component(k, v, span, engine_state)
+                                url.add_component(k.into(), v, span, engine_state)
                             });
 
                         url_components?.to_url(span)
@@ -120,14 +121,14 @@ impl Command for SubCommand {
 
 #[derive(Default)]
 struct UrlComponents {
-    scheme: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
-    host: Option<String>,
+    scheme: Option<NuString>,
+    username: Option<NuString>,
+    password: Option<NuString>,
+    host: Option<NuString>,
     port: Option<i64>,
-    path: Option<String>,
-    query: Option<String>,
-    fragment: Option<String>,
+    path: Option<NuString>,
+    query: Option<NuString>,
+    fragment: Option<NuString>,
     query_span: Option<Span>,
     params_span: Option<Span>,
 }
@@ -210,7 +211,7 @@ impl UrlComponents {
                     }
 
                     Ok(Self {
-                        query: Some(qs),
+                        query: Some(qs.into()),
                         params_span: Some(value_span),
                         ..self
                     })
@@ -249,7 +250,7 @@ impl UrlComponents {
                 path: Some(if s.starts_with('/') {
                     s
                 } else {
-                    format!("/{s}")
+                    format!("/{s}").into()
                 }),
                 ..self
             }),
@@ -267,7 +268,7 @@ impl UrlComponents {
                 }
 
                 Ok(Self {
-                    query: Some(format!("?{s}")),
+                    query: Some(format!("?{s}").into()),
                     query_span: Some(value_span),
                     ..self
                 })
@@ -276,7 +277,7 @@ impl UrlComponents {
                 fragment: Some(if s.starts_with('#') {
                     s
                 } else {
-                    format!("#{s}")
+                    format!("#{s}").into()
                 }),
                 ..self
             }),

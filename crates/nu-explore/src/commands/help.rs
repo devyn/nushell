@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::{self, Result};
 
 use crossterm::event::KeyEvent;
+use nu_protocol::NuString;
 use nu_protocol::{
     engine::{EngineState, Stack},
     record, Value,
@@ -173,7 +174,7 @@ fn help_frame_data(
     collect_input(commands)
 }
 
-fn help_manual_data(manual: &HelpManual, aliases: &[String]) -> (Vec<String>, Vec<Vec<Value>>) {
+fn help_manual_data(manual: &HelpManual, aliases: &[String]) -> (Vec<NuString>, Vec<Vec<Value>>) {
     fn nu_str(s: &impl ToString) -> Value {
         Value::string(s.to_string(), NuSpan::unknown())
     }
@@ -262,13 +263,13 @@ fn help_manual_data(manual: &HelpManual, aliases: &[String]) -> (Vec<String>, Ve
     let desc = nu_str(&manual.description);
 
     let headers = vec![
-        String::from("name"),
-        String::from("aliases"),
-        String::from("arguments"),
-        String::from("input"),
-        String::from("examples"),
-        String::from("configuration"),
-        String::from("description"),
+        NuString::from("name"),
+        NuString::from("aliases"),
+        NuString::from("arguments"),
+        NuString::from("input"),
+        NuString::from("examples"),
+        NuString::from("configuration"),
+        NuString::from("description"),
     ];
 
     let data = vec![vec![

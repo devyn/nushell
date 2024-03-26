@@ -2,7 +2,8 @@ use super::url;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Value,
+    record, Category, Example, NuString, PipelineData, ShellError, Signature, Span, SyntaxShape,
+    ToNuString, Type, Value,
 };
 
 use url::Url;
@@ -74,7 +75,7 @@ impl Command for SubCommand {
     }
 }
 
-fn get_url_string(value: &Value, engine_state: &EngineState) -> String {
+fn get_url_string(value: &Value, engine_state: &EngineState) -> NuString {
     value.to_expanded_string("", engine_state.get_config())
 }
 
@@ -89,7 +90,7 @@ fn parse(value: Value, head: Span, engine_state: &EngineState) -> Result<Pipelin
     match result_url {
         Ok(url) => {
             let params =
-                serde_urlencoded::from_str::<Vec<(String, String)>>(url.query().unwrap_or(""));
+                serde_urlencoded::from_str::<Vec<(NuString, NuString)>>(url.query().unwrap_or(""));
             match params {
                 Ok(result) => {
                     let params = result
@@ -97,7 +98,7 @@ fn parse(value: Value, head: Span, engine_state: &EngineState) -> Result<Pipelin
                         .map(|(k, v)| (k, Value::string(v, head)))
                         .collect();
 
-                    let port = url.port().map(|p| p.to_string()).unwrap_or_default();
+                    let port = url.port().map(|p| p.to_nu_string()).unwrap_or_default();
 
                     let record = record! {
                         "scheme" => Value::string(url.scheme(), head),

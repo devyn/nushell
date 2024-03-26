@@ -721,7 +721,12 @@ Operating system commands:
     }
 }
 
-fn heavy_lifting(code: Value, escape: bool, osc: bool, call: &Call) -> Result<String, ShellError> {
+fn heavy_lifting(
+    code: Value,
+    escape: bool,
+    osc: bool,
+    call: &Call,
+) -> Result<NuString, ShellError> {
     let param_is_string = matches!(code, Value::String { .. });
     if escape && osc {
         return Err(ShellError::IncompatibleParameters {
@@ -758,13 +763,13 @@ fn heavy_lifting(code: Value, escape: bool, osc: bool, call: &Call) -> Result<St
         }
     }
     let output = if escape && param_is_valid_string {
-        format!("\x1b[{code_string}")
+        format!("\x1b[{code_string}").into()
     } else if osc && param_is_valid_string {
         // Operating system command aka osc  ESC ] <- note the right brace, not left brace for osc
         // OCS's need to end with either:
         // bel '\x07' char
         // string terminator aka st '\\' char
-        format!("\x1b]{code_string}")
+        format!("\x1b]{code_string}").into()
     } else if param_is_valid_string {
         // parse hex colors like #00FF00
         if code_string.starts_with('#') {
@@ -811,9 +816,9 @@ fn heavy_lifting(code: Value, escape: bool, osc: bool, call: &Call) -> Result<St
         // Iterate and populate NuStyle with real values
         for (k, v) in record {
             match k.as_str() {
-                "fg" => nu_style.fg = Some(v.coerce_into_nu_string()?),
-                "bg" => nu_style.bg = Some(v.coerce_into_nu_string()?),
-                "attr" => nu_style.attr = Some(v.coerce_into_nu_string()?),
+                "fg" => nu_style.fg = Some(v.coerce_into_string()?),
+                "bg" => nu_style.bg = Some(v.coerce_into_string()?),
+                "attr" => nu_style.attr = Some(v.coerce_into_string()?),
                 _ => {
                     return Err(ShellError::IncompatibleParametersSingle {
                         msg: format!("unknown ANSI format key: expected one of ['fg', 'bg', 'attr'], found '{k}'"),
@@ -830,8 +835,8 @@ fn heavy_lifting(code: Value, escape: bool, osc: bool, call: &Call) -> Result<St
     Ok(output)
 }
 
-pub fn str_to_ansi(s: &str) -> Option<String> {
-    CODE_MAP.get(s).map(|x| String::from(*x))
+pub fn str_to_ansi(s: &str) -> Option<NuString> {
+    CODE_MAP.get(s).map(|x| NuString::from(*x))
 }
 
 fn generate_ansi_code_list(

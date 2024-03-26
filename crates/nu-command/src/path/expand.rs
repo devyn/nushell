@@ -3,17 +3,17 @@ use std::path::Path;
 use nu_engine::env::{current_dir_str, current_dir_str_const};
 use nu_engine::CallExt;
 use nu_path::{canonicalize_with, expand_path_with};
-use nu_protocol::ast::Call;
-use nu_protocol::engine::{EngineState, Stack, StateWorkingSet};
 use nu_protocol::{
-    engine::Command, Category, Example, PipelineData, ShellError, Signature, Span, Type, Value,
+    ast::Call,
+    engine::{Command, EngineState, Stack, StateWorkingSet},
+    Category, Example, NuString, PipelineData, ShellError, Signature, Span, Type, Value,
 };
 
 use super::PathSubcommandArguments;
 
 struct Arguments {
     strict: bool,
-    cwd: String,
+    cwd: NuString,
     not_follow_symlink: bool,
 }
 

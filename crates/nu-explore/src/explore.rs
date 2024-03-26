@@ -9,7 +9,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    Category, Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Value,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Span, SyntaxShape, Type,
+    Value,
 };
 use std::collections::HashMap;
 
@@ -126,7 +127,7 @@ impl Command for Explore {
     }
 }
 
-fn update_config(config: &mut HashMap<String, Value>, show_index: bool, show_head: bool) {
+fn update_config(config: &mut HashMap<NuString, Value>, show_index: bool, show_head: bool) {
     let mut hm = config.get("table").and_then(create_map).unwrap_or_default();
     if show_index {
         insert_bool(&mut hm, "show_index", show_index);
@@ -136,10 +137,10 @@ fn update_config(config: &mut HashMap<String, Value>, show_index: bool, show_hea
         insert_bool(&mut hm, "show_head", show_head);
     }
 
-    config.insert(String::from("table"), map_into_value(hm));
+    config.insert("table".into(), map_into_value(hm));
 }
 
-fn style_from_config(config: &HashMap<String, Value>) -> StyleConfig {
+fn style_from_config(config: &HashMap<NuString, Value>) -> StyleConfig {
     let mut style = StyleConfig::default();
 
     let colors = get_color_map(config);
@@ -291,7 +292,7 @@ fn insert_bool(map: &mut HashMap<String, Value>, key: &str, value: bool) {
     map.insert(String::from(key), Value::bool(value, Span::unknown()));
 }
 
-fn include_nu_config(config: &mut HashMap<String, Value>, style_computer: &StyleComputer) {
+fn include_nu_config(config: &mut HashMap<NuString, Value>, style_computer: &StyleComputer) {
     let line_color = lookup_color(style_computer, "separator");
     if line_color != nu_ansi_term::Style::default() {
         let mut map = config

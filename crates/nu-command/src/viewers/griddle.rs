@@ -3,6 +3,7 @@ use super::icons::icon_for_file;
 use lscolors::Style;
 use nu_engine::env_to_string;
 use nu_engine::CallExt;
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},

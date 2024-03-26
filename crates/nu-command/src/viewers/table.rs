@@ -6,6 +6,7 @@ use lscolors::{LsColors, Style};
 use nu_color_config::color_from_hex;
 use nu_color_config::{StyleComputer, TextStyle};
 use nu_engine::{env::get_config, env_to_string, CallExt};
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},

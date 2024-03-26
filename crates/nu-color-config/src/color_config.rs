@@ -3,7 +3,7 @@ use crate::{
     parse_nustyle, NuStyle,
 };
 use nu_ansi_term::Style;
-use nu_protocol::{Record, Value};
+use nu_protocol::{NuString, Record, Value};
 use std::collections::HashMap;
 
 pub fn lookup_ansi_color_style(s: &str) -> Style {
@@ -19,8 +19,8 @@ pub fn lookup_ansi_color_style(s: &str) -> Style {
     }
 }
 
-pub fn get_color_map(colors: &HashMap<String, Value>) -> HashMap<String, Style> {
-    let mut hm: HashMap<String, Style> = HashMap::new();
+pub fn get_color_map(colors: &HashMap<NuString, Value>) -> HashMap<NuString, Style> {
+    let mut hm: HashMap<NuString, Style> = HashMap::new();
 
     for (key, value) in colors {
         parse_map_entry(&mut hm, key, value);
@@ -29,14 +29,14 @@ pub fn get_color_map(colors: &HashMap<String, Value>) -> HashMap<String, Style> 
     hm
 }
 
-fn parse_map_entry(hm: &mut HashMap<String, Style>, key: &str, value: &Value) {
+fn parse_map_entry(hm: &mut HashMap<NuString, Style>, key: &str, value: &Value) {
     let value = match value {
         Value::String { val, .. } => Some(lookup_ansi_color_style(val)),
         Value::Record { val, .. } => get_style_from_value(val).map(parse_nustyle),
         _ => None,
     };
     if let Some(value) = value {
-        hm.entry(key.to_owned()).or_insert(value);
+        hm.entry(key.into()).or_insert(value);
     }
 }
 
@@ -157,6 +157,6 @@ mod tests {
         let key = "test_key".to_owned();
         let value = Value::string("red", Span::unknown());
         parse_map_entry(&mut hm, &key, &value);
-        assert_eq!(hm.get(&key), Some(&lookup_ansi_color_style("red")));
+        assert_eq!(hm.get(key.as_str()), Some(&lookup_ansi_color_style("red")));
     }
 }

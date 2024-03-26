@@ -3,7 +3,8 @@ use nu_parser::{parse, parse_module_block, parse_module_file_or_dir, unescape_un
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack, StateWorkingSet};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape,
+    Type, Value,
 };
 
 use std::path::Path;
