@@ -4,8 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Config, DataSource, Example, IntoPipelineData, PipelineData,
-    PipelineMetadata, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value, NuString,
+    record, Category, Config, DataSource, Example, IntoPipelineData, NuString, PipelineData,
+    PipelineMetadata, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
 };
 use nu_utils::IgnoreCaseExt;
 use rust_embed::RustEmbed;

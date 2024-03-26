@@ -18,8 +18,8 @@ use nu_protocol::{
     config::NuCursorShape,
     engine::{EngineState, Stack, StateWorkingSet},
     eval_const::create_nu_constant,
-    report_error_new, HistoryConfig, HistoryFileFormat, PipelineData, ShellError, Span, Spanned,
-    Value, NU_VARIABLE_ID, NuString,
+    report_error_new, HistoryConfig, HistoryFileFormat, NuString, PipelineData, ShellError, Span,
+    Spanned, Value, NU_VARIABLE_ID,
 };
 use nu_utils::utils::perf;
 use reedline::{
@@ -27,6 +27,7 @@ use reedline::{
     HistorySessionId, Reedline, SqliteBackedHistory, Vi,
 };
 use std::{
+    borrow::Cow,
     collections::HashMap,
     env::temp_dir,
     io::{self, IsTerminal, Write},
@@ -34,7 +35,7 @@ use std::{
     path::Path,
     path::PathBuf,
     sync::{atomic::Ordering, Arc},
-    time::{Duration, Instant}, borrow::Cow,
+    time::{Duration, Instant},
 };
 use sysinfo::System;
 

@@ -1,9 +1,9 @@
-use nu_protocol::{report_error, NuString};
 use nu_protocol::{
     ast::RangeInclusion,
     engine::{EngineState, Stack, StateWorkingSet},
     Range, ShellError, Span, Value,
 };
+use nu_protocol::{report_error, NuString};
 use std::path::PathBuf;
 
 pub fn get_init_cwd() -> PathBuf {

@@ -1,7 +1,7 @@
 use crate::{
     ast::{Call, Expression},
     engine::{Command, EngineState, Stack},
-    PipelineData, ShellError, Signature, NuString,
+    NuString, PipelineData, ShellError, Signature,
 };
 
 #[derive(Clone)]

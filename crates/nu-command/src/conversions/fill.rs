@@ -3,7 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::{Call, CellPath},
     engine::{Command, EngineState, Stack},
-    Category, Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Value, NuString,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Span, SyntaxShape, Type,
+    Value,
 };
 use print_positions::print_positions;
 

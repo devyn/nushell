@@ -1,6 +1,6 @@
-use nu_protocol::NuString;
 use nu_protocol::ast::{Argument, Expr, Expression, RecordItem};
 use nu_protocol::debugger::WithoutDebug;
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::Call,
     engine::{EngineState, Stack},
@@ -45,7 +45,11 @@ struct DocumentationConfig {
 }
 
 // Utility returns nu-highlighted string
-fn nu_highlight_string(code_string: &str, engine_state: &EngineState, stack: &mut Stack) -> NuString {
+fn nu_highlight_string(
+    code_string: &str,
+    engine_state: &EngineState,
+    stack: &mut Stack,
+) -> NuString {
     if let Some(highlighter) = engine_state.find_decl(b"nu-highlight", &[]) {
         let decl = engine_state.get_decl(highlighter);
 
@@ -391,7 +395,9 @@ fn get_argument_for_color_value(
                         },
                         Expression {
                             expr: Expr::String(
-                                v.clone().to_expanded_string("", engine_state.get_config()).into(),
+                                v.clone()
+                                    .to_expanded_string("", engine_state.get_config())
+                                    .into(),
                             ),
                             span,
                             ty: Type::String,

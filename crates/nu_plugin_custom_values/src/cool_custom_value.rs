@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use nu_protocol::{ast, CustomValue, ShellError, Span, Value, NuString};
+use nu_protocol::{ast, CustomValue, NuString, ShellError, Span, Value};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

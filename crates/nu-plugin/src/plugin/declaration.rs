@@ -6,7 +6,7 @@ use nu_engine::get_eval_expression;
 
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{ast::Call, PluginSignature, Signature};
-use nu_protocol::{Example, PipelineData, PluginIdentity, RegisteredPlugin, ShellError, NuString};
+use nu_protocol::{Example, NuString, PipelineData, PluginIdentity, RegisteredPlugin, ShellError};
 
 #[doc(hidden)] // Note: not for plugin authors / only used in nu-parser
 #[derive(Clone)]

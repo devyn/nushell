@@ -1,5 +1,5 @@
 use indexmap::{indexset, IndexSet};
-use nu_protocol::{Value, NuString};
+use nu_protocol::{NuString, Value};
 
 pub fn merge_descriptors(values: &[Value]) -> Vec<NuString> {
     let mut ret: Vec<NuString> = vec![];

@@ -8,7 +8,7 @@ use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
     record, Category, Config, Example, IntoInterruptiblePipelineData, IntoPipelineData, ListStream,
-    PipelineData, Record, ShellError, Signature, Span, SyntaxShape, Type, Value, NuString,
+    NuString, PipelineData, Record, ShellError, Signature, Span, SyntaxShape, Type, Value,
 };
 use nu_utils::IgnoreCaseExt;
 

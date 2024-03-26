@@ -62,7 +62,8 @@ pub fn format_filesize(
                 format!("{:.1}", adj_byte)
             }
         }
-    }.into()
+    }
+    .into()
 }
 
 /// Get the filesize unit, or None if format is "auto"

@@ -1,7 +1,7 @@
 use nu_protocol::{
     ast::Expr,
     engine::{Command, EngineState, Stack, Visibility},
-    record, ModuleId, Signature, Span, SyntaxShape, Type, Value, NuString,
+    record, ModuleId, NuString, Signature, Span, SyntaxShape, Type, Value,
 };
 use std::cmp::Ordering;
 use std::collections::HashMap;

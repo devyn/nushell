@@ -1,6 +1,6 @@
 use gjson::Value as gjValue;
 use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, SimplePluginCommand};
-use nu_protocol::{Category, PluginSignature, Record, Span, Spanned, SyntaxShape, Value, NuString};
+use nu_protocol::{Category, NuString, PluginSignature, Record, Span, Spanned, SyntaxShape, Value};
 
 use crate::Query;
 

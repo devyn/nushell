@@ -14,8 +14,8 @@ use nu_protocol::ast::Call;
 
 use nu_protocol::engine::{Closure, Command, EngineState, Stack, StateWorkingSet};
 use nu_protocol::{
-    format_error, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature,
-    Spanned, SyntaxShape, Type, Value, NuString,
+    format_error, Category, Example, IntoPipelineData, NuString, PipelineData, ShellError,
+    Signature, Spanned, SyntaxShape, Type, Value,
 };
 
 // durations chosen mostly arbitrarily

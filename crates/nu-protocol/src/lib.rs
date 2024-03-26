@@ -15,8 +15,8 @@ mod pipeline_data;
 #[cfg(feature = "plugin")]
 mod plugin;
 mod signature;
-mod string;
 pub mod span;
+mod string;
 mod syntax_shape;
 mod ty;
 pub mod util;
@@ -36,8 +36,8 @@ pub use pipeline_data::*;
 #[cfg(feature = "plugin")]
 pub use plugin::*;
 pub use signature::*;
-pub use string::*;
 pub use span::*;
+pub use string::*;
 pub use syntax_shape::*;
 pub use ty::*;
 pub use util::BufferedReader;

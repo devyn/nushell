@@ -7,8 +7,8 @@ use nu_protocol::ast::Call;
 use nu_protocol::debugger::WithoutDebug;
 use nu_protocol::engine::{Closure, Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoPipelineData, LazyRecord, PipelineData, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value, NuString,
+    Category, Example, IntoPipelineData, LazyRecord, NuString, PipelineData, ShellError, Signature,
+    Span, Spanned, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]

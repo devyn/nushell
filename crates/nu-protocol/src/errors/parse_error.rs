@@ -3,7 +3,7 @@ use std::{
     str::{from_utf8, Utf8Error},
 };
 
-use crate::{ast::RedirectionSource, did_you_mean, Span, Type, NuString};
+use crate::{ast::RedirectionSource, did_you_mean, NuString, Span, Type};
 use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

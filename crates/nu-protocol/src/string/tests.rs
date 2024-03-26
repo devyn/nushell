@@ -10,7 +10,6 @@ fn from_empty_string_is_empty_variant() {
 fn from_short_string_is_shared_variant() {
     let s = NuString::from("abc");
     assert!(matches!(s, NuString(Variant::Shared(_))));
-    
 }
 
 #[test]

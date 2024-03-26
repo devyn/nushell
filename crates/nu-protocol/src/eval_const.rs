@@ -1,5 +1,5 @@
-use crate::NuString;
 use crate::debugger::{DebugContext, WithoutDebug};
+use crate::NuString;
 use crate::{
     ast::{Assignment, Block, Call, Expr, Expression, ExternalArgument},
     engine::{EngineState, StateWorkingSet},

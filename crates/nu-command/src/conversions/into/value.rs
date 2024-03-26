@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    Category, Example, IntoInterruptiblePipelineData, PipelineData, PipelineIterator, ShellError,
-    Signature, Span, SyntaxShape, Type, Value, NuString,
+    Category, Example, IntoInterruptiblePipelineData, NuString, PipelineData, PipelineIterator,
+    ShellError, Signature, Span, SyntaxShape, Type, Value,
 };
 use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};

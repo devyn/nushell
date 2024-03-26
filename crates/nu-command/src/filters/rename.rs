@@ -4,8 +4,8 @@ use nu_protocol::ast::Call;
 
 use nu_protocol::engine::{Closure, Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoPipelineData, PipelineData, Record, ShellError, Signature,
-    SyntaxShape, Type, Value, NuString,
+    record, Category, Example, IntoPipelineData, NuString, PipelineData, Record, ShellError,
+    Signature, SyntaxShape, Type, Value,
 };
 use std::collections::HashSet;
 

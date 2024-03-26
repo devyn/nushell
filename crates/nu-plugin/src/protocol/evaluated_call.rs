@@ -1,5 +1,5 @@
-use nu_protocol::NuString;
 use nu_protocol::ast::Expression;
+use nu_protocol::NuString;
 
 use nu_protocol::{
     ast::Call,
@@ -369,7 +369,7 @@ impl EvaluatedCall {
 #[cfg(test)]
 mod test {
     use super::*;
-    use nu_protocol::{Span, Spanned, Value, NuString};
+    use nu_protocol::{NuString, Span, Spanned, Value};
 
     #[test]
     fn call_to_value() {

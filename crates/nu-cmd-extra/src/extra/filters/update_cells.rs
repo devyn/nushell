@@ -3,8 +3,8 @@ use nu_protocol::ast::{Block, Call};
 
 use nu_protocol::engine::{Closure, Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    PipelineIterator, ShellError, Signature, Span, SyntaxShape, Type, Value, NuString,
+    record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, NuString,
+    PipelineData, PipelineIterator, ShellError, Signature, Span, SyntaxShape, Type, Value,
 };
 use std::collections::HashSet;
 use std::sync::Arc;

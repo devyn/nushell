@@ -1,6 +1,6 @@
 use std::ops::RangeBounds;
 
-use crate::{ShellError, Span, Value, NuString};
+use crate::{NuString, ShellError, Span, Value};
 
 use serde::{Deserialize, Serialize};
 

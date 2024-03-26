@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use nu_protocol::{IoStream, Span, Spanned, NuString};
+use nu_protocol::{IoStream, NuString, Span, Spanned};
 
 use crate::ExternalCommand;
 

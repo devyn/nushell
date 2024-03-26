@@ -1,11 +1,11 @@
 use nu_engine::CallExt;
-use nu_protocol::{IntoPipelineData, NuString};
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
     record, Category, Example, PipelineData, Record, ShellError, Signature, SyntaxShape, Type,
     Value,
 };
+use nu_protocol::{IntoPipelineData, NuString};
 
 #[derive(Clone)]
 pub struct Rotate;

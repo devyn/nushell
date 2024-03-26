@@ -1,4 +1,4 @@
-use crate::{DeclId, Type, NuString};
+use crate::{DeclId, NuString, Type};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 

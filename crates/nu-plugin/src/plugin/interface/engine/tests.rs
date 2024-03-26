@@ -4,8 +4,8 @@ use std::{
 };
 
 use nu_protocol::{
-    engine::Closure, Config, CustomValue, IntoInterruptiblePipelineData, PipelineData,
-    PluginExample, PluginSignature, ShellError, Span, Spanned, Value, NuString,
+    engine::Closure, Config, CustomValue, IntoInterruptiblePipelineData, NuString, PipelineData,
+    PluginExample, PluginSignature, ShellError, Span, Spanned, Value,
 };
 
 use crate::{

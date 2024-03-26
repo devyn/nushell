@@ -2,8 +2,8 @@ use std::{borrow::Cow, fs::OpenOptions, path::PathBuf};
 
 use crate::{current_dir, current_dir_str, get_config, get_full_help};
 use nu_path::expand_path_with;
-use nu_protocol::NuString;
 use nu_protocol::debugger::DebugContext;
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::{
         Assignment, Block, Call, Expr, Expression, ExternalArgument, PathMember, PipelineElement,

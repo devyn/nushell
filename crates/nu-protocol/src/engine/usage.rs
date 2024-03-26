@@ -1,4 +1,4 @@
-use crate::{ModuleId, Span, NuString};
+use crate::{ModuleId, NuString, Span};
 use std::collections::HashMap;
 
 /// Organizes usage messages for various primitives

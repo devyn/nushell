@@ -8,7 +8,8 @@ use nu_engine::get_eval_block_with_early_return;
 use nu_protocol::{
     ast::Call,
     engine::{Closure, EngineState, Redirection, Stack},
-    Config, IntoSpanned, IoStream, PipelineData, PluginIdentity, ShellError, Spanned, Value, NuString,
+    Config, IntoSpanned, IoStream, NuString, PipelineData, PluginIdentity, ShellError, Spanned,
+    Value,
 };
 
 use crate::util::MutableCow;

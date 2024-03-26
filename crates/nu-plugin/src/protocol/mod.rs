@@ -12,8 +12,8 @@ use std::collections::HashMap;
 
 pub use evaluated_call::EvaluatedCall;
 use nu_protocol::{
-    ast::Operator, engine::Closure, Config, PipelineData, PluginSignature, RawStream, ShellError,
-    Span, Spanned, Value, NuString,
+    ast::Operator, engine::Closure, Config, NuString, PipelineData, PluginSignature, RawStream,
+    ShellError, Span, Spanned, Value,
 };
 pub use plugin_custom_value::PluginCustomValue;
 #[cfg(test)]

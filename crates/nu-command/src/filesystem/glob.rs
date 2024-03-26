@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoInterruptiblePipelineData, PipelineData, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value, NuString,
+    Category, Example, IntoInterruptiblePipelineData, NuString, PipelineData, ShellError,
+    Signature, Span, Spanned, SyntaxShape, Type, Value,
 };
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;

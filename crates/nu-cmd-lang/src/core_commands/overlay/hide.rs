@@ -2,7 +2,7 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, NuString,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type,
 };
 
 #[derive(Clone)]
@@ -51,14 +51,15 @@ impl Command for OverlayHide {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let overlay_name: Spanned<NuString> = if let Some(name) = call.opt(engine_state, stack, 0)? {
-            name
-        } else {
-            Spanned {
-                item: stack.last_overlay_name()?,
-                span: call.head,
-            }
-        };
+        let overlay_name: Spanned<NuString> =
+            if let Some(name) = call.opt(engine_state, stack, 0)? {
+                name
+            } else {
+                Spanned {
+                    item: stack.last_overlay_name()?,
+                    span: call.head,
+                }
+            };
 
         if !stack.is_overlay_active(&overlay_name.item) {
             return Err(ShellError::OverlayNotFoundAtRuntime {

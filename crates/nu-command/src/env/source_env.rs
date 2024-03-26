@@ -8,7 +8,8 @@ use nu_protocol::ast::Call;
 
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value, NuString,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type,
+    Value,
 };
 
 /// Source a file for environment variables.

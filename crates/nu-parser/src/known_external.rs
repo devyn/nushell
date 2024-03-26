@@ -4,7 +4,7 @@ use nu_protocol::{
     engine::Command,
     ShellError, Signature,
 };
-use nu_protocol::{PipelineData, Type, NuString};
+use nu_protocol::{NuString, PipelineData, Type};
 
 #[derive(Clone)]
 pub struct KnownExternal {

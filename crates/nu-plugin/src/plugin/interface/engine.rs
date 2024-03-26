@@ -6,8 +6,8 @@ use std::{
 };
 
 use nu_protocol::{
-    engine::Closure, Config, IntoInterruptiblePipelineData, ListStream, PipelineData,
-    PluginSignature, ShellError, Spanned, Value, NuString,
+    engine::Closure, Config, IntoInterruptiblePipelineData, ListStream, NuString, PipelineData,
+    PluginSignature, ShellError, Spanned, Value,
 };
 
 use crate::{

@@ -1,5 +1,5 @@
-use crate::NuString;
 use crate::debugger::DebugContext;
+use crate::NuString;
 use crate::{
     ast::{
         eval_operator, Assignment, Bits, Boolean, Call, Comparison, Expr, Expression,

@@ -8,8 +8,8 @@ use super::{
 use crate::ast::Block;
 use crate::debugger::{Debugger, NoopDebugger};
 use crate::{
-    BlockId, Config, DeclId, Example, FileId, HistoryConfig, Module, ModuleId, OverlayId,
-    ShellError, Signature, Span, Type, VarId, VirtualPathId, NuString,
+    BlockId, Config, DeclId, Example, FileId, HistoryConfig, Module, ModuleId, NuString, OverlayId,
+    ShellError, Signature, Span, Type, VarId, VirtualPathId,
 };
 use crate::{Category, Value};
 use std::collections::HashMap;

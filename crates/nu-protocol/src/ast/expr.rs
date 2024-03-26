@@ -6,8 +6,8 @@ use super::{
     RangeOperator,
 };
 use crate::{
-    ast::ImportPattern, ast::Unit, engine::EngineState, BlockId, IoStream, Signature, Span,
-    Spanned, VarId, NuString,
+    ast::ImportPattern, ast::Unit, engine::EngineState, BlockId, IoStream, NuString, Signature,
+    Span, Spanned, VarId,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

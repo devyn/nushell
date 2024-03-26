@@ -2,7 +2,7 @@ use crate::completions::{Completer, CompletionOptions};
 use nu_engine::{column::get_columns, eval_variable};
 use nu_protocol::{
     engine::{EngineState, Stack, StateWorkingSet},
-    Span, Value, NuString,
+    NuString, Span, Value,
 };
 
 use reedline::Suggestion;

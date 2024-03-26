@@ -55,7 +55,8 @@ pub fn format_duration(duration: i64) -> NuString {
         "{}{}",
         if sign == -1 { "-" } else { "" },
         text.join(" ").trim()
-    ).into()
+    )
+    .into()
 }
 
 pub fn format_duration_as_timeperiod(duration: i64) -> (i32, Vec<TimePeriod>) {

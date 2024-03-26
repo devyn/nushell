@@ -4,13 +4,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ast::Expression, engine::StateWorkingSet, eval_const::eval_constant, DeclId, FromValue,
-    ShellError, Span, Spanned, Value, NuString,
+    NuString, ShellError, Span, Spanned, Value,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Argument {
     Positional(Expression),
-    Named((Spanned<NuString>, Option<Spanned<NuString>>, Option<Expression>)),
+    Named(
+        (
+            Spanned<NuString>,
+            Option<Spanned<NuString>>,
+            Option<Expression>,
+        ),
+    ),
     Unknown(Expression), // unknown argument used in "fall-through" signatures
     Spread(Expression),  // a list spread to fill in rest arguments
 }
@@ -86,7 +92,13 @@ impl Call {
 
     pub fn named_iter(
         &self,
-    ) -> impl Iterator<Item = &(Spanned<NuString>, Option<Spanned<NuString>>, Option<Expression>)> {
+    ) -> impl Iterator<
+        Item = &(
+            Spanned<NuString>,
+            Option<Spanned<NuString>>,
+            Option<Expression>,
+        ),
+    > {
         self.arguments.iter().filter_map(|arg| match arg {
             Argument::Named(named) => Some(named),
             Argument::Positional(_) => None,
@@ -97,8 +109,13 @@ impl Call {
 
     pub fn named_iter_mut(
         &mut self,
-    ) -> impl Iterator<Item = &mut (Spanned<NuString>, Option<Spanned<NuString>>, Option<Expression>)>
-    {
+    ) -> impl Iterator<
+        Item = &mut (
+            Spanned<NuString>,
+            Option<Spanned<NuString>>,
+            Option<Expression>,
+        ),
+    > {
         self.arguments.iter_mut().filter_map(|arg| match arg {
             Argument::Named(named) => Some(named),
             Argument::Positional(_) => None,
@@ -113,7 +130,11 @@ impl Call {
 
     pub fn add_named(
         &mut self,
-        named: (Spanned<NuString>, Option<Spanned<NuString>>, Option<Expression>),
+        named: (
+            Spanned<NuString>,
+            Option<Spanned<NuString>>,
+            Option<Expression>,
+        ),
     ) {
         self.arguments.push(Argument::Named(named));
     }

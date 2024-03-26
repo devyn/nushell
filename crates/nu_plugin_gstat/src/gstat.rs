@@ -1,6 +1,6 @@
 use git2::{Branch, BranchType, DescribeOptions, Repository};
 use nu_plugin::LabeledError;
-use nu_protocol::{record, IntoSpanned, Span, Spanned, Value, NuString};
+use nu_protocol::{record, IntoSpanned, NuString, Span, Spanned, Value};
 use std::fmt::Write;
 use std::ops::BitAnd;
 use std::path::Path;

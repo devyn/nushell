@@ -2,8 +2,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value, NuString,
+    record, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, NuString,
+    PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
 };
 
 use std::collections::HashSet;
@@ -146,7 +146,11 @@ fn drop_cols(
     }
 }
 
-fn drop_cols_set(val: &mut Value, head: Span, drop: usize) -> Result<HashSet<NuString>, ShellError> {
+fn drop_cols_set(
+    val: &mut Value,
+    head: Span,
+    drop: usize,
+) -> Result<HashSet<NuString>, ShellError> {
     if let Value::Record { val: record, .. } = val {
         let len = record.len().saturating_sub(drop);
         Ok(record.drain(len..).map(|(col, _)| col).collect())

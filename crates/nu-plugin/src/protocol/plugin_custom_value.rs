@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, convert::Infallible, sync::Arc};
 
-use nu_protocol::{ast::Operator, CustomValue, IntoSpanned, ShellError, Span, Value, NuString};
+use nu_protocol::{ast::Operator, CustomValue, IntoSpanned, NuString, ShellError, Span, Value};
 use serde::{Deserialize, Serialize};
 
 use crate::plugin::{PluginInterface, PluginSource};

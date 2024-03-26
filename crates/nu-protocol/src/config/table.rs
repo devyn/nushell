@@ -1,5 +1,5 @@
 use super::helper::ReconstructVal;
-use crate::{record, Config, ShellError, Span, Value, NuString};
+use crate::{record, Config, NuString, ShellError, Span, Value};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 

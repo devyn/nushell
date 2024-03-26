@@ -1,4 +1,4 @@
-use nu_protocol::{Value, NuString};
+use nu_protocol::{NuString, Value};
 use nu_table::{string_width, string_wrap};
 use tabled::{
     grid::config::ColoredConfig,
@@ -193,7 +193,7 @@ fn push_empty_column(data: &mut Vec<Vec<NuString>>) {
 mod util {
     use crate::debug::explain::debug_string_without_formatting;
     use nu_engine::get_columns;
-    use nu_protocol::{Value, NuString};
+    use nu_protocol::{NuString, Value};
 
     /// Try to build column names and a table grid.
     pub fn collect_input(value: Value) -> (Vec<NuString>, Vec<Vec<NuString>>) {

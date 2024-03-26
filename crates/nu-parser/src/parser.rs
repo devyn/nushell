@@ -18,8 +18,8 @@ use nu_protocol::{
     },
     engine::StateWorkingSet,
     eval_const::eval_constant,
-    span, BlockId, DidYouMean, Flag, ParseError, PositionalArg, Signature, Span, Spanned,
-    SyntaxShape, Type, Unit, VarId, ENV_VARIABLE_ID, IN_VARIABLE_ID, NuString,
+    span, BlockId, DidYouMean, Flag, NuString, ParseError, PositionalArg, Signature, Span, Spanned,
+    SyntaxShape, Type, Unit, VarId, ENV_VARIABLE_ID, IN_VARIABLE_ID,
 };
 
 use crate::parse_keywords::{

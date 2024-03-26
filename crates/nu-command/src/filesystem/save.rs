@@ -1,10 +1,10 @@
 use nu_engine::current_dir;
 use nu_engine::CallExt;
 use nu_path::expand_path_with;
-use nu_protocol::NuString;
 use nu_protocol::ast::{Call, Expr, Expression};
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::IntoSpanned;
+use nu_protocol::NuString;
 use nu_protocol::{
     Category, DataSource, Example, IoStream, PipelineData, PipelineMetadata, RawStream, ShellError,
     Signature, Span, Spanned, SyntaxShape, Type, Value,

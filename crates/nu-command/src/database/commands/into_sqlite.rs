@@ -4,8 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoPipelineData, PipelineData, Record, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value, NuString,
+    Category, Example, IntoPipelineData, NuString, PipelineData, Record, ShellError, Signature,
+    Span, Spanned, SyntaxShape, Type, Value,
 };
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};

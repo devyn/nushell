@@ -6,8 +6,8 @@ use std::{
 };
 
 use nu_protocol::{
-    ast::Operator, IntoInterruptiblePipelineData, IntoSpanned, ListStream, PipelineData,
-    PluginSignature, ShellError, Span, Spanned, Value, NuString,
+    ast::Operator, IntoInterruptiblePipelineData, IntoSpanned, ListStream, NuString, PipelineData,
+    PluginSignature, ShellError, Span, Spanned, Value,
 };
 
 use crate::{

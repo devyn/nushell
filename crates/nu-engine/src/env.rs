@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use nu_protocol::ast::{Call, Expr};
 use nu_protocol::engine::{EngineState, Stack, StateWorkingSet, PWD_ENV};
-use nu_protocol::{Config, PipelineData, ShellError, Span, Value, VarId, NuString};
+use nu_protocol::{Config, NuString, PipelineData, ShellError, Span, Value, VarId};
 
 use nu_path::canonicalize_with;
 use nu_protocol::debugger::WithoutDebug;

@@ -101,10 +101,7 @@ pub fn evaluate_file(
         "CURRENT_FILE".into(),
         Value::string(file_path.to_string_lossy(), Span::unknown()),
     );
-    stack.add_env_var(
-        "PROCESS_PATH".into(),
-        Value::string(path, Span::unknown()),
-    );
+    stack.add_env_var("PROCESS_PATH".into(), Value::string(path, Span::unknown()));
 
     let source_filename = file_path
         .file_name()
@@ -123,8 +120,12 @@ pub fn evaluate_file(
         if block.signature.name == "main" {
             block.signature.name = source_filename.to_string_lossy().into();
         } else if block.signature.name.starts_with("main ") {
-            block.signature.name =
-                format!("{} {}", source_filename.to_string_lossy(), &block.signature.name[5..]).into();
+            block.signature.name = format!(
+                "{} {}",
+                source_filename.to_string_lossy(),
+                &block.signature.name[5..]
+            )
+            .into();
         }
     }
 

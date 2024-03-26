@@ -1,4 +1,4 @@
-use crate::{Record, ShellError, Span, Value, NuString};
+use crate::{NuString, Record, ShellError, Span, Value};
 use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 pub(super) trait ReconstructVal {

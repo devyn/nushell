@@ -3,7 +3,7 @@ use nu_protocol::{
         Assignment, Bits, Block, Boolean, Comparison, Expr, Expression, Math, Operator, Pipeline,
     },
     engine::StateWorkingSet,
-    ParseError, Type, NuString,
+    NuString, ParseError, Type,
 };
 
 pub fn type_compatible(lhs: &Type, rhs: &Type) -> bool {

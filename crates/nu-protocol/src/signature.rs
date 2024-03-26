@@ -1,12 +1,12 @@
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::NuString;
 use crate::ast::Call;
 use crate::engine::Command;
 use crate::engine::EngineState;
 use crate::engine::Stack;
 use crate::BlockId;
+use crate::NuString;
 use crate::PipelineData;
 use crate::ShellError;
 use crate::SyntaxShape;
@@ -470,7 +470,11 @@ impl Signature {
 
     /// Checks if short or long are already present
     /// Panics if one of them is found
-    fn check_names(&self, name: impl Into<NuString>, short: Option<char>) -> (NuString, Option<char>) {
+    fn check_names(
+        &self,
+        name: impl Into<NuString>,
+        short: Option<char>,
+    ) -> (NuString, Option<char>) {
         let s = short.map(|c| {
             assert!(
                 !self.get_shorts().contains(&c),
@@ -615,7 +619,8 @@ impl Signature {
                 "... Use `--help` for a full list of flags and more information."
             );
             s
-        }.into()
+        }
+        .into()
     }
 }
 

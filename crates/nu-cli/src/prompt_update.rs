@@ -2,11 +2,11 @@ use crate::NushellPrompt;
 use log::trace;
 use nu_engine::get_eval_subexpression;
 
-use nu_protocol::{report_error, NuString};
 use nu_protocol::{
     engine::{EngineState, Stack, StateWorkingSet},
     Config, PipelineData, Value,
 };
+use nu_protocol::{report_error, NuString};
 use reedline::Prompt;
 
 // Name of environment variable where the prompt could be stored
@@ -111,9 +111,7 @@ pub(crate) fn update_prompt(
     // <133 A><prompt><133 B><command><133 C><command output>
     let left_prompt_string = if config.shell_integration {
         if let Some(prompt_string) = left_prompt_string {
-            Some(format!(
-                "{PRE_PROMPT_MARKER}{prompt_string}{POST_PROMPT_MARKER}"
-            ).into())
+            Some(format!("{PRE_PROMPT_MARKER}{prompt_string}{POST_PROMPT_MARKER}").into())
         } else {
             left_prompt_string
         }

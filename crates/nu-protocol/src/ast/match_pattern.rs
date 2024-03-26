@@ -1,5 +1,5 @@
 use super::Expression;
-use crate::{Span, VarId, NuString};
+use crate::{NuString, Span, VarId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

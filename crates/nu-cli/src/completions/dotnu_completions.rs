@@ -1,7 +1,7 @@
 use crate::completions::{file_path_completion, Completer, CompletionOptions, SortBy};
 use nu_protocol::{
     engine::{EngineState, Stack, StateWorkingSet},
-    Span, NuString,
+    NuString, Span,
 };
 use reedline::Suggestion;
 use std::{

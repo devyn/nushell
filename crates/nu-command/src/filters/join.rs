@@ -2,8 +2,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Config, Example, PipelineData, Record, ShellError, Signature, Span,
-    SyntaxShape, Type, Value, NuString,
+    record, Category, Config, Example, NuString, PipelineData, Record, ShellError, Signature, Span,
+    SyntaxShape, Type, Value,
 };
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
@@ -372,7 +372,11 @@ fn merge_records(left: &Record, right: &Record, shared_key: Option<&str>) -> Rec
         // Do not output shared join key twice
         if !(k_seen && k_shared) {
             record.push(
-                if k_seen { format!("{}_", k).into() } else { k.clone() },
+                if k_seen {
+                    format!("{}_", k).into()
+                } else {
+                    k.clone()
+                },
                 v.clone(),
             );
         }

@@ -1,5 +1,5 @@
 use super::Expression;
-use crate::{Span, NuString};
+use crate::{NuString, Span};
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, fmt::Display};
 
@@ -201,14 +201,12 @@ mod test {
 
         assert_eq!(
             Some(Greater),
-            PathMember::test_string("e", true)
-                .partial_cmp(&PathMember::test_string("e", false))
+            PathMember::test_string("e", true).partial_cmp(&PathMember::test_string("e", false))
         );
 
         assert_eq!(
             Some(Greater),
-            PathMember::test_string("f", true)
-                .partial_cmp(&PathMember::test_string("e", true))
+            PathMember::test_string("f", true).partial_cmp(&PathMember::test_string("e", true))
         );
     }
 }

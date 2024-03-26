@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{Argument, Expr, ExternalArgument, RecordItem};
 use crate::ast::ImportPattern;
-use crate::{DeclId, NuString};
 use crate::{engine::StateWorkingSet, BlockId, Signature, Span, Type, VarId, IN_VARIABLE_ID};
+use crate::{DeclId, NuString};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Expression {

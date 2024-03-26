@@ -4,8 +4,8 @@ use nu_protocol::ast::{Call, CellPath, PathMember};
 
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, PipelineData, Record, ShellError, Signature, Span, SyntaxShape,
-    Type, Value, NuString,
+    record, Category, Example, NuString, PipelineData, Record, ShellError, Signature, Span,
+    SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
@@ -178,7 +178,10 @@ fn flat_value(columns: &[CellPath], item: Value, all: bool) -> Vec<Value> {
                                 }
                             }
                         } else if out.contains_key(&column) {
-                            out.insert(format!("{column}_{column}").into(), Value::record(val, span));
+                            out.insert(
+                                format!("{column}_{column}").into(),
+                                Value::record(val, span),
+                            );
                         } else {
                             out.insert(column, Value::record(val, span));
                         }
@@ -210,7 +213,10 @@ fn flat_value(columns: &[CellPath], item: Value, all: bool) -> Vec<Value> {
                                     parent_column_index: column_index,
                                 });
                             } else if out.contains_key(&column) {
-                                out.insert(format!("{column}_{column}").into(), Value::list(vals, span));
+                                out.insert(
+                                    format!("{column}_{column}").into(),
+                                    Value::list(vals, span),
+                                );
                             } else {
                                 out.insert(column, Value::list(vals, span));
                             }

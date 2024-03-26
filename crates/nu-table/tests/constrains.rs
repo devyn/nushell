@@ -1,6 +1,6 @@
 mod common;
 
-use nu_protocol::{TrimStrategy, NuString};
+use nu_protocol::{NuString, TrimStrategy};
 use nu_table::{NuTable, NuTableConfig, TableTheme as theme};
 
 use common::{create_row, test_table, TestCase};

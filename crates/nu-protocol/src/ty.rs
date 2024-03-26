@@ -4,7 +4,7 @@ use strum_macros::EnumIter;
 
 use std::fmt::Display;
 
-use crate::{SyntaxShape, NuString};
+use crate::{NuString, SyntaxShape};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(EnumIter))]

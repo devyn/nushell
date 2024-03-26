@@ -85,7 +85,9 @@ pub fn http_parse_url(
     Ok((requested_url, url))
 }
 
-pub fn http_parse_redirect_mode(mode: Option<Spanned<NuString>>) -> Result<RedirectMode, ShellError> {
+pub fn http_parse_redirect_mode(
+    mode: Option<Spanned<NuString>>,
+) -> Result<RedirectMode, ShellError> {
     mode.map_or(Ok(RedirectMode::Follow), |v| match &v.item[..] {
         "follow" | "f" => Ok(RedirectMode::Follow),
         "error" | "e" => Ok(RedirectMode::Error),

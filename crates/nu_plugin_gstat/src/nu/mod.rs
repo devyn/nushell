@@ -2,7 +2,7 @@ use crate::GStat;
 use nu_plugin::{
     EngineInterface, EvaluatedCall, LabeledError, Plugin, PluginCommand, SimplePluginCommand,
 };
-use nu_protocol::{Category, PluginSignature, Spanned, SyntaxShape, Value, NuString};
+use nu_protocol::{Category, NuString, PluginSignature, Spanned, SyntaxShape, Value};
 
 pub struct GStatPlugin;
 

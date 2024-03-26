@@ -5,7 +5,7 @@ macro_rules! generate_tests {
             PluginCallResponse, PluginCustomValue, PluginInput, PluginOption, PluginOutput,
             StreamData, StreamMessage,
         };
-        use nu_protocol::{PluginSignature, Span, Spanned, SyntaxShape, NuString, Value};
+        use nu_protocol::{NuString, PluginSignature, Span, Spanned, SyntaxShape, Value};
 
         #[test]
         fn decode_eof() {
