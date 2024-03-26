@@ -126,14 +126,14 @@ fn main() -> Result<()> {
     let mut default_nu_lib_dirs_path = nushell_config_path.clone();
     default_nu_lib_dirs_path.push("scripts");
     engine_state.add_env_var(
-        "NU_LIB_DIRS".to_string(),
+        "NU_LIB_DIRS".into(),
         Value::test_string(default_nu_lib_dirs_path.to_string_lossy()),
     );
 
     let mut default_nu_plugin_dirs_path = nushell_config_path;
     default_nu_plugin_dirs_path.push("plugins");
     engine_state.add_env_var(
-        "NU_PLUGIN_DIRS".to_string(),
+        "NU_PLUGIN_DIRS".into(),
         Value::test_string(default_nu_plugin_dirs_path.to_string_lossy()),
     );
     // End: Default NU_LIB_DIRS, NU_PLUGIN_DIRS
@@ -174,13 +174,13 @@ fn main() -> Result<()> {
             eprintln!(
                 "ERROR: log library did not recognize log level '{level}', using default 'info'"
             );
-            "info".to_string()
+            "info".into()
         };
         let target = parsed_nu_cli_args
             .log_target
             .as_ref()
             .map(|target| target.item.clone())
-            .unwrap_or_else(|| "stderr".to_string());
+            .unwrap_or_else(|| "stderr".into());
 
         logger(|builder| configure(&level, &target, builder))?;
         // info!("start logging {}:{}:{}", file!(), line!(), column!());
@@ -257,7 +257,7 @@ fn main() -> Result<()> {
     );
 
     engine_state.add_env_var(
-        "NU_VERSION".to_string(),
+        "NU_VERSION".into(),
         Value::string(env!("CARGO_PKG_VERSION"), Span::unknown()),
     );
 

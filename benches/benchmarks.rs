@@ -78,7 +78,7 @@ mod eval_commands {
         load_standard_library(&mut engine).unwrap();
         let commands = Spanned {
             span: Span::unknown(),
-            item: scaled_command,
+            item: scaled_command.into(),
         };
 
         bencher
@@ -112,7 +112,8 @@ mod eval_commands {
         load_standard_library(&mut engine).unwrap();
         let commands = Spanned {
             span: Span::unknown(),
-            item: format!("seq 1 {n} | wrap a | interleave {{ seq 1 {n} | wrap b }} | ignore"),
+            item: format!("seq 1 {n} | wrap a | interleave {{ seq 1 {n} | wrap b }} | ignore")
+                .into(),
         };
 
         bencher
@@ -229,7 +230,7 @@ mod eval_benchmarks {
 fn encoding_test_data(row_cnt: usize, col_cnt: usize) -> Value {
     let record = Value::test_record(
         (0..col_cnt)
-            .map(|x| (format!("col_{x}"), Value::test_int(x as i64)))
+            .map(|x| (format!("col_{x}").into(), Value::test_int(x as i64)))
             .collect(),
     );
 

@@ -172,6 +172,12 @@ impl PartialEq<String> for NuString {
     }
 }
 
+impl<'a> PartialEq<Cow<'a, str>> for NuString {
+    fn eq(&self, other: &Cow<'a, str>) -> bool {
+        self.as_str() == &*other
+    }
+}
+
 impl PartialEq<NuString> for str {
     fn eq(&self, other: &NuString) -> bool {
         other.eq(self)
@@ -190,29 +196,41 @@ impl PartialEq<NuString> for String {
     }
 }
 
+impl<'a> PartialEq<NuString> for Cow<'a, str> {
+    fn eq(&self, other: &NuString) -> bool {
+        other.eq(self)
+    }
+}
+
 impl Eq for NuString {}
 
 impl PartialOrd for NuString {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.deref().partial_cmp(other.deref())
+        self.as_str().partial_cmp(other.as_str())
     }
 }
 
 impl PartialOrd<str> for NuString {
     fn partial_cmp(&self, other: &str) -> Option<Ordering> {
-        self.deref().partial_cmp(other)
+        self.as_str().partial_cmp(other)
     }
 }
 
 impl<'a> PartialOrd<&'a str> for NuString {
     fn partial_cmp(&self, other: &&'a str) -> Option<Ordering> {
-        self.deref().partial_cmp(*other)
+        self.as_str().partial_cmp(*other)
     }
 }
 
 impl PartialOrd<String> for NuString {
     fn partial_cmp(&self, other: &String) -> Option<Ordering> {
         self.as_str().partial_cmp(other.as_str())
+    }
+}
+
+impl<'a> PartialOrd<Cow<'a, str>> for NuString {
+    fn partial_cmp(&self, other: &Cow<'a, str>) -> Option<Ordering> {
+        self.as_str().partial_cmp(other.as_ref())
     }
 }
 
@@ -229,6 +247,12 @@ impl<'a> PartialOrd<NuString> for &'a str {
 }
 
 impl PartialOrd<NuString> for String {
+    fn partial_cmp(&self, other: &NuString) -> Option<Ordering> {
+        other.partial_cmp(self)
+    }
+}
+
+impl<'a> PartialOrd<NuString> for Cow<'a, str> {
     fn partial_cmp(&self, other: &NuString) -> Option<Ordering> {
         other.partial_cmp(self)
     }

@@ -136,13 +136,13 @@ pub fn make_styled_string(
                     };
                     (precise_number, style_computer.style_primitive(value))
                 }
-                _ => (text, style_computer.style_primitive(value)),
+                _ => (text.into(), style_computer.style_primitive(value)),
             }
         }
         None => {
             // Though holes are not the same as null, the closure for "empty" is passed a null anyway.
             (
-                text,
+                text.into(),
                 TextStyle::with_style(
                     Alignment::Center,
                     style_computer.compute("empty", &Value::nothing(nu_protocol::Span::unknown())),

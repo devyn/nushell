@@ -3,6 +3,7 @@ use nu_engine::eval_block;
 use nu_parser::parse;
 use nu_protocol::debugger::WithoutDebug;
 use nu_protocol::engine::{EngineState, Stack, StateWorkingSet};
+use nu_protocol::NuString;
 use nu_protocol::{cli_error::CliError, PipelineData, Value};
 use nu_std::load_standard_library;
 use std::io::{self, BufRead, Read, Write};
@@ -214,7 +215,7 @@ fn outcome_err(
     std::process::exit(1);
 }
 
-fn outcome_ok(msg: String) -> ! {
+fn outcome_ok(msg: NuString) -> ! {
     println!("{msg}");
 
     std::process::exit(0);
@@ -237,7 +238,7 @@ pub fn nu_repl() {
 
     engine_state.add_env_var("PWD".into(), Value::test_string(cwd.to_string_lossy()));
 
-    let mut last_output = String::new();
+    let mut last_output = NuString::new();
 
     load_standard_library(&mut engine_state).expect("Could not load the standard library.");
 

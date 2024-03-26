@@ -41,29 +41,26 @@ pub fn new_engine() -> (PathBuf, String, EngineState, Stack) {
 
     // Add pwd as env var
     stack.add_env_var(
-        "PWD".to_string(),
+        "PWD".into(),
         Value::string(dir_str.clone(), nu_protocol::Span::new(0, dir_str.len())),
     );
     stack.add_env_var(
-        "TEST".to_string(),
-        Value::string(
-            "NUSHELL".to_string(),
-            nu_protocol::Span::new(0, dir_str.len()),
-        ),
+        "TEST".into(),
+        Value::string("NUSHELL", nu_protocol::Span::new(0, dir_str.len())),
     );
     #[cfg(windows)]
     stack.add_env_var(
-        "Path".to_string(),
+        "Path".into(),
         Value::string(
-            "c:\\some\\path;c:\\some\\other\\path".to_string(),
+            "c:\\some\\path;c:\\some\\other\\path",
             nu_protocol::Span::new(0, dir_str.len()),
         ),
     );
     #[cfg(not(windows))]
     stack.add_env_var(
-        "PATH".to_string(),
+        "PATH".into(),
         Value::string(
-            "/some/path:/some/other/path".to_string(),
+            "/some/path:/some/other/path",
             nu_protocol::Span::new(0, dir_str.len()),
         ),
     );
@@ -93,15 +90,12 @@ pub fn new_quote_engine() -> (PathBuf, String, EngineState, Stack) {
 
     // Add pwd as env var
     stack.add_env_var(
-        "PWD".to_string(),
+        "PWD".into(),
         Value::string(dir_str.clone(), nu_protocol::Span::new(0, dir_str.len())),
     );
     stack.add_env_var(
-        "TEST".to_string(),
-        Value::string(
-            "NUSHELL".to_string(),
-            nu_protocol::Span::new(0, dir_str.len()),
-        ),
+        "TEST".into(),
+        Value::string("NUSHELL", nu_protocol::Span::new(0, dir_str.len())),
     );
 
     // Merge environment into the permanent state
@@ -129,15 +123,12 @@ pub fn new_partial_engine() -> (PathBuf, String, EngineState, Stack) {
 
     // Add pwd as env var
     stack.add_env_var(
-        "PWD".to_string(),
+        "PWD".into(),
         Value::string(dir_str.clone(), nu_protocol::Span::new(0, dir_str.len())),
     );
     stack.add_env_var(
-        "TEST".to_string(),
-        Value::string(
-            "NUSHELL".to_string(),
-            nu_protocol::Span::new(0, dir_str.len()),
-        ),
+        "TEST".into(),
+        Value::string("NUSHELL", nu_protocol::Span::new(0, dir_str.len())),
     );
 
     // Merge environment into the permanent state
