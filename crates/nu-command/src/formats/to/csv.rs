@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Config, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape,
-    Type, Value,
+    Category, Config, Example, NuString, PipelineData, ShellError, Signature, Span, Spanned,
+    SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
@@ -68,7 +68,8 @@ impl Command for ToCsv {
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
         let noheaders = call.has_flag(engine_state, stack, "noheaders")?;
-        let separator: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "separator")?;
+        let separator: Option<Spanned<NuString>> =
+            call.get_flag(engine_state, stack, "separator")?;
         let config = engine_state.get_config();
         to_csv(input, noheaders, separator, head, config)
     }
@@ -77,7 +78,7 @@ impl Command for ToCsv {
 fn to_csv(
     input: PipelineData,
     noheaders: bool,
-    separator: Option<Spanned<String>>,
+    separator: Option<Spanned<NuString>>,
     head: Span,
     config: &Config,
 ) -> Result<PipelineData, ShellError> {

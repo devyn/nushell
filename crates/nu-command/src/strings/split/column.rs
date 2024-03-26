@@ -2,8 +2,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    record, Category, Example, PipelineData, Record, ShellError, Signature, Span, Spanned,
-    SyntaxShape, Type, Value,
+    record, Category, Example, NuString, PipelineData, Record, ShellError, Signature, Span,
+    Spanned, SyntaxShape, Type, Value,
 };
 use regex::Regex;
 
@@ -118,7 +118,7 @@ fn split_column(
 ) -> Result<PipelineData, ShellError> {
     let name_span = call.head;
     let separator: Spanned<NuString> = call.req(engine_state, stack, 0)?;
-    let rest: Vec<Spanned<String>> = call.rest(engine_state, stack, 1)?;
+    let rest: Vec<Spanned<NuString>> = call.rest(engine_state, stack, 1)?;
     let collapse_empty = call.has_flag(engine_state, stack, "collapse-empty")?;
 
     let regex = if call.has_flag(engine_state, stack, "regex")? {

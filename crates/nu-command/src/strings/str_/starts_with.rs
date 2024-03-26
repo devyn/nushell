@@ -4,6 +4,7 @@ use nu_protocol::ast::Call;
 use nu_protocol::ast::CellPath;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::Category;
+use nu_protocol::NuString;
 use nu_protocol::Spanned;
 use nu_protocol::{Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Value};
 use nu_utils::IgnoreCaseExt;

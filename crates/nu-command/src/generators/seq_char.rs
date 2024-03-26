@@ -1,5 +1,6 @@
 use nu_engine::CallExt;
 use nu_protocol::engine::{Command, EngineState, Stack};
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::Call, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span,
     Spanned, SyntaxShape, Type, Value,

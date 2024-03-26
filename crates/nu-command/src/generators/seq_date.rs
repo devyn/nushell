@@ -4,8 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, Spanned,
-    SyntaxShape, Type, Value,
+    Category, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature, Span,
+    Spanned, SyntaxShape, Type, Value,
 };
 use std::fmt::Write;
 
@@ -121,11 +121,11 @@ impl Command for SeqDate {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let output_format: Option<Spanned<String>> =
+        let output_format: Option<Spanned<NuString>> =
             call.get_flag(engine_state, stack, "output-format")?;
-        let input_format: Option<Spanned<String>> =
+        let input_format: Option<Spanned<NuString>> =
             call.get_flag(engine_state, stack, "input-format")?;
-        let begin_date: Option<Spanned<String>> =
+        let begin_date: Option<Spanned<NuString>> =
             call.get_flag(engine_state, stack, "begin-date")?;
         let end_date: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "end-date")?;
         let increment: Option<Spanned<i64>> = call.get_flag(engine_state, stack, "increment")?;
@@ -183,8 +183,8 @@ pub fn parse_date_string(s: &str, format: &str) -> Result<NaiveDate, &'static st
 pub fn run_seq_dates(
     output_format: Option<Value>,
     input_format: Option<Value>,
-    beginning_date: Option<String>,
-    ending_date: Option<String>,
+    beginning_date: Option<NuString>,
+    ending_date: Option<NuString>,
     increment: Value,
     day_count: Option<Value>,
     reverse: bool,
@@ -217,7 +217,7 @@ pub fn run_seq_dates(
                 });
             }
         },
-        _ => "%Y-%m-%d".to_string(),
+        _ => "%Y-%m-%d".into(),
     };
 
     let out_format = match output_format {
@@ -233,7 +233,7 @@ pub fn run_seq_dates(
                 });
             }
         },
-        _ => "%Y-%m-%d".to_string(),
+        _ => "%Y-%m-%d".into(),
     };
 
     let start_date = match beginning_date {

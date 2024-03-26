@@ -19,7 +19,7 @@ pub use record::Record;
 
 use crate::ast::{Bits, Boolean, CellPath, Comparison, Math, Operator, PathMember, RangeInclusion};
 use crate::engine::{Closure, EngineState};
-use crate::{did_you_mean, BlockId, Config, ShellError, Span, Type, NuString};
+use crate::{did_you_mean, BlockId, Config, NuString, ShellError, Span, ToNuString, Type};
 
 use chrono::{DateTime, Datelike, FixedOffset, Locale, TimeZone};
 use chrono_humanize::HumanTime;
@@ -484,14 +484,16 @@ impl Value {
     pub fn coerce_into_string(self) -> Result<NuString, ShellError> {
         let span = self.span();
         match self {
-            Value::Int { val, .. } => Ok(val.to_string().into()),
-            Value::Float { val, .. } => Ok(val.to_string().into()),
+            Value::Int { val, .. } => Ok(val.to_nu_string()),
+            Value::Float { val, .. } => Ok(val.to_nu_string()),
             Value::String { val, .. } => Ok(val),
             Value::Binary { val, .. } => match String::from_utf8(val) {
                 Ok(s) => Ok(s.into()),
                 Err(err) => Value::binary(err.into_bytes(), span).cant_convert_to("string"),
             },
-            Value::Date { val, .. } => Ok(val.to_rfc3339_opts(chrono::SecondsFormat::Millis, true).into()),
+            Value::Date { val, .. } => Ok(val
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+                .into()),
             val => val.cant_convert_to("string"),
         }
     }
@@ -895,32 +897,30 @@ impl Value {
     pub fn to_expanded_string(&self, separator: &str, config: &Config) -> NuString {
         let span = self.span();
         match self {
-            Value::Bool { val, .. } => val.to_string().into(),
-            Value::Int { val, .. } => val.to_string().into(),
-            Value::Float { val, .. } => val.to_string().into(),
+            Value::Bool { val, .. } => val.to_nu_string(),
+            Value::Int { val, .. } => val.to_nu_string(),
+            Value::Float { val, .. } => val.to_nu_string(),
             Value::Filesize { val, .. } => format_filesize_from_conf(*val, config),
             Value::Duration { val, .. } => format_duration(*val),
             Value::Date { val, .. } => match &config.datetime_normal_format {
                 Some(format) => self.format_datetime(val, format),
-                None => {
-                    format!(
-                        "{} ({})",
-                        if val.year() >= 0 {
-                            val.to_rfc2822()
-                        } else {
-                            val.to_rfc3339()
-                        },
-                        HumanTime::from(*val),
-                    ).into()
-                }
+                None => format!(
+                    "{} ({})",
+                    if val.year() >= 0 {
+                        val.to_rfc2822()
+                    } else {
+                        val.to_rfc3339()
+                    },
+                    HumanTime::from(*val),
+                )
+                .into(),
             },
-            Value::Range { val, .. } => {
-                format!(
-                    "{}..{}",
-                    val.from.to_expanded_string(", ", config),
-                    val.to.to_expanded_string(", ", config)
-                ).into()
-            }
+            Value::Range { val, .. } => format!(
+                "{}..{}",
+                val.from.to_expanded_string(", ", config),
+                val.to.to_expanded_string(", ", config)
+            )
+            .into(),
             Value::String { val, .. } => val.into(),
             Value::Glob { val, .. } => val.into(),
             Value::List { vals: val, .. } => format!(
@@ -929,14 +929,16 @@ impl Value {
                     .map(|x| x.to_expanded_string(", ", config))
                     .collect::<Vec<_>>()
                     .join(separator)
-            ).into(),
+            )
+            .into(),
             Value::Record { val, .. } => format!(
                 "{{{}}}",
                 val.iter()
                     .map(|(x, y)| format!("{}: {}", x, y.to_expanded_string(", ", config)))
                     .collect::<Vec<_>>()
                     .join(separator)
-            ).into(),
+            )
+            .into(),
             Value::LazyRecord { val, .. } => val
                 .collect()
                 .unwrap_or_else(|err| Value::error(err, span))
@@ -946,7 +948,7 @@ impl Value {
             Value::Nothing { .. } => NuString::new(),
             Value::Error { error, .. } => format!("{error:?}").into(),
             Value::Binary { val, .. } => format!("{val:?}").into(),
-            Value::CellPath { val, .. } => val.to_string().into(),
+            Value::CellPath { val, .. } => val.to_nu_string(),
             // If we fail to collapse the custom value, just print <{type_name}> - failure is not
             // that critical here
             Value::CustomValue { val, .. } => val
@@ -968,7 +970,7 @@ impl Value {
         match self {
             Value::Date { val, .. } => match &config.datetime_table_format {
                 Some(format) => self.format_datetime(val, format),
-                None => HumanTime::from(*val).to_string().into(),
+                None => HumanTime::from(*val).to_nu_string(),
             },
             Value::List { ref vals, .. } => {
                 if !vals.is_empty() && vals.iter().all(|x| matches!(x, Value::Record { .. })) {
@@ -976,20 +978,23 @@ impl Value {
                         "[table {} row{}]",
                         vals.len(),
                         if vals.len() == 1 { "" } else { "s" }
-                    ).into()
+                    )
+                    .into()
                 } else {
                     format!(
                         "[list {} item{}]",
                         vals.len(),
                         if vals.len() == 1 { "" } else { "s" }
-                    ).into()
+                    )
+                    .into()
                 }
             }
             Value::Record { val, .. } => format!(
                 "{{record {} field{}}}",
                 val.len(),
                 if val.len() == 1 { "" } else { "s" }
-            ).into(),
+            )
+            .into(),
             Value::LazyRecord { val, .. } => val
                 .collect()
                 .unwrap_or_else(|err| Value::error(err, span))
@@ -1018,14 +1023,16 @@ impl Value {
                     .map(|x| x.to_parsable_string(", ", config))
                     .collect::<Vec<_>>()
                     .join(separator)
-            ).into(),
+            )
+            .into(),
             Value::Record { val, .. } => format!(
                 "{{{}}}",
                 val.iter()
                     .map(|(x, y)| format!("{}: {}", x, y.to_parsable_string(", ", config)))
                     .collect::<Vec<_>>()
                     .join(separator)
-            ).into(),
+            )
+            .into(),
             // defer to standard handling for types where standard representation is parsable
             _ => self.to_expanded_string(separator, config),
         }

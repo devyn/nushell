@@ -1,5 +1,5 @@
 use nu_protocol::{NuString, Value};
-use std::{borrow::Borrow, collections::HashSet, hash::Hash};
+use std::collections::HashSet;
 
 pub fn get_columns<'a, T>(input: &'a [Value]) -> Vec<T>
 where
@@ -22,16 +22,14 @@ where
 }
 
 // If a column doesn't exist in the input, return it.
-pub fn nonexistent_column<I, S>(inputs: &[NuString], columns: I) -> Option<NuString>
-where
-    I: IntoIterator<Item = S>,
-    NuString: Borrow<S>,
-    S: Hash + Eq,
-{
-    let set: HashSet<S> = HashSet::from_iter(columns);
+pub fn nonexistent_column<'a>(
+    inputs: &[NuString],
+    columns: impl IntoIterator<Item = &'a NuString>,
+) -> Option<NuString> {
+    let set: HashSet<&NuString> = HashSet::from_iter(columns);
 
     for input in inputs {
-        if set.contains(input.borrow()) {
+        if set.contains(&input) {
             continue;
         }
         return Some(input.clone());

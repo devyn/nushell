@@ -120,7 +120,7 @@ pub fn value_to_json_value(v: &Value) -> Result<nu_json::Value, ShellError> {
             val.members
                 .iter()
                 .map(|x| match &x {
-                    PathMember::String { val, .. } => Ok(nu_json::Value::String(val.clone())),
+                    PathMember::String { val, .. } => Ok(nu_json::Value::String(val.into())),
                     PathMember::Int { val, .. } => Ok(nu_json::Value::U64(*val as u64)),
                 })
                 .collect::<Result<Vec<nu_json::Value>, ShellError>>()?,
@@ -135,7 +135,7 @@ pub fn value_to_json_value(v: &Value) -> Result<nu_json::Value, ShellError> {
         Value::Record { val, .. } => {
             let mut m = nu_json::Map::new();
             for (k, v) in val {
-                m.insert(k.clone(), value_to_json_value(v)?);
+                m.insert(k.into(), value_to_json_value(v)?);
             }
             nu_json::Value::Object(m)
         }

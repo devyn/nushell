@@ -4,8 +4,8 @@ use nu_protocol::{
     engine::Command,
     engine::EngineState,
     engine::Stack,
-    Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type,
-    Value,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape,
+    Type, Value,
 };
 
 #[derive(Clone)]

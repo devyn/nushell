@@ -7,8 +7,8 @@ use crossterm::{
 };
 use itertools::Itertools;
 use nu_engine::CallExt;
-use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
+use nu_protocol::{ast::Call, NuString};
 use nu_protocol::{
     Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Spanned, SyntaxShape,
     Type, Value,
@@ -61,7 +61,8 @@ impl Command for Input {
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let prompt: Option<NuString> = call.opt(engine_state, stack, 0)?;
-        let bytes_until: Option<NuString> = call.get_flag(engine_state, stack, "bytes-until-any")?;
+        let bytes_until: Option<NuString> =
+            call.get_flag(engine_state, stack, "bytes-until-any")?;
         let suppress_output = call.has_flag(engine_state, stack, "suppress-output")?;
         let numchar: Option<Spanned<i64>> = call.get_flag(engine_state, stack, "numchar")?;
         let numchar: Spanned<i64> = numchar.unwrap_or(Spanned {

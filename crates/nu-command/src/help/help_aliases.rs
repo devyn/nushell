@@ -4,8 +4,8 @@ use nu_engine::{scope::ScopeData, CallExt};
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    span, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    span, Category, Example, IntoInterruptiblePipelineData, IntoPipelineData, NuString,
+    PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]

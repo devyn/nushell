@@ -4,14 +4,14 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::{Call, CellPath},
     engine::{Command, EngineState, Stack},
-    record, Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape,
-    Type, Value,
+    record, Category, Example, NuString, PipelineData, ShellError, Signature, Span, Spanned,
+    SyntaxShape, Type, Value,
 };
 
 struct Arguments {
     all: bool,
-    find: Spanned<String>,
-    replace: Spanned<String>,
+    find: Spanned<NuString>,
+    replace: Spanned<NuString>,
     cell_paths: Option<Vec<CellPath>>,
     literal_replace: bool,
     no_regex: bool,

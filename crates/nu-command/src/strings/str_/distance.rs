@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::{Call, CellPath},
     engine::{Command, EngineState, Stack},
-    levenshtein_distance, record, Category, Example, PipelineData, ShellError, Signature, Span,
-    SyntaxShape, Type, Value,
+    levenshtein_distance, record, Category, Example, NuString, PipelineData, ShellError, Signature,
+    Span, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]

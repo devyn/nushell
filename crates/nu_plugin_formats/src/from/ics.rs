@@ -1,9 +1,9 @@
 use ical::parser::ical::component::*;
 use ical::property::Property;
-use indexmap::map::IndexMap;
+use indexmap::IndexMap;
 use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, SimplePluginCommand};
 use nu_protocol::{
-    record, Category, PluginExample, PluginSignature, ShellError, Span, Type, Value,
+    record, Category, NuString, PluginExample, PluginSignature, ShellError, Span, Type, Value,
 };
 use std::io::BufReader;
 
@@ -250,16 +250,18 @@ fn properties_to_value(properties: Vec<Property>, span: Span) -> Value {
 }
 
 fn params_to_value(params: Vec<(String, Vec<String>)>, span: Span) -> Value {
-    let mut row = IndexMap::new();
+    // De-duplicate potential duplicate params by collecting to an IndexMap first
+    let dict: IndexMap<NuString, Value> = params
+        .into_iter()
+        .map(|(param_name, param_values)| {
+            let values: Vec<Value> = param_values
+                .into_iter()
+                .map(|val| Value::string(val, span))
+                .collect();
+            let values = Value::list(values, span);
+            (param_name.into(), values)
+        })
+        .collect();
 
-    for (param_name, param_values) in params {
-        let values: Vec<Value> = param_values
-            .into_iter()
-            .map(|val| Value::string(val, span))
-            .collect();
-        let values = Value::list(values, span);
-        row.insert(param_name, values);
-    }
-
-    Value::record(row.into_iter().collect(), span)
+    Value::record(dict.into_iter().collect(), span)
 }

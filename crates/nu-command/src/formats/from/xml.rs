@@ -4,8 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoPipelineData, PipelineData, Record, ShellError, Signature, Span,
-    Type, Value,
+    record, Category, Example, IntoPipelineData, NuString, PipelineData, Record, ShellError,
+    Signature, Span, Type, Value,
 };
 use roxmltree::NodeType;
 
@@ -100,7 +100,10 @@ struct ParsingInfo {
 fn from_attributes_to_value(attributes: &[roxmltree::Attribute], info: &ParsingInfo) -> Value {
     let mut collected = IndexMap::new();
     for a in attributes {
-        collected.insert(String::from(a.name()), Value::string(a.value(), info.span));
+        collected.insert(
+            NuString::from(a.name()),
+            Value::string(a.value(), info.span),
+        );
     }
     Value::record(collected.into_iter().collect(), info.span)
 }
@@ -120,9 +123,9 @@ fn element_to_value(n: &roxmltree::Node, info: &ParsingInfo) -> Value {
 
     let attributes = from_attributes_to_value(&n.attributes().collect::<Vec<_>>(), info);
 
-    node.insert(String::from(COLUMN_TAG_NAME), tag);
-    node.insert(String::from(COLUMN_ATTRS_NAME), attributes);
-    node.insert(String::from(COLUMN_CONTENT_NAME), content);
+    node.insert(NuString::from(COLUMN_TAG_NAME), tag);
+    node.insert(NuString::from(COLUMN_ATTRS_NAME), attributes);
+    node.insert(NuString::from(COLUMN_CONTENT_NAME), content);
 
     Value::record(node.into_iter().collect(), span)
 }
@@ -137,9 +140,9 @@ fn text_to_value(n: &roxmltree::Node, info: &ParsingInfo) -> Option<Value> {
         let mut node = IndexMap::new();
         let content = Value::string(String::from(text), span);
 
-        node.insert(String::from(COLUMN_TAG_NAME), Value::nothing(span));
-        node.insert(String::from(COLUMN_ATTRS_NAME), Value::nothing(span));
-        node.insert(String::from(COLUMN_CONTENT_NAME), content);
+        node.insert(NuString::from(COLUMN_TAG_NAME), Value::nothing(span));
+        node.insert(NuString::from(COLUMN_ATTRS_NAME), Value::nothing(span));
+        node.insert(NuString::from(COLUMN_CONTENT_NAME), content);
 
         Some(Value::record(node.into_iter().collect(), span))
     }
@@ -155,9 +158,9 @@ fn comment_to_value(n: &roxmltree::Node, info: &ParsingInfo) -> Option<Value> {
         let mut node = IndexMap::new();
         let content = Value::string(String::from(text), span);
 
-        node.insert(String::from(COLUMN_TAG_NAME), Value::string("!", span));
-        node.insert(String::from(COLUMN_ATTRS_NAME), Value::nothing(span));
-        node.insert(String::from(COLUMN_CONTENT_NAME), content);
+        node.insert(NuString::from(COLUMN_TAG_NAME), Value::string("!", span));
+        node.insert(NuString::from(COLUMN_ATTRS_NAME), Value::nothing(span));
+        node.insert(NuString::from(COLUMN_CONTENT_NAME), content);
 
         Some(Value::record(node.into_iter().collect(), span))
     } else {
@@ -178,9 +181,9 @@ fn processing_instruction_to_value(n: &roxmltree::Node, info: &ParsingInfo) -> O
             .value
             .map_or_else(|| Value::nothing(span), |x| Value::string(x, span));
 
-        node.insert(String::from(COLUMN_TAG_NAME), tag);
-        node.insert(String::from(COLUMN_ATTRS_NAME), Value::nothing(span));
-        node.insert(String::from(COLUMN_CONTENT_NAME), content);
+        node.insert(NuString::from(COLUMN_TAG_NAME), tag);
+        node.insert(NuString::from(COLUMN_ATTRS_NAME), Value::nothing(span));
+        node.insert(NuString::from(COLUMN_CONTENT_NAME), content);
 
         Some(Value::record(node.into_iter().collect(), span))
     } else {
@@ -202,7 +205,7 @@ fn from_document_to_value(d: &roxmltree::Document, info: &ParsingInfo) -> Value 
     element_to_value(&d.root_element(), info)
 }
 
-fn from_xml_string_to_value(s: String, info: &ParsingInfo) -> Result<Value, roxmltree::Error> {
+fn from_xml_string_to_value(s: NuString, info: &ParsingInfo) -> Result<Value, roxmltree::Error> {
     let parsed = roxmltree::Document::parse(&s)?;
     Ok(from_document_to_value(&parsed, info))
 }
@@ -332,7 +335,7 @@ mod tests {
     use indexmap::indexmap;
     use indexmap::IndexMap;
 
-    fn string(input: impl Into<String>) -> Value {
+    fn string(input: impl Into<NuString>) -> Value {
         Value::test_string(input)
     }
 
@@ -350,7 +353,7 @@ mod tests {
     }
 
     fn content_tag(
-        tag: impl Into<String>,
+        tag: impl Into<NuString>,
         attrs: IndexMap<&str, &str>,
         content: &[Value],
     ) -> Value {
@@ -361,7 +364,7 @@ mod tests {
         })
     }
 
-    fn content_string(value: impl Into<String>) -> Value {
+    fn content_string(value: impl Into<NuString>) -> Value {
         Value::test_record(record! {
             COLUMN_TAG_NAME =>     Value::nothing(Span::test_data()),
             COLUMN_ATTRS_NAME =>   Value::nothing(Span::test_data()),
@@ -375,7 +378,7 @@ mod tests {
             keep_comments: false,
             keep_processing_instructions: false,
         };
-        from_xml_string_to_value(xml.to_string(), &info)
+        from_xml_string_to_value(xml.into(), &info)
     }
 
     #[test]

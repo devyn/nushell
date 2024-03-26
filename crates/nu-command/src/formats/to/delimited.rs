@@ -1,6 +1,8 @@
 use csv::{Writer, WriterBuilder};
 use nu_cmd_base::formats::to::delimited::merge_descriptors;
-use nu_protocol::{Config, IntoPipelineData, PipelineData, Record, ShellError, Span, Value};
+use nu_protocol::{
+    Config, IntoPipelineData, NuString, PipelineData, Record, ShellError, Span, ToNuString, Value,
+};
 use std::collections::VecDeque;
 use std::error::Error;
 
@@ -30,8 +32,8 @@ fn record_to_delimited(
     let mut wtr = WriterBuilder::new()
         .delimiter(separator as u8)
         .from_writer(vec![]);
-    let mut fields: VecDeque<String> = VecDeque::new();
-    let mut values: VecDeque<String> = VecDeque::new();
+    let mut fields: VecDeque<NuString> = VecDeque::new();
+    let mut values: VecDeque<NuString> = VecDeque::new();
 
     for (k, v) in record {
         fields.push_back(k.clone());
@@ -66,7 +68,7 @@ fn table_to_delimited(
         let vals = vals
             .iter()
             .map(|ele| {
-                to_string_tagged_value(ele, config, head, span).unwrap_or_else(|_| String::new())
+                to_string_tagged_value(ele, config, head, span).unwrap_or_else(|_| NuString::new())
             })
             .collect::<Vec<_>>();
         wtr.write_record(vals).expect("can not write");
@@ -81,7 +83,7 @@ fn table_to_delimited(
                 for desc in &merged_descriptors {
                     row.push(match l.get(desc) {
                         Some(s) => to_string_tagged_value(s, config, head, span)?,
-                        None => String::new(),
+                        None => NuString::new(),
                     });
                 }
                 wtr.write_record(&row).expect("can not write");
@@ -109,7 +111,7 @@ fn to_string_tagged_value(
     config: &Config,
     span: Span,
     head: Span,
-) -> Result<String, ShellError> {
+) -> Result<NuString, ShellError> {
     match &v {
         Value::String { .. }
         | Value::Bool { .. }
@@ -120,8 +122,8 @@ fn to_string_tagged_value(
         | Value::Filesize { .. }
         | Value::CellPath { .. }
         | Value::Float { .. } => Ok(v.clone().to_abbreviated_string(config)),
-        Value::Date { val, .. } => Ok(val.to_string()),
-        Value::Nothing { .. } => Ok(String::new()),
+        Value::Date { val, .. } => Ok(val.to_nu_string()),
+        Value::Nothing { .. } => Ok(NuString::new()),
         // Propagate existing errors
         Value::Error { error, .. } => Err(*error.clone()),
         _ => Err(make_unsupported_input_error(v, head, span)),

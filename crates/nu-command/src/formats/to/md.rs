@@ -4,8 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Config, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, Type,
-    Value,
+    Category, Config, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature,
+    Span, ToNuString, Type, Value,
 };
 
 #[derive(Clone)]
@@ -96,7 +96,7 @@ fn to_md(
                     Value::List { .. } => table(val.into_pipeline_data(), pretty, config),
                     other => fragment(other, pretty, config),
                 })
-                .collect::<Vec<String>>()
+                .collect::<Vec<NuString>>()
                 .join(""),
             head,
         )
@@ -105,8 +105,8 @@ fn to_md(
     Ok(Value::string(table(grouped_input, pretty, config), head).into_pipeline_data())
 }
 
-fn fragment(input: Value, pretty: bool, config: &Config) -> String {
-    let mut out = String::new();
+fn fragment(input: Value, pretty: bool, config: &Config) -> NuString {
+    let mut out = NuString::new();
 
     if let Value::Record { val, .. } = &input {
         match val.get_index(0) {
@@ -132,13 +132,13 @@ fn fragment(input: Value, pretty: bool, config: &Config) -> String {
     out
 }
 
-fn collect_headers(headers: &[String]) -> (Vec<String>, Vec<usize>) {
-    let mut escaped_headers: Vec<String> = Vec::new();
+fn collect_headers(headers: &[NuString]) -> (Vec<NuString>, Vec<usize>) {
+    let mut escaped_headers: Vec<NuString> = Vec::new();
     let mut column_widths: Vec<usize> = Vec::new();
 
     if !headers.is_empty() && (headers.len() > 1 || !headers[0].is_empty()) {
         for header in headers {
-            let escaped_header_string = v_htmlescape::escape(header).to_string();
+            let escaped_header_string = v_htmlescape::escape(header).to_nu_string();
             column_widths.push(escaped_header_string.len());
             escaped_headers.push(escaped_header_string);
         }
@@ -149,7 +149,7 @@ fn collect_headers(headers: &[String]) -> (Vec<String>, Vec<usize>) {
     (escaped_headers, column_widths)
 }
 
-fn table(input: PipelineData, pretty: bool, config: &Config) -> String {
+fn table(input: PipelineData, pretty: bool, config: &Config) -> NuString {
     let vec_of_values = input.into_iter().collect::<Vec<Value>>();
     let mut headers = merge_descriptors(&vec_of_values);
 
@@ -157,8 +157,8 @@ fn table(input: PipelineData, pretty: bool, config: &Config) -> String {
     for value in &vec_of_values {
         if let Value::Record { val, .. } = value {
             for column in val.columns() {
-                if column.is_empty() && !headers.contains(&String::new()) {
-                    headers.insert(empty_header_index, String::new());
+                if column.is_empty() && !headers.contains(&NuString::new()) {
+                    headers.insert(empty_header_index, NuString::new());
                     empty_header_index += 1;
                     break;
                 }
@@ -169,10 +169,10 @@ fn table(input: PipelineData, pretty: bool, config: &Config) -> String {
 
     let (escaped_headers, mut column_widths) = collect_headers(&headers);
 
-    let mut escaped_rows: Vec<Vec<String>> = Vec::new();
+    let mut escaped_rows: Vec<Vec<NuString>> = Vec::new();
 
     for row in vec_of_values {
-        let mut escaped_row: Vec<String> = Vec::new();
+        let mut escaped_row: Vec<NuString> = Vec::new();
         let span = row.span();
 
         match row.to_owned() {
@@ -194,7 +194,7 @@ fn table(input: PipelineData, pretty: bool, config: &Config) -> String {
             }
             p => {
                 let value_string =
-                    v_htmlescape::escape(&p.to_abbreviated_string(config)).to_string();
+                    v_htmlescape::escape(&p.to_abbreviated_string(config)).to_nu_string();
                 escaped_row.push(value_string);
             }
         }
@@ -205,11 +205,11 @@ fn table(input: PipelineData, pretty: bool, config: &Config) -> String {
     let output_string = if (column_widths.is_empty() || column_widths.iter().all(|x| *x == 0))
         && escaped_rows.is_empty()
     {
-        String::from("")
+        NuString::from("")
     } else {
         get_output_string(&escaped_headers, &escaped_rows, &column_widths, pretty)
             .trim()
-            .to_string()
+            .into()
     };
 
     output_string
@@ -224,7 +224,7 @@ pub fn group_by(values: PipelineData, head: Span, config: &Config) -> (PipelineD
         } = val
         {
             lists
-                .entry(record.columns().map(|c| c.as_str()).collect::<String>())
+                .entry(record.columns().map(|c| c.as_str()).collect::<NuString>())
                 .and_modify(|v: &mut Vec<Value>| v.push(val.clone()))
                 .or_insert_with(|| vec![val.clone()]);
         } else {
@@ -249,11 +249,11 @@ pub fn group_by(values: PipelineData, head: Span, config: &Config) -> (PipelineD
 }
 
 fn get_output_string(
-    headers: &[String],
-    rows: &[Vec<String>],
+    headers: &[NuString],
+    rows: &[Vec<NuString>],
     column_widths: &[usize],
     pretty: bool,
-) -> String {
+) -> NuString {
     let mut output_string = String::new();
 
     if !headers.is_empty() {
@@ -262,11 +262,7 @@ fn get_output_string(
         for i in 0..headers.len() {
             if pretty {
                 output_string.push(' ');
-                output_string.push_str(&get_padded_string(
-                    headers[i].clone(),
-                    column_widths[i],
-                    ' ',
-                ));
+                output_string.push_str(&get_padded_string(&headers[i], column_widths[i], ' '));
                 output_string.push(' ');
             } else {
                 output_string.push_str(&headers[i]);
@@ -280,7 +276,7 @@ fn get_output_string(
         for &col_width in column_widths.iter().take(headers.len()) {
             if pretty {
                 output_string.push(' ');
-                output_string.push_str(&get_padded_string(String::from("-"), col_width, '-'));
+                output_string.push_str(&get_padded_string("-", col_width, '-'));
                 output_string.push(' ');
             } else {
                 output_string.push('-');
@@ -300,7 +296,7 @@ fn get_output_string(
         for i in 0..row.len() {
             if pretty && column_widths.get(i).is_some() {
                 output_string.push(' ');
-                output_string.push_str(&get_padded_string(row[i].clone(), column_widths[i], ' '));
+                output_string.push_str(&get_padded_string(&row[i], column_widths[i], ' '));
                 output_string.push(' ');
             } else {
                 output_string.push_str(&row[i]);
@@ -314,10 +310,10 @@ fn get_output_string(
         output_string.push('\n');
     }
 
-    output_string
+    output_string.into()
 }
 
-fn get_padded_string(text: String, desired_length: usize, padding_character: char) -> String {
+fn get_padded_string(text: &str, desired_length: usize, padding_character: char) -> String {
     let repeat_length = if text.len() > desired_length {
         0
     } else {

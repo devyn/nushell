@@ -2,6 +2,7 @@ use crate::grapheme_flags;
 use nu_cmd_base::input_handler::{operate, CmdArgument};
 use nu_cmd_base::util;
 use nu_engine::CallExt;
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::{Call, CellPath},
     engine::{Command, EngineState, Stack},

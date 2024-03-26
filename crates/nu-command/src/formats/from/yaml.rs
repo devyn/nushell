@@ -3,8 +3,8 @@ use itertools::Itertools;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, Type,
-    Value,
+    record, Category, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature,
+    Span, ToNuString, Type, Value,
 };
 use serde::de::Deserialize;
 
@@ -118,21 +118,19 @@ fn convert_yaml_value_to_nu_value(
                 match (k, v) {
                     (serde_yaml::Value::Number(k), _) => {
                         collected.insert(
-                            k.to_string(),
+                            k.to_nu_string(),
                             convert_yaml_value_to_nu_value(v, span, val_span)?,
                         );
                     }
                     (serde_yaml::Value::Bool(k), _) => {
                         collected.insert(
-                            k.to_string(),
+                            k.to_nu_string(),
                             convert_yaml_value_to_nu_value(v, span, val_span)?,
                         );
                     }
                     (serde_yaml::Value::String(k), _) => {
-                        collected.insert(
-                            k.clone(),
-                            convert_yaml_value_to_nu_value(v, span, val_span)?,
-                        );
+                        collected
+                            .insert(k.into(), convert_yaml_value_to_nu_value(v, span, val_span)?);
                     }
                     // Hard-code fix for cases where "v" is a string without quotations with double curly braces
                     // e.g. k = value
@@ -191,7 +189,7 @@ fn convert_yaml_value_to_nu_value(
 }
 
 pub fn from_yaml_string_to_value(
-    s: String,
+    s: NuString,
     span: Span,
     val_span: Span,
 ) -> Result<Value, ShellError> {
@@ -279,11 +277,8 @@ mod test {
         ];
         let config = Config::default();
         for tc in tt {
-            let actual = from_yaml_string_to_value(
-                tc.input.to_owned(),
-                Span::test_data(),
-                Span::test_data(),
-            );
+            let actual =
+                from_yaml_string_to_value(tc.input.into(), Span::test_data(), Span::test_data());
             if actual.is_err() {
                 assert!(
                     tc.expected.is_err(),
@@ -319,7 +314,7 @@ mod test {
         // see this ordering difference. This loop should be far more than enough to catch a regression.
         for ii in 1..1000 {
             let actual = from_yaml_string_to_value(
-                String::from(test_yaml),
+                NuString::from(test_yaml),
                 Span::test_data(),
                 Span::test_data(),
             );

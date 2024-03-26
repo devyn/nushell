@@ -4,8 +4,8 @@ use nu_engine::{get_full_help, CallExt};
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    record, span, Category, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    record, span, Category, IntoInterruptiblePipelineData, IntoPipelineData, NuString,
+    PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
@@ -105,7 +105,7 @@ pub fn help_commands(
             .map(|(signature, examples, _, _, is_parser_keyword)| {
                 get_full_help(signature, examples, engine_state, stack, *is_parser_keyword)
             })
-            .collect::<Vec<String>>();
+            .collect::<Vec<NuString>>();
 
         if !output.is_empty() {
             Ok(

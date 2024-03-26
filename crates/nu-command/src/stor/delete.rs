@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, SyntaxShape,
-    Type, Value,
+    Category, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature, Span,
+    SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
@@ -70,7 +70,7 @@ impl Command for StorDelete {
         let table_name_opt: Option<NuString> = call.get_flag(engine_state, stack, "table-name")?;
 
         // For deleting rows from a table
-        let where_clause_opt: Option<String> =
+        let where_clause_opt: Option<NuString> =
             call.get_flag(engine_state, stack, "where-clause")?;
 
         if table_name_opt.is_none() && where_clause_opt.is_none() {
@@ -93,7 +93,7 @@ impl Command for StorDelete {
         if let Some(new_table_name) = table_name_opt {
             let where_clause = match where_clause_opt {
                 Some(where_stmt) => where_stmt,
-                None => String::new(),
+                None => NuString::new(),
             };
 
             if let Ok(conn) = db.open_connection() {

@@ -2,8 +2,8 @@ use indexmap::IndexMap;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoInterruptiblePipelineData, PipelineData, ShellError, Signature, Span,
-    Type, Value,
+    Category, Example, IntoInterruptiblePipelineData, NuString, PipelineData, ShellError,
+    Signature, Span, Type, Value,
 };
 
 #[derive(Clone)]
@@ -106,7 +106,7 @@ pub fn get_values<'a>(
     head: Span,
     input_span: Span,
 ) -> Result<Vec<Value>, ShellError> {
-    let mut output: IndexMap<String, Vec<Value>> = IndexMap::new();
+    let mut output: IndexMap<NuString, Vec<Value>> = IndexMap::new();
 
     for item in input {
         match item {

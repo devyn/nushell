@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value,
+    record, Category, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature,
+    Span, Spanned, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
@@ -91,11 +91,11 @@ fn parse_aligned_columns<'a>(
     lines: impl Iterator<Item = &'a str>,
     headers: HeaderOptions,
     separator: &str,
-) -> Vec<Vec<(String, String)>> {
+) -> Vec<Vec<(NuString, NuString)>> {
     fn construct<'a>(
         lines: impl Iterator<Item = &'a str>,
-        headers: Vec<(String, usize)>,
-    ) -> Vec<Vec<(String, String)>> {
+        headers: Vec<(NuString, usize)>,
+    ) -> Vec<Vec<(NuString, NuString)>> {
         lines
             .map(|l| {
                 headers
@@ -156,10 +156,10 @@ fn parse_aligned_columns<'a>(
             .split(&separator)
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .map(String::from)
+            .map(NuString::from)
             .zip(indices);
 
-        let columns = headers.collect::<Vec<(String, usize)>>();
+        let columns = headers.collect::<Vec<(NuString, usize)>>();
 
         construct(lines, columns)
     };
@@ -173,10 +173,10 @@ fn parse_aligned_columns<'a>(
         indices.sort_unstable();
         indices.dedup();
 
-        let headers: Vec<(String, usize)> = indices
+        let headers: Vec<(NuString, usize)> = indices
             .iter()
             .enumerate()
-            .map(|(i, position)| (format!("column{}", i + 1), *position))
+            .map(|(i, position)| (format!("column{}", i + 1).into(), *position))
             .collect();
 
         construct(ls.iter().map(|s| s.to_owned()), headers)
@@ -192,17 +192,17 @@ fn parse_separated_columns<'a>(
     lines: impl Iterator<Item = &'a str>,
     headers: HeaderOptions,
     separator: &str,
-) -> Vec<Vec<(String, String)>> {
+) -> Vec<Vec<(NuString, NuString)>> {
     fn collect<'a>(
-        headers: Vec<String>,
+        headers: Vec<NuString>,
         rows: impl Iterator<Item = &'a str>,
         separator: &str,
-    ) -> Vec<Vec<(String, String)>> {
+    ) -> Vec<Vec<(NuString, NuString)>> {
         rows.map(|r| {
             headers
                 .iter()
                 .zip(r.split(separator).map(str::trim).filter(|s| !s.is_empty()))
-                .map(|(a, b)| (a.to_owned(), b.to_owned()))
+                .map(|(a, b)| (a.into(), b.into()))
                 .collect()
         })
         .collect()
@@ -212,7 +212,7 @@ fn parse_separated_columns<'a>(
         let headers = headers_raw
             .split(&separator)
             .map(str::trim)
-            .map(str::to_owned)
+            .map(NuString::from)
             .filter(|s| !s.is_empty())
             .collect();
         collect(headers, lines, separator)
@@ -222,8 +222,8 @@ fn parse_separated_columns<'a>(
         let num_columns = ls.iter().map(|r| r.len()).max().unwrap_or(0);
 
         let headers = (1..=num_columns)
-            .map(|i| format!("column{i}"))
-            .collect::<Vec<String>>();
+            .map(|i| format!("column{i}").into())
+            .collect::<Vec<NuString>>();
         collect(headers, ls.into_iter(), separator)
     };
 
@@ -238,7 +238,7 @@ fn string_to_table(
     noheaders: bool,
     aligned_columns: bool,
     split_at: usize,
-) -> Vec<Vec<(String, String)>> {
+) -> Vec<Vec<(NuString, NuString)>> {
     let mut lines = s
         .lines()
         .filter(|l| !l.trim().is_empty() && !l.trim().starts_with('#'));
@@ -312,8 +312,8 @@ fn from_ssv(
 mod tests {
     use super::*;
 
-    fn owned(x: &str, y: &str) -> (String, String) {
-        (String::from(x), String::from(y))
+    fn owned(x: &str, y: &str) -> (NuString, NuString) {
+        (NuString::from(x), NuString::from(y))
     }
 
     #[test]
@@ -456,7 +456,7 @@ mod tests {
         let input = "colA   col B";
 
         let result = string_to_table(input, false, true, 2);
-        let expected: Vec<Vec<(String, String)>> = vec![];
+        let expected: Vec<Vec<(NuString, NuString)>> = vec![];
         assert_eq!(expected, result);
     }
 

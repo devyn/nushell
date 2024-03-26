@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, SyntaxShape,
-    Type, Value,
+    Category, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature, Span,
+    SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
@@ -110,7 +110,7 @@ fn tutor(
     if let Some(find) = find {
         let mut results = vec![];
         for search_group in search_space {
-            if search_group.1.contains(&find) {
+            if search_group.1.contains(find.as_str()) {
                 results.push(search_group.0[0].to_string())
             }
         }

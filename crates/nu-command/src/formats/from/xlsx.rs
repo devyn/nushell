@@ -6,7 +6,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Value,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Span, SyntaxShape, Type,
+    Value,
 };
 use std::io::Cursor;
 
@@ -71,7 +72,7 @@ impl Command for FromXlsx {
     }
 }
 
-fn convert_columns(columns: &[Value]) -> Result<Vec<String>, ShellError> {
+fn convert_columns(columns: &[Value]) -> Result<Vec<NuString>, ShellError> {
     let res = columns
         .iter()
         .map(|value| match &value {
@@ -81,7 +82,7 @@ fn convert_columns(columns: &[Value]) -> Result<Vec<String>, ShellError> {
                 span: value.span(),
             }),
         })
-        .collect::<Result<Vec<String>, _>>()?;
+        .collect::<Result<Vec<NuString>, _>>()?;
 
     Ok(res)
 }
@@ -113,7 +114,7 @@ fn collect_binary(input: PipelineData, span: Span) -> Result<Vec<u8>, ShellError
 fn from_xlsx(
     input: PipelineData,
     head: Span,
-    sel_sheets: Vec<String>,
+    sel_sheets: Vec<NuString>,
 ) -> Result<PipelineData, ShellError> {
     let span = input.span();
     let bytes = collect_binary(input, head)?;
@@ -129,7 +130,7 @@ fn from_xlsx(
 
     let mut sheet_names = xlsx.sheet_names();
     if !sel_sheets.is_empty() {
-        sheet_names.retain(|e| sel_sheets.contains(e));
+        sheet_names.retain(|e| sel_sheets.iter().any(|sel| sel == e));
     }
 
     let tz = match Local.timestamp_opt(0, 0) {
@@ -163,14 +164,14 @@ fn from_xlsx(
                             _ => Value::nothing(head),
                         };
 
-                        (format!("column{i}"), value)
+                        (format!("column{i}").into(), value)
                     })
                     .collect();
 
                 sheet_output.push(Value::record(record, head));
             }
 
-            dict.insert(sheet_name, Value::list(sheet_output, head));
+            dict.insert(sheet_name.into(), Value::list(sheet_output, head));
         } else {
             return Err(ShellError::UnsupportedInput {
                 msg: "Could not load sheet".to_string(),

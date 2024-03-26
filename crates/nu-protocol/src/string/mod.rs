@@ -1,6 +1,15 @@
-use std::{sync::Arc, fmt, ops::{Deref, self}, cmp::Ordering, hash::Hash, borrow::{Cow, Borrow}, path::{PathBuf, Path}, ffi::OsStr};
+use std::{
+    borrow::{Borrow, Cow},
+    cmp::Ordering,
+    ffi::OsStr,
+    fmt,
+    hash::Hash,
+    ops::{self, Deref},
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 mod tests;
@@ -104,7 +113,7 @@ impl Clone for NuString {
                 } else {
                     NuString(Variant::Owned(s.clone()))
                 }
-            },
+            }
             Variant::Shared(s) => NuString(Variant::Shared(s.clone())),
         }
     }
@@ -164,7 +173,7 @@ impl PartialEq<NuString> for String {
     }
 }
 
-impl Eq for NuString { }
+impl Eq for NuString {}
 
 impl PartialOrd for NuString {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -229,7 +238,8 @@ impl Default for NuString {
 impl Serialize for NuString {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         self.deref().serialize(serializer)
     }
 }
@@ -237,7 +247,8 @@ impl Serialize for NuString {
 impl<'de> Deserialize<'de> for NuString {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         <&'de str as Deserialize>::deserialize(deserializer).map(NuString::from)
     }
 }
@@ -429,3 +440,15 @@ impl<'a> ops::Add<&'a str> for NuString {
         (String::from(self) + rhs).into()
     }
 }
+
+pub trait ToNuString: ToString {
+    /// Format `self` as a [`NuString`]. This is typically used with types implementing
+    /// [`Display`](std::fmt::Display).
+    ///
+    /// This is just a shorthand wrapper around `.to_string().into()`.
+    fn to_nu_string(&self) -> NuString {
+        self.to_string().into()
+    }
+}
+
+impl<T: ToString> ToNuString for T {}

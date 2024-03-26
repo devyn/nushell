@@ -4,7 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, PipelineData, ShellError, Signature, Span, SyntaxShape, Type, Value,
+    record, Category, Example, NuString, PipelineData, ShellError, Signature, Span, SyntaxShape,
+    Type, Value,
 };
 
 #[derive(Clone)]
@@ -64,7 +65,7 @@ impl Command for UniqBy {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let columns: Vec<String> = call.rest(engine_state, stack, 0)?;
+        let columns: Vec<NuString> = call.rest(engine_state, stack, 0)?;
 
         if columns.is_empty() {
             return Err(ShellError::MissingParameter {
@@ -110,7 +111,7 @@ impl Command for UniqBy {
     }
 }
 
-fn validate(vec: &[Value], columns: &[String], span: Span) -> Result<(), ShellError> {
+fn validate(vec: &[Value], columns: &[NuString], span: Span) -> Result<(), ShellError> {
     let first = vec.first();
     if let Some(v) = first {
         let val_span = v.span();
@@ -128,7 +129,7 @@ fn validate(vec: &[Value], columns: &[String], span: Span) -> Result<(), ShellEr
 
             if let Some(nonexistent) = nonexistent_column(columns, record.columns()) {
                 return Err(ShellError::CantFindColumn {
-                    col_name: nonexistent,
+                    col_name: nonexistent.into(),
                     span,
                     src_span: val_span,
                 });
@@ -139,14 +140,16 @@ fn validate(vec: &[Value], columns: &[String], span: Span) -> Result<(), ShellEr
     Ok(())
 }
 
-fn get_data_by_columns(columns: &[String], item: &Value) -> Vec<Value> {
+fn get_data_by_columns(columns: &[NuString], item: &Value) -> Vec<Value> {
     columns
         .iter()
         .filter_map(|col| item.get_data_by_key(col))
         .collect::<Vec<_>>()
 }
 
-fn item_mapper_by_col(cols: Vec<String>) -> impl Fn(crate::ItemMapperState) -> crate::ValueCounter {
+fn item_mapper_by_col(
+    cols: Vec<NuString>,
+) -> impl Fn(crate::ItemMapperState) -> crate::ValueCounter {
     let columns = cols;
 
     Box::new(move |ms: crate::ItemMapperState| -> crate::ValueCounter {

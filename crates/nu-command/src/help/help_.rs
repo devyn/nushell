@@ -4,6 +4,7 @@ use crate::help::help_modules;
 use fancy_regex::Regex;
 use nu_ansi_term::Style;
 use nu_engine::CallExt;
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},

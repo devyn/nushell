@@ -57,11 +57,11 @@ fn helper(engine_state: &EngineState, v: &Value) -> Result<toml::Value, ShellErr
         }
         Value::Range { .. } => toml::Value::String("<Range>".to_string()),
         Value::Float { val, .. } => toml::Value::Float(*val),
-        Value::String { val, .. } | Value::Glob { val, .. } => toml::Value::String(val.clone()),
+        Value::String { val, .. } | Value::Glob { val, .. } => toml::Value::String(val.into()),
         Value::Record { val, .. } => {
             let mut m = toml::map::Map::new();
             for (k, v) in val {
-                m.insert(k.clone(), helper(engine_state, v)?);
+                m.insert(k.into(), helper(engine_state, v)?);
             }
             toml::Value::Table(m)
         }
@@ -91,7 +91,7 @@ fn helper(engine_state: &EngineState, v: &Value) -> Result<toml::Value, ShellErr
             val.members
                 .iter()
                 .map(|x| match &x {
-                    PathMember::String { val, .. } => Ok(toml::Value::String(val.clone())),
+                    PathMember::String { val, .. } => Ok(toml::Value::String(val.into())),
                     PathMember::Int { val, .. } => Ok(toml::Value::Integer(*val as i64)),
                 })
                 .collect::<Result<Vec<toml::Value>, ShellError>>()?,
@@ -209,10 +209,10 @@ mod tests {
         let engine_state = EngineState::new();
 
         let mut m = indexmap::IndexMap::new();
-        m.insert("rust".to_owned(), Value::test_string("editor"));
-        m.insert("is".to_owned(), Value::nothing(Span::test_data()));
+        m.insert("rust".into(), Value::test_string("editor"));
+        m.insert("is".into(), Value::nothing(Span::test_data()));
         m.insert(
-            "features".to_owned(),
+            "features".into(),
             Value::list(
                 vec![Value::test_string("hello"), Value::test_string("array")],
                 Span::test_data(),

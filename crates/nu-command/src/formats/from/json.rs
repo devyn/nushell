@@ -117,7 +117,7 @@ fn convert_nujson_to_value(value: nu_json::Value, span: Span) -> Value {
         nu_json::Value::Null => Value::nothing(span),
         nu_json::Value::Object(k) => Value::record(
             k.into_iter()
-                .map(|(k, v)| (k, convert_nujson_to_value(v, span)))
+                .map(|(k, v)| (k.into(), convert_nujson_to_value(v, span)))
                 .collect(),
             span,
         ),

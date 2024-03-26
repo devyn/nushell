@@ -3,8 +3,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    Category, Example, IntoPipelineData, PipelineData, Record, ShellError, Signature, Span,
-    SyntaxShape, Type, Value,
+    Category, Example, IntoPipelineData, NuString, PipelineData, Record, ShellError, Signature,
+    Span, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]

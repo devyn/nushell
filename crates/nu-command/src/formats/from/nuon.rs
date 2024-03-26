@@ -68,7 +68,7 @@ impl Command for FromNuon {
                     span: Some(head),
                     help: None,
                     inner: vec![ShellError::OutsideSpannedLabeledError {
-                        src: string_input,
+                        src: string_input.into(),
                         error: "error when loading".into(),
                         msg: "excess values when loading".into(),
                         span: element.expr.span,
@@ -108,7 +108,7 @@ impl Command for FromNuon {
                     span: Some(head),
                     help: None,
                     inner: vec![ShellError::OutsideSpannedLabeledError {
-                        src: string_input,
+                        src: string_input.into(),
                         error: "error when loading".into(),
                         msg: "detected a pipeline in nuon file".into(),
                         span: expr.expr.span,
@@ -135,7 +135,7 @@ impl Command for FromNuon {
                 span: Some(head),
                 help: None,
                 inner: vec![ShellError::OutsideSpannedLabeledError {
-                    src: string_input,
+                    src: string_input.into(),
                     error: "error when parsing".into(),
                     msg: err.to_string(),
                     span: err.span(),
@@ -317,7 +317,7 @@ fn convert_to_value(
 
                         if let Some(i) = record.index_of(&key_str) {
                             return Err(ShellError::ColumnDefinedTwice {
-                                col_name: key_str,
+                                col_name: key_str.into(),
                                 second_use: key.span,
                                 first_use: key_spans[i],
                             });
@@ -390,7 +390,7 @@ fn convert_to_value(
 
                 if let Some(idx) = cols.iter().position(|existing| existing == key_str) {
                     return Err(ShellError::ColumnDefinedTwice {
-                        col_name: key_str.clone(),
+                        col_name: key_str.to_string(),
                         second_use: key.span,
                         first_use: headers[idx].span,
                     });

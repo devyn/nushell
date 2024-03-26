@@ -187,7 +187,7 @@ pub fn value_to_string(
         }
         Value::Int { val, .. } => Ok(format!("{}", *val)),
         Value::List { vals, .. } => {
-            let headers = get_columns(vals);
+            let headers = get_columns::<&str>(vals);
             if !headers.is_empty() && vals.iter().all(|x| x.columns().eq(headers.iter())) {
                 // Table output
                 let headers: Vec<String> = headers
@@ -308,7 +308,7 @@ fn value_to_string_without_quotes(
             if needs_quotes(val) {
                 escape_quote_string(val)
             } else {
-                val.clone()
+                val.into()
             }
         }),
         _ => value_to_string(v, span, depth, indent),

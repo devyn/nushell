@@ -3,7 +3,7 @@ use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
     format_duration, format_filesize_from_conf, Category, Config, Example, IntoPipelineData,
-    ListStream, PipelineData, RawStream, ShellError, Signature, Type, Value,
+    ListStream, NuString, PipelineData, RawStream, ShellError, Signature, ToNuString, Type, Value,
 };
 
 #[derive(Clone)]
@@ -109,52 +109,53 @@ impl Iterator for ListStreamIterator {
     }
 }
 
-fn local_into_string(value: Value, separator: &str, config: &Config) -> String {
+fn local_into_string(value: Value, separator: &str, config: &Config) -> NuString {
     let span = value.span();
     match value {
-        Value::Bool { val, .. } => val.to_string(),
-        Value::Int { val, .. } => val.to_string(),
-        Value::Float { val, .. } => val.to_string(),
+        Value::Bool { val, .. } => val.to_nu_string(),
+        Value::Int { val, .. } => val.to_nu_string(),
+        Value::Float { val, .. } => val.to_nu_string(),
         Value::Filesize { val, .. } => format_filesize_from_conf(val, config),
         Value::Duration { val, .. } => format_duration(val),
         Value::Date { val, .. } => {
-            format!("{} ({})", val.to_rfc2822(), HumanTime::from(val))
+            format!("{} ({})", val.to_rfc2822(), HumanTime::from(val)).into()
         }
-        Value::Range { val, .. } => {
-            format!(
-                "{}..{}",
-                local_into_string(val.from, ", ", config),
-                local_into_string(val.to, ", ", config)
-            )
-        }
+        Value::Range { val, .. } => format!(
+            "{}..{}",
+            local_into_string(val.from, ", ", config),
+            local_into_string(val.to, ", ", config)
+        )
+        .into(),
         Value::String { val, .. } => val,
         Value::Glob { val, .. } => val,
         Value::List { vals: val, .. } => val
             .into_iter()
             .map(|x| local_into_string(x, ", ", config))
             .collect::<Vec<_>>()
-            .join(separator),
+            .join(separator)
+            .into(),
         Value::Record { val, .. } => val
             .into_iter()
             .map(|(x, y)| format!("{}: {}", x, local_into_string(y, ", ", config)))
             .collect::<Vec<_>>()
-            .join(separator),
+            .join(separator)
+            .into(),
         Value::LazyRecord { val, .. } => match val.collect() {
             Ok(val) => local_into_string(val, separator, config),
-            Err(error) => format!("{error:?}"),
+            Err(error) => format!("{error:?}").into(),
         },
-        Value::Block { val, .. } => format!("<Block {val}>"),
-        Value::Closure { val, .. } => format!("<Closure {}>", val.block_id),
-        Value::Nothing { .. } => String::new(),
-        Value::Error { error, .. } => format!("{error:?}"),
-        Value::Binary { val, .. } => format!("{val:?}"),
-        Value::CellPath { val, .. } => val.to_string(),
+        Value::Block { val, .. } => format!("<Block {val}>").into(),
+        Value::Closure { val, .. } => format!("<Closure {}>", val.block_id).into(),
+        Value::Nothing { .. } => NuString::new(),
+        Value::Error { error, .. } => format!("{error:?}").into(),
+        Value::Binary { val, .. } => format!("{val:?}").into(),
+        Value::CellPath { val, .. } => val.to_nu_string(),
         // If we fail to collapse the custom value, just print <{type_name}> - failure is not
         // that critical here
         Value::CustomValue { val, .. } => val
             .to_base_value(span)
             .map(|val| local_into_string(val, separator, config))
-            .unwrap_or_else(|_| format!("<{}>", val.type_name())),
+            .unwrap_or_else(|_| format!("<{}>", val.type_name()).into()),
     }
 }
 

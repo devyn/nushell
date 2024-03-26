@@ -142,23 +142,23 @@ fn from_eml(input: &Value, body_preview: usize, head: Span) -> Result<Value, Lab
     let mut collected = IndexMap::new();
 
     if let Some(subj) = eml.subject {
-        collected.insert("Subject".to_string(), Value::string(subj, head));
+        collected.insert("Subject".into(), Value::string(subj, head));
     }
 
     if let Some(from) = eml.from {
-        collected.insert("From".to_string(), headerfieldvalue_to_value(head, &from));
+        collected.insert("From".into(), headerfieldvalue_to_value(head, &from));
     }
 
     if let Some(to) = eml.to {
-        collected.insert("To".to_string(), headerfieldvalue_to_value(head, &to));
+        collected.insert("To".into(), headerfieldvalue_to_value(head, &to));
     }
 
     for HeaderField { name, value } in &eml.headers {
-        collected.insert(name.to_string(), headerfieldvalue_to_value(head, value));
+        collected.insert(name.into(), headerfieldvalue_to_value(head, value));
     }
 
     if let Some(body) = eml.body {
-        collected.insert("Body".to_string(), Value::string(body, head));
+        collected.insert("Body".into(), Value::string(body, head));
     }
 
     Ok(Value::record(collected.into_iter().collect(), head))

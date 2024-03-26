@@ -1,5 +1,5 @@
 use csv::{ReaderBuilder, Trim};
-use nu_protocol::{IntoPipelineData, PipelineData, ShellError, Span, Value};
+use nu_protocol::{IntoPipelineData, NuString, PipelineData, ShellError, Span, Value};
 
 fn from_delimited_string_to_value(
     DelimitedReaderConfig {
@@ -12,7 +12,7 @@ fn from_delimited_string_to_value(
         no_infer,
         trim,
     }: DelimitedReaderConfig,
-    s: String,
+    s: NuString,
     span: Span,
 ) -> Result<Value, csv::Error> {
     let mut reader = ReaderBuilder::new()
@@ -27,10 +27,10 @@ fn from_delimited_string_to_value(
 
     let headers = if noheaders {
         (1..=reader.headers()?.len())
-            .map(|i| format!("column{i}"))
-            .collect::<Vec<String>>()
+            .map(|i| format!("column{i}").into())
+            .collect::<Vec<NuString>>()
     } else {
-        reader.headers()?.iter().map(String::from).collect()
+        reader.headers()?.iter().map(NuString::from).collect()
     };
 
     let mut rows = vec![];

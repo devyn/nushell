@@ -4,7 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, PipelineData, ShellError, Signature, SyntaxShape, Type, Value,
+    record, Category, Example, NuString, PipelineData, ShellError, Signature, SyntaxShape, Type,
+    Value,
 };
 
 #[derive(Clone)]

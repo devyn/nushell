@@ -2,8 +2,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type,
-    Value,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape,
+    Type, Value,
 };
 use regex::Regex;
 #[derive(Clone)]

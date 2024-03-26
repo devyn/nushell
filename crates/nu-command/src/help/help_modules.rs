@@ -4,8 +4,8 @@ use nu_engine::{scope::ScopeData, CallExt};
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    span, Category, DeclId, Example, IntoInterruptiblePipelineData, IntoPipelineData, PipelineData,
-    ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    span, Category, DeclId, Example, IntoInterruptiblePipelineData, IntoPipelineData, NuString,
+    PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
@@ -82,7 +82,7 @@ pub fn help_modules(
 ) -> Result<PipelineData, ShellError> {
     let head = call.head;
     let find: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "find")?;
-    let rest: Vec<Spanned<String>> = call.rest(engine_state, stack, 0)?;
+    let rest: Vec<Spanned<NuString>> = call.rest(engine_state, stack, 0)?;
 
     // 🚩The following two-lines are copied from filters/find.rs:
     let style_computer = StyleComputer::from_config(engine_state, stack);

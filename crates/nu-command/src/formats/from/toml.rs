@@ -1,8 +1,8 @@
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, Type,
-    Value,
+    record, Category, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature,
+    Span, Type, Value,
 };
 use std::str::FromStr;
 
@@ -76,7 +76,7 @@ fn convert_toml_to_value(value: &toml::Value, span: Span) -> Value {
         toml::Value::Integer(i) => Value::int(*i, span),
         toml::Value::Table(k) => Value::record(
             k.iter()
-                .map(|(k, v)| (k.clone(), convert_toml_to_value(v, span)))
+                .map(|(k, v)| (k.into(), convert_toml_to_value(v, span)))
                 .collect(),
             span,
         ),
@@ -91,7 +91,7 @@ fn convert_toml_to_value(value: &toml::Value, span: Span) -> Value {
     }
 }
 
-pub fn convert_string_to_value(string_input: String, span: Span) -> Result<Value, ShellError> {
+pub fn convert_string_to_value(string_input: NuString, span: Span) -> Result<Value, ShellError> {
     let result: Result<toml::Value, toml::de::Error> = toml::from_str(&string_input);
     match result {
         Ok(value) => Ok(convert_toml_to_value(&value, span)),
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn string_to_toml_value_passes() {
-        let input_string = String::from(
+        let input_string = NuString::from(
             r#"
             command.build = "go build"
 
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn string_to_toml_value_fails() {
-        let input_string = String::from(
+        let input_string = NuString::from(
             r#"
             command.build =
 

@@ -4,8 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoPipelineData, PipelineData, Record, ShellError, Signature, Span,
-    Spanned, SyntaxShape, Type, Value,
+    Category, Example, IntoPipelineData, NuString, PipelineData, Record, ShellError, Signature,
+    Span, Spanned, SyntaxShape, Type, Value,
 };
 use quick_xml::escape;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
@@ -152,7 +152,7 @@ impl Job {
     fn add_attributes<'a>(
         &self,
         element: &mut BytesStart<'a>,
-        attributes: &'a IndexMap<String, String>,
+        attributes: &'a IndexMap<NuString, NuString>,
     ) {
         for (k, v) in attributes {
             if self.partial_escape {
@@ -270,7 +270,7 @@ impl Job {
         }
     }
 
-    fn find_invalid_column(record: &Record) -> Option<&String> {
+    fn find_invalid_column(record: &Record) -> Option<&NuString> {
         const VALID_COLS: [&str; 3] = [COLUMN_TAG_NAME, COLUMN_ATTRS_NAME, COLUMN_CONTENT_NAME];
         record
             .cols
@@ -282,7 +282,7 @@ impl Job {
     fn write_tag_like(
         &mut self,
         entry_span: Span,
-        tag: String,
+        tag: NuString,
         tag_span: Span,
         attrs: Value,
         content: Value,
@@ -311,7 +311,7 @@ impl Job {
                 });
             }
 
-            let content: String = match content {
+            let content: NuString = match content {
                 Value::String { val, .. } => val,
                 Value::Nothing { .. } => "".into(),
                 _ => {
@@ -393,7 +393,7 @@ impl Job {
         entry_span: Span,
         tag: &str,
         attrs: Value,
-        content: String,
+        content: NuString,
     ) -> Result<(), ShellError> {
         if !matches!(attrs, Value::Nothing { .. }) {
             return Err(ShellError::CantConvert {
@@ -422,7 +422,7 @@ impl Job {
     fn write_tag(
         &mut self,
         entry_span: Span,
-        tag: String,
+        tag: NuString,
         tag_span: Span,
         attrs: Record,
         children: Vec<Value>,
@@ -476,7 +476,7 @@ impl Job {
         Ok(())
     }
 
-    fn parse_attributes(attrs: Record) -> Result<IndexMap<String, String>, ShellError> {
+    fn parse_attributes(attrs: Record) -> Result<IndexMap<NuString, NuString>, ShellError> {
         let mut h = IndexMap::new();
         for (k, v) in attrs {
             if let Value::String { val, .. } = v {
