@@ -3087,6 +3087,7 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "string_cache",
  "strum",
  "strum_macros 0.26.1",
  "thiserror",

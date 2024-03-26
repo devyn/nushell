@@ -9,7 +9,6 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     string::FromUtf8Error,
-    sync::Arc,
 };
 
 use serde::{Deserialize, Serialize};
@@ -33,7 +32,7 @@ pub struct NuString(Variant);
 enum Variant {
     Empty,
     Owned(String),
-    Shared(Arc<str>),
+    Shared(string_cache::DefaultAtom),
 }
 
 impl NuString {
@@ -59,7 +58,7 @@ impl NuString {
         match &self.0 {
             Variant::Empty => "",
             Variant::Owned(string) => string.as_str(),
-            Variant::Shared(arc) => arc.deref(),
+            Variant::Shared(atom) => atom.deref(),
         }
     }
 
@@ -156,7 +155,12 @@ impl fmt::Display for NuString {
 
 impl PartialEq for NuString {
     fn eq(&self, other: &Self) -> bool {
-        self.deref() == other.deref()
+        match (&self.0, &other.0) {
+            // This comparison is faster
+            (Variant::Shared(a), Variant::Shared(b)) => a == b,
+            (Variant::Empty, Variant::Empty) => true,
+            _ => self.deref() == other.deref(),
+        }
     }
 }
 
