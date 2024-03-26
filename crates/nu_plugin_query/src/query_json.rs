@@ -34,7 +34,7 @@ impl SimplePluginCommand for QueryJson {
 pub fn execute_json_query(
     call: &EvaluatedCall,
     input: &Value,
-    query: Option<Spanned<String>>,
+    query: Option<Spanned<NuString>>,
 ) -> Result<Value, LabeledError> {
     let input_string = match input.coerce_str() {
         Ok(s) => s,

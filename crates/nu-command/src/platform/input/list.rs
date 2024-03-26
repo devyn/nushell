@@ -16,7 +16,7 @@ enum InteractMode {
 
 #[derive(Clone)]
 struct Options {
-    name: String,
+    name: NuString,
     value: Value,
 }
 

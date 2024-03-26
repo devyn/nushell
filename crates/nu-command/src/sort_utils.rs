@@ -1,6 +1,6 @@
 use alphanumeric_sort::compare_str;
 use nu_engine::column::nonexistent_column;
-use nu_protocol::{ShellError, Span, Value};
+use nu_protocol::{NuString, ShellError, Span, Value};
 use nu_utils::IgnoreCaseExt;
 use std::cmp::Ordering;
 
@@ -13,7 +13,7 @@ use std::cmp::Ordering;
 /// CustomValues are converted to their base value and then sorted.
 pub fn sort_value(
     val: &Value,
-    sort_columns: Vec<String>,
+    sort_columns: Vec<NuString>,
     ascending: bool,
     insensitive: bool,
     natural: bool,
@@ -42,7 +42,7 @@ pub fn sort_value(
 /// avoids cloning, but it does not work for CustomValues; they are returned as-is.
 pub fn sort_value_in_place(
     val: &mut Value,
-    sort_columns: Vec<String>,
+    sort_columns: Vec<NuString>,
     ascending: bool,
     insensitive: bool,
     natural: bool,
@@ -59,7 +59,7 @@ pub fn sort_value_in_place(
 
 pub fn sort(
     vec: &mut [Value],
-    sort_columns: Vec<String>,
+    sort_columns: Vec<NuString>,
     span: Span,
     insensitive: bool,
     natural: bool,
@@ -80,7 +80,7 @@ pub fn sort(
 
             if let Some(nonexistent) = nonexistent_column(&sort_columns, record.columns()) {
                 return Err(ShellError::CantFindColumn {
-                    col_name: nonexistent,
+                    col_name: nonexistent.into(),
                     span,
                     src_span: val_span,
                 });
@@ -166,7 +166,7 @@ pub fn sort(
 pub fn compare(
     left: &Value,
     right: &Value,
-    columns: &[String],
+    columns: &[NuString],
     span: Span,
     insensitive: bool,
     natural: bool,
@@ -253,7 +253,7 @@ mod tests {
         ]);
 
         let sorted_alphabetically =
-            sort_value(&val, vec!["fruit".to_string()], true, false, false).unwrap();
+            sort_value(&val, vec!["fruit".into()], true, false, false).unwrap();
         assert_eq!(
             sorted_alphabetically,
             Value::test_list(vec![
@@ -273,7 +273,7 @@ mod tests {
         );
 
         let sorted_by_count_desc =
-            sort_value(&val, vec!["count".to_string()], false, false, false).unwrap();
+            sort_value(&val, vec!["count".into()], false, false, false).unwrap();
         assert_eq!(
             sorted_by_count_desc,
             Value::test_list(vec![
@@ -310,7 +310,7 @@ mod tests {
             }),
         ]);
 
-        sort_value_in_place(&mut val, vec!["fruit".to_string()], true, false, false).unwrap();
+        sort_value_in_place(&mut val, vec!["fruit".into()], true, false, false).unwrap();
         assert_eq!(
             val,
             Value::test_list(vec![
@@ -329,7 +329,7 @@ mod tests {
             ],)
         );
 
-        sort_value_in_place(&mut val, vec!["count".to_string()], false, false, false).unwrap();
+        sort_value_in_place(&mut val, vec!["count".into()], false, false, false).unwrap();
         assert_eq!(
             val,
             Value::test_list(vec![

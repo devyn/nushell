@@ -1,6 +1,6 @@
 use chardetng::EncodingDetector;
 use encoding_rs::Encoding;
-use nu_protocol::{ShellError, Span, Spanned, Value};
+use nu_protocol::{NuString, ShellError, Span, Spanned, Value};
 
 pub fn detect_encoding_name(
     head: Span,
@@ -24,7 +24,7 @@ pub fn detect_encoding_name(
 
 pub fn decode(
     head: Span,
-    encoding_name: Spanned<String>,
+    encoding_name: Spanned<NuString>,
     bytes: &[u8],
 ) -> Result<Value, ShellError> {
     // Workaround for a bug in the Encodings Specification.
@@ -39,7 +39,7 @@ pub fn decode(
 
 pub fn encode(
     head: Span,
-    encoding_name: Spanned<String>,
+    encoding_name: Spanned<NuString>,
     s: &str,
     s_span: Span,
     ignore_errors: bool,
@@ -107,7 +107,7 @@ mod test {
     #[case::utf_hyphen_16("utf-16", "")]
     #[case::utf8("utf8", "")]
     #[case::utf_hyphen_8("utf-8", "")]
-    fn smoke(#[case] encoding: String, #[case] expected: &str) {
+    fn smoke(#[case] encoding: NuString, #[case] expected: &str) {
         let test_span = Span::test_data();
         let encoding = Spanned {
             item: encoding,

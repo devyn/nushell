@@ -15,7 +15,7 @@ use commands::{ExpandCmd, HelpCmd, HelpManual, NuCmd, QuitCmd, TableCmd, TryCmd}
 use nu_common::{collect_pipeline, has_simple_value, CtrlC};
 use nu_protocol::{
     engine::{EngineState, Stack},
-    PipelineData, Value,
+    NuString, PipelineData, Value,
 };
 use pager::{Page, Pager};
 use registry::{Command, CommandRegistry};
@@ -60,7 +60,7 @@ fn run_pager(
 }
 
 fn create_record_view(
-    columns: Vec<String>,
+    columns: Vec<NuString>,
     data: Vec<Vec<Value>>,
     is_record: bool,
     config: PagerConfig,

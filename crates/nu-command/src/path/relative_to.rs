@@ -4,6 +4,7 @@ use nu_engine::CallExt;
 use nu_path::expand_to_real_path;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{EngineState, Stack, StateWorkingSet};
+use nu_protocol::NuString;
 use nu_protocol::{
     engine::Command, Category, Example, PipelineData, ShellError, Signature, Span, Spanned,
     SyntaxShape, Type, Value,
@@ -12,7 +13,7 @@ use nu_protocol::{
 use super::PathSubcommandArguments;
 
 struct Arguments {
-    path: Spanned<String>,
+    path: Spanned<NuString>,
 }
 
 impl PathSubcommandArguments for Arguments {}

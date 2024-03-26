@@ -6,7 +6,7 @@ use nu_cmd_base::input_handler::{operate as general_operate, CmdArgument};
 use nu_engine::CallExt;
 use nu_protocol::ast::{Call, CellPath};
 use nu_protocol::engine::{EngineState, Stack};
-use nu_protocol::{PipelineData, ShellError, Span, Spanned, Value};
+use nu_protocol::{NuString, PipelineData, ShellError, Span, Spanned, Value};
 
 pub const CHARACTER_SET_DESC: &str = "specify the character rules for encoding the input.\n\
                     \tValid values are 'standard', 'standard-no-padding', 'url-safe', 'url-safe-no-padding',\
@@ -14,7 +14,7 @@ pub const CHARACTER_SET_DESC: &str = "specify the character rules for encoding t
 
 #[derive(Clone)]
 pub struct Base64Config {
-    pub character_set: Spanned<String>,
+    pub character_set: Spanned<NuString>,
     pub action_type: ActionType,
 }
 
@@ -44,7 +44,7 @@ pub fn operate(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let head = call.head;
-    let character_set: Option<Spanned<String>> =
+    let character_set: Option<Spanned<NuString>> =
         call.get_flag(engine_state, stack, "character-set")?;
     let binary = call.has_flag(engine_state, stack, "binary")?;
     let cell_paths: Vec<CellPath> = call.rest(engine_state, stack, 0)?;
@@ -54,7 +54,7 @@ pub fn operate(
     let character_set = match character_set {
         Some(inner_tag) => inner_tag,
         None => Spanned {
-            item: "standard".to_string(),
+            item: "standard".into(),
             span: head, // actually this span is always useless, because default character_set is always valid.
         },
     };
@@ -214,7 +214,7 @@ mod tests {
             &Arguments {
                 encoding_config: Base64Config {
                     character_set: Spanned {
-                        item: "standard".to_string(),
+                        item: "standard".into(),
                         span: Span::test_data(),
                     },
                     action_type: ActionType::Encode,
@@ -237,7 +237,7 @@ mod tests {
             &Arguments {
                 encoding_config: Base64Config {
                     character_set: Spanned {
-                        item: "standard-no-padding".to_string(),
+                        item: "standard-no-padding".into(),
                         span: Span::test_data(),
                     },
                     action_type: ActionType::Encode,
@@ -260,7 +260,7 @@ mod tests {
             &Arguments {
                 encoding_config: Base64Config {
                     character_set: Spanned {
-                        item: "url-safe".to_string(),
+                        item: "url-safe".into(),
                         span: Span::test_data(),
                     },
                     action_type: ActionType::Encode,
@@ -283,7 +283,7 @@ mod tests {
             &Arguments {
                 encoding_config: Base64Config {
                     character_set: Spanned {
-                        item: "binhex".to_string(),
+                        item: "binhex".into(),
                         span: Span::test_data(),
                     },
                     action_type: ActionType::Decode,
@@ -306,7 +306,7 @@ mod tests {
             &Arguments {
                 encoding_config: Base64Config {
                     character_set: Spanned {
-                        item: "binhex".to_string(),
+                        item: "binhex".into(),
                         span: Span::test_data(),
                     },
                     action_type: ActionType::Decode,
@@ -329,7 +329,7 @@ mod tests {
             &Arguments {
                 encoding_config: Base64Config {
                     character_set: Spanned {
-                        item: "standard".to_string(),
+                        item: "standard".into(),
                         span: Span::test_data(),
                     },
                     action_type: ActionType::Encode,
@@ -351,7 +351,7 @@ mod tests {
             &Arguments {
                 encoding_config: Base64Config {
                     character_set: Spanned {
-                        item: "standard".to_string(),
+                        item: "standard".into(),
                         span: Span::test_data(),
                     },
                     action_type: ActionType::Decode,

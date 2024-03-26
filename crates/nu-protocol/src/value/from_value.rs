@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use super::NuGlob;
 use crate::ast::{CellPath, PathMember};
 use crate::engine::{Block, Closure};
-use crate::{Range, Record, ShellError, Spanned, Value, NuString};
+use crate::{NuString, Range, Record, ShellError, Spanned, Value};
 use chrono::{DateTime, FixedOffset};
 
 pub trait FromValue: Sized {

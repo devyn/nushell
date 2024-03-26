@@ -69,7 +69,7 @@ impl Command for StorCreate {
 }
 
 fn process(
-    table_name: Option<String>,
+    table_name: Option<NuString>,
     span: Span,
     db: &SQLiteDatabase,
     columns: Option<Record>,
@@ -161,7 +161,7 @@ mod test {
 
     #[test]
     fn test_process_with_valid_parameters() {
-        let table_name = Some("test_table".to_string());
+        let table_name = Some("test_table".into());
         let span = Span::unknown();
         let db = Box::new(SQLiteDatabase::new(std::path::Path::new(MEMORY_DB), None));
         let mut columns = Record::new();
@@ -197,7 +197,7 @@ mod test {
 
     #[test]
     fn test_process_with_missing_columns() {
-        let table_name = Some("test_table".to_string());
+        let table_name = Some("test_table".into());
         let span = Span::unknown();
         let db = Box::new(SQLiteDatabase::new(std::path::Path::new(MEMORY_DB), None));
 
@@ -212,7 +212,7 @@ mod test {
 
     #[test]
     fn test_process_with_unsupported_column_data_type() {
-        let table_name = Some("test_table".to_string());
+        let table_name = Some("test_table".into());
         let span = Span::unknown();
         let db = Box::new(SQLiteDatabase::new(std::path::Path::new(MEMORY_DB), None));
         let mut columns = Record::new();

@@ -1,11 +1,14 @@
 use std::{
     borrow::{Borrow, Cow},
     cmp::Ordering,
+    convert::Infallible,
     ffi::OsStr,
     fmt,
     hash::Hash,
     ops::{self, Deref},
     path::{Path, PathBuf},
+    str::FromStr,
+    string::FromUtf8Error,
     sync::Arc,
 };
 
@@ -37,6 +40,12 @@ impl NuString {
     /// Create a new empty string.
     pub const fn new() -> Self {
         NuString(Variant::Empty)
+    }
+
+    /// Create a new empty string from UTF-8 encoded text. Returns `Err` if there was a problem with
+    /// decoding.
+    pub fn from_utf8(encoded: Vec<u8>) -> Result<NuString, FromUtf8Error> {
+        String::from_utf8(encoded).map(NuString::from)
     }
 
     /// Get the string as a string slice.
@@ -90,6 +99,14 @@ impl NuString {
     /// Remove the last character from the string and return it.
     pub fn pop(&mut self) -> Option<char> {
         self.string_mut().pop()
+    }
+
+    /// Truncate the string to at most the specified length. The remaining characters will be
+    /// discarded.
+    pub fn truncate(&mut self, length: usize) {
+        if self.len() > length {
+            self.string_mut().truncate(length)
+        }
     }
 }
 
@@ -344,6 +361,16 @@ impl From<NuString> for PathBuf {
     }
 }
 
+impl From<NuString> for Vec<u8> {
+    fn from(value: NuString) -> Self {
+        match value.0 {
+            Variant::Empty => vec![],
+            Variant::Owned(s) => s.into(),
+            Variant::Shared(s) => s.as_bytes().into(),
+        }
+    }
+}
+
 impl<'a> Extend<&'a str> for NuString {
     fn extend<T: IntoIterator<Item = &'a str>>(&mut self, iter: T) {
         self.string_mut().extend(iter)
@@ -410,6 +437,12 @@ impl Borrow<str> for NuString {
     }
 }
 
+impl<'a> Borrow<str> for &'a NuString {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl fmt::Write for NuString {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.push_str(s);
@@ -438,6 +471,32 @@ impl<'a> ops::Add<&'a str> for NuString {
 
     fn add(self, rhs: &'a str) -> Self::Output {
         (String::from(self) + rhs).into()
+    }
+}
+
+impl ops::AddAssign for NuString {
+    fn add_assign(&mut self, rhs: Self) {
+        self.push_str(&rhs);
+    }
+}
+
+impl ops::AddAssign<String> for NuString {
+    fn add_assign(&mut self, rhs: String) {
+        self.push_str(&rhs);
+    }
+}
+
+impl<'a> ops::AddAssign<&'a str> for NuString {
+    fn add_assign(&mut self, rhs: &'a str) {
+        self.push_str(rhs);
+    }
+}
+
+impl FromStr for NuString {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(s.into())
     }
 }
 

@@ -73,7 +73,7 @@ impl Command for StorUpdate {
         let span = call.head;
         let table_name: Option<NuString> = call.get_flag(engine_state, stack, "table-name")?;
         let columns: Option<Record> = call.get_flag(engine_state, stack, "update-record")?;
-        let where_clause_opt: Option<Spanned<String>> =
+        let where_clause_opt: Option<Spanned<NuString>> =
             call.get_flag(engine_state, stack, "where-clause")?;
 
         // Open the in-mem database

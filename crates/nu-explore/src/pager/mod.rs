@@ -24,7 +24,7 @@ use lscolors::LsColors;
 use nu_color_config::{lookup_ansi_color_style, StyleComputer};
 use nu_protocol::{
     engine::{EngineState, Stack},
-    Record, Value,
+    NuString, Record, Value,
 };
 use ratatui::{backend::CrosstermBackend, layout::Rect, widgets::Block};
 
@@ -47,7 +47,7 @@ use events::UIEvents;
 
 pub type Frame<'a> = ratatui::Frame<'a>;
 pub type Terminal = ratatui::Terminal<CrosstermBackend<Stdout>>;
-pub type ConfigMap = HashMap<String, Value>;
+pub type ConfigMap = HashMap<NuString, Value>;
 
 #[derive(Debug, Clone)]
 pub struct Pager<'a> {
@@ -1016,7 +1016,7 @@ fn value_as_style(style: &mut nu_ansi_term::Style, value: &Value) -> bool {
     }
 }
 
-fn set_config(hm: &mut HashMap<String, Value>, path: &[&str], value: Value) -> bool {
+fn set_config(hm: &mut HashMap<NuString, Value>, path: &[&str], value: Value) -> bool {
     if path.is_empty() {
         return false;
     }
@@ -1024,10 +1024,7 @@ fn set_config(hm: &mut HashMap<String, Value>, path: &[&str], value: Value) -> b
     let key = path[0];
 
     if !hm.contains_key(key) {
-        hm.insert(
-            key.to_string(),
-            Value::record(Record::new(), NuSpan::unknown()),
-        );
+        hm.insert(key.into(), Value::record(Record::new(), NuSpan::unknown()));
     }
 
     let val = hm.get_mut(key).expect("...");
@@ -1044,9 +1041,9 @@ fn set_config(hm: &mut HashMap<String, Value>, path: &[&str], value: Value) -> b
 
                 record.insert(key, value);
             } else {
-                let mut hm2: HashMap<String, Value> = HashMap::new();
+                let mut hm2: HashMap<NuString, Value> = HashMap::new();
                 for (k, v) in record.iter() {
-                    hm2.insert(k.to_string(), v.clone());
+                    hm2.insert(k.clone(), v.clone());
                 }
 
                 let result = set_config(&mut hm2, &path[1..], value);

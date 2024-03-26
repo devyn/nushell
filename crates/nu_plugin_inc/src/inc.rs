@@ -127,7 +127,7 @@ impl Inc {
 
                 Err(LabeledError {
                     label: "Incorrect value".into(),
-                    msg,
+                    msg: msg.into(),
                     span: Some(head),
                 })
             }

@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nu_color_config::{get_color_map, StyleComputer};
 use nu_protocol::{
     engine::{EngineState, Stack},
-    Record, Value,
+    NuString, Record, ToNuString, Value,
 };
 use ratatui::{layout::Rect, widgets::Block};
 
@@ -42,7 +42,7 @@ pub struct RecordView<'a> {
 
 impl<'a> RecordView<'a> {
     pub fn new(
-        columns: impl Into<Cow<'a, [String]>>,
+        columns: impl Into<Cow<'a, [NuString]>>,
         records: impl Into<Cow<'a, [Vec<Value>]>>,
     ) -> Self {
         Self {
@@ -372,7 +372,7 @@ enum UIMode {
 
 #[derive(Debug, Clone)]
 pub struct RecordLayer<'a> {
-    columns: Cow<'a, [String]>,
+    columns: Cow<'a, [NuString]>,
     records: Cow<'a, [Vec<Value>]>,
     orientation: Orientation,
     name: Option<String>,
@@ -382,7 +382,7 @@ pub struct RecordLayer<'a> {
 
 impl<'a> RecordLayer<'a> {
     fn new(
-        columns: impl Into<Cow<'a, [String]>>,
+        columns: impl Into<Cow<'a, [NuString]>>,
         records: impl Into<Cow<'a, [Vec<Value>]>>,
     ) -> Self {
         let columns = columns.into();
@@ -795,7 +795,7 @@ fn transpose_table(layer: &mut RecordLayer<'_>) {
         }
 
         layer.records = Cow::Owned(data);
-        layer.columns = (1..count_rows + 1 + 1).map(|i| i.to_string()).collect();
+        layer.columns = (1..count_rows + 1 + 1).map(|i| i.to_nu_string()).collect();
     }
 
     layer.was_transposed = !layer.was_transposed;

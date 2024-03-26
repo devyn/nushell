@@ -51,14 +51,14 @@ impl Command for StrJoin {
         // let output = input.collect_string(&separator.unwrap_or_default(), &config)?;
         // Hmm, not sure what we actually want.
         // `to_formatted_string` formats dates as human readable which feels funny.
-        let mut strings: Vec<String> = vec![];
+        let mut strings: Vec<NuString> = vec![];
 
         for value in input {
             let str = match value {
                 Value::Error { error, .. } => {
                     return Err(*error);
                 }
-                Value::Date { val, .. } => format!("{val:?}"),
+                Value::Date { val, .. } => format!("{val:?}").into(),
                 value => value.to_expanded_string("\n", config),
             };
             strings.push(str);

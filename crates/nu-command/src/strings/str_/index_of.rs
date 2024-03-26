@@ -13,7 +13,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 struct Arguments {
     end: bool,
-    substring: String,
+    substring: NuString,
     range: Option<Spanned<Range>>,
     cell_paths: Option<Vec<CellPath>>,
     graphemes: bool,
@@ -238,7 +238,7 @@ mod tests {
         let word = Value::test_string("Cargo.tomL");
 
         let options = Arguments {
-            substring: String::from(".tomL"),
+            substring: NuString::from(".tomL"),
             range: None,
             cell_paths: None,
             end: false,
@@ -254,7 +254,7 @@ mod tests {
         let word = Value::test_string("Cargo.tomL");
 
         let options = Arguments {
-            substring: String::from("Lm"),
+            substring: NuString::from("Lm"),
 
             range: None,
             cell_paths: None,
@@ -283,7 +283,7 @@ mod tests {
         };
 
         let options = Arguments {
-            substring: String::from("Cargo"),
+            substring: NuString::from("Cargo"),
 
             range: Some(spanned_range),
             cell_paths: None,
@@ -311,7 +311,7 @@ mod tests {
         };
 
         let options = Arguments {
-            substring: String::from("Banana"),
+            substring: NuString::from("Banana"),
 
             range: Some(spanned_range),
             cell_paths: None,
@@ -339,7 +339,7 @@ mod tests {
         };
 
         let options = Arguments {
-            substring: String::from("123"),
+            substring: NuString::from("123"),
 
             range: Some(spanned_range),
             cell_paths: None,
@@ -367,7 +367,7 @@ mod tests {
         };
 
         let options = Arguments {
-            substring: String::from("1"),
+            substring: NuString::from("1"),
 
             range: Some(spanned_range),
             cell_paths: None,
@@ -384,7 +384,7 @@ mod tests {
         let word = Value::string(String::from("🇯🇵ほげ ふが ぴよ"), Span::test_data());
 
         let options = Arguments {
-            substring: String::from("ふが"),
+            substring: NuString::from("ふが"),
 
             range: None,
             cell_paths: None,
@@ -413,7 +413,7 @@ mod tests {
         };
 
         let options = Arguments {
-            substring: String::new(),
+            substring: NuString::new(),
 
             range: Some(spanned_range),
             cell_paths: None,
@@ -442,7 +442,7 @@ mod tests {
         };
 
         let options = Arguments {
-            substring: String::from("h"),
+            substring: NuString::from("h"),
 
             range: Some(spanned_range),
             cell_paths: None,

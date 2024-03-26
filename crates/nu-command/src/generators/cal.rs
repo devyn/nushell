@@ -5,8 +5,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, IntoPipelineData, PipelineData, ShellError, Signature, Span, Spanned,
-    SyntaxShape, Type, Value,
+    Category, Example, IntoPipelineData, NuString, PipelineData, ShellError, Signature, Span,
+    Spanned, SyntaxShape, Type, Value,
 };
 use std::collections::VecDeque;
 
@@ -19,7 +19,7 @@ struct Arguments {
     month: bool,
     month_names: bool,
     full_year: Option<Spanned<i64>>,
-    week_start: Option<Spanned<String>>,
+    week_start: Option<Spanned<NuString>>,
 }
 
 impl Command for Cal {

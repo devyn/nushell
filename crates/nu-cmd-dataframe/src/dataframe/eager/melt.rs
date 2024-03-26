@@ -138,7 +138,7 @@ fn command(
         .expect("required value");
 
     let value_name: Option<Spanned<NuString>> = call.get_flag(engine_state, stack, "value-name")?;
-    let variable_name: Option<Spanned<String>> =
+    let variable_name: Option<Spanned<NuString>> =
         call.get_flag(engine_state, stack, "variable-name")?;
 
     let (id_col_string, id_col_span) = convert_columns_string(id_col, call.head)?;

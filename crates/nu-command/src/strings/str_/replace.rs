@@ -270,9 +270,9 @@ mod tests {
     use super::*;
     use super::{action, Arguments, SubCommand};
 
-    fn test_spanned_string(val: &str) -> Spanned<String> {
+    fn test_spanned_string(val: &str) -> Spanned<NuString> {
         Spanned {
-            item: String::from(val),
+            item: NuString::from(val),
             span: Span::test_data(),
         }
     }

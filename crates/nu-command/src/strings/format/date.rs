@@ -4,8 +4,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type,
-    Value,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape,
+    Type, Value,
 };
 use nu_utils::locale::{get_system_locale_string, LOCALE_OVERRIDE_ENV_VAR};
 use std::fmt::{Display, Write};
@@ -60,7 +60,7 @@ impl Command for FormatDate {
             ));
         }
 
-        let format = call.opt::<Spanned<String>>(engine_state, stack, 0)?;
+        let format = call.opt::<Spanned<NuString>>(engine_state, stack, 0)?;
 
         // This doesn't match explicit nulls
         if matches!(input, PipelineData::Empty) {

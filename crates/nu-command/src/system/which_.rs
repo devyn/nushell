@@ -2,6 +2,7 @@ use log::trace;
 use nu_engine::env;
 use nu_engine::CallExt;
 use nu_protocol::record;
+use nu_protocol::NuString;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
@@ -160,19 +161,19 @@ fn get_all_entries_in_path(
 
 #[derive(Debug)]
 struct WhichArgs {
-    applications: Vec<Spanned<String>>,
+    applications: Vec<Spanned<NuString>>,
     all: bool,
 }
 
 fn which_single(
-    application: Spanned<String>,
+    application: Spanned<NuString>,
     all: bool,
     engine_state: &EngineState,
     cwd: impl AsRef<Path>,
     paths: impl AsRef<OsStr>,
 ) -> Vec<Value> {
     let (external, prog_name) = if application.item.starts_with('^') {
-        (true, application.item[1..].to_string())
+        (true, application.item[1..].into())
     } else {
         (false, application.item.clone())
     };

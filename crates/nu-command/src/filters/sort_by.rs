@@ -2,8 +2,8 @@ use nu_engine::CallExt;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
-    record, Category, Example, IntoInterruptiblePipelineData, PipelineData, ShellError, Signature,
-    SyntaxShape, Type, Value,
+    record, Category, Example, IntoInterruptiblePipelineData, NuString, PipelineData, ShellError,
+    Signature, SyntaxShape, Type, Value,
 };
 
 #[derive(Clone)]
@@ -84,7 +84,7 @@ impl Command for SortBy {
         call: &Call,
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let columns: Vec<String> = call.rest(engine_state, stack, 0)?;
+        let columns: Vec<NuString> = call.rest(engine_state, stack, 0)?;
         let reverse = call.has_flag(engine_state, stack, "reverse")?;
         let insensitive = call.has_flag(engine_state, stack, "ignore-case")?;
         let natural = call.has_flag(engine_state, stack, "natural")?;

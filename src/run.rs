@@ -15,7 +15,7 @@ pub(crate) fn run_commands(
     engine_state: &mut nu_protocol::engine::EngineState,
     parsed_nu_cli_args: command::NushellCliArgs,
     use_color: bool,
-    commands: &nu_protocol::Spanned<String>,
+    commands: &nu_protocol::Spanned<NuString>,
     input: PipelineData,
     entire_start_time: std::time::Instant,
 ) -> Result<(), miette::ErrReport> {

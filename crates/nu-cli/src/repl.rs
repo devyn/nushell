@@ -53,8 +53,8 @@ pub fn evaluate_repl(
     engine_state: &mut EngineState,
     stack: Stack,
     nushell_path: &str,
-    prerun_command: Option<Spanned<String>>,
-    load_std_lib: Option<Spanned<String>>,
+    prerun_command: Option<Spanned<NuString>>,
+    load_std_lib: Option<Spanned<NuString>>,
     entire_start_time: Instant,
 ) -> Result<()> {
     // throughout this code, we hold this stack uniquely.

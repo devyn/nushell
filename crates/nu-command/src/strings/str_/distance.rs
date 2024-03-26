@@ -11,7 +11,7 @@ use nu_protocol::{
 pub struct SubCommand;
 
 struct Arguments {
-    compare_string: String,
+    compare_string: NuString,
     cell_paths: Option<Vec<CellPath>>,
 }
 

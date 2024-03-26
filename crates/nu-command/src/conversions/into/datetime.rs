@@ -47,7 +47,7 @@ impl Zone {
             Self::Error // Out of range
         }
     }
-    fn from_string(s: String) -> Self {
+    fn from_str(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "utc" | "u" => Self::Utc,
             "local" | "l" => Self::Local,
@@ -134,7 +134,7 @@ impl Command for SubCommand {
                         span: zone_offset.span,
                     }),
                     None => timezone.as_ref().map(|zone| Spanned {
-                        item: Zone::from_string(zone.item.into()),
+                        item: Zone::from_str(&zone.item),
                         span: zone.span,
                     }),
                 };

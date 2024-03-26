@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
 use nu_engine::get_columns;
-use nu_protocol::{record, ListStream, PipelineData, PipelineMetadata, RawStream, Value};
+use nu_protocol::{
+    record, ListStream, NuString, PipelineData, PipelineMetadata, RawStream, ToNuString, Value,
+};
 
 use super::NuSpan;
 
-pub fn collect_pipeline(input: PipelineData) -> (Vec<String>, Vec<Vec<Value>>) {
+pub fn collect_pipeline(input: PipelineData) -> (Vec<NuString>, Vec<Vec<Value>>) {
     match input {
         PipelineData::Empty => (vec![], vec![]),
         PipelineData::Value(value, ..) => collect_input(value),
@@ -21,7 +23,7 @@ pub fn collect_pipeline(input: PipelineData) -> (Vec<String>, Vec<Vec<Value>>) {
     }
 }
 
-fn collect_list_stream(mut stream: ListStream) -> (Vec<String>, Vec<Vec<Value>>) {
+fn collect_list_stream(mut stream: ListStream) -> (Vec<NuString>, Vec<Vec<Value>>) {
     let mut records = vec![];
     for item in stream.by_ref() {
         records.push(item);
@@ -34,7 +36,7 @@ fn collect_list_stream(mut stream: ListStream) -> (Vec<String>, Vec<Vec<Value>>)
     if cols.is_empty() && !data.is_empty() {
         let min_column_length = data.iter().map(|row| row.len()).min().unwrap_or(0);
         if min_column_length > 0 {
-            cols = (0..min_column_length).map(|i| i.to_string()).collect();
+            cols = (0..min_column_length).map(|i| i.to_nu_string()).collect();
         }
     }
 
@@ -47,7 +49,7 @@ fn collect_external_stream(
     exit_code: Option<ListStream>,
     metadata: Option<PipelineMetadata>,
     span: NuSpan,
-) -> (Vec<String>, Vec<Vec<Value>>) {
+) -> (Vec<NuString>, Vec<Vec<Value>>) {
     let mut columns = vec![];
     let mut data = vec![];
     if let Some(stdout) = stdout {
@@ -56,7 +58,7 @@ fn collect_external_stream(
             |string| Value::string(string.item, span),
         );
 
-        columns.push(String::from("stdout"));
+        columns.push("stdout".into());
         data.push(value);
     }
     if let Some(stderr) = stderr {
@@ -65,27 +67,27 @@ fn collect_external_stream(
             |string| Value::string(string.item, span),
         );
 
-        columns.push(String::from("stderr"));
+        columns.push("stderr".into());
         data.push(value);
     }
     if let Some(exit_code) = exit_code {
         let list = exit_code.collect::<Vec<_>>();
         let val = Value::list(list, span);
 
-        columns.push(String::from("exit_code"));
+        columns.push("exit_code".into());
         data.push(val);
     }
     if metadata.is_some() {
         let val = Value::record(record! { "data_source" => Value::string("ls", span) }, span);
 
-        columns.push(String::from("metadata"));
+        columns.push("metadata".into());
         data.push(val);
     }
     (columns, vec![data])
 }
 
 /// Try to build column names and a table grid.
-pub fn collect_input(value: Value) -> (Vec<String>, Vec<Vec<Value>>) {
+pub fn collect_input(value: Value) -> (Vec<NuString>, Vec<Vec<Value>>) {
     let span = value.span();
     match value {
         Value::Record { val: record, .. } => {
@@ -97,7 +99,7 @@ pub fn collect_input(value: Value) -> (Vec<String>, Vec<Vec<Value>>) {
             let data = convert_records_to_dataset(&columns, vals);
 
             if columns.is_empty() && !data.is_empty() {
-                columns = vec![String::from("")];
+                columns = vec!["".into()];
             }
 
             (columns, data)
@@ -109,21 +111,18 @@ pub fn collect_input(value: Value) -> (Vec<String>, Vec<Vec<Value>>) {
                 .map(|val| vec![val])
                 .collect();
 
-            (vec![String::from("")], lines)
+            (vec!["".into()], lines)
         }
         Value::LazyRecord { val, .. } => match val.collect() {
             Ok(value) => collect_input(value),
-            Err(_) => (
-                vec![String::from("")],
-                vec![vec![Value::lazy_record(val, span)]],
-            ),
+            Err(_) => (vec!["".into()], vec![vec![Value::lazy_record(val, span)]]),
         },
         Value::Nothing { .. } => (vec![], vec![]),
-        value => (vec![String::from("")], vec![vec![value]]),
+        value => (vec!["".into()], vec![vec![value]]),
     }
 }
 
-fn convert_records_to_dataset(cols: &[String], records: Vec<Value>) -> Vec<Vec<Value>> {
+fn convert_records_to_dataset(cols: &[NuString], records: Vec<Value>) -> Vec<Vec<Value>> {
     if !cols.is_empty() {
         create_table_for_record(cols, &records)
     } else if cols.is_empty() && records.is_empty() {
@@ -141,7 +140,7 @@ fn convert_records_to_dataset(cols: &[String], records: Vec<Value>) -> Vec<Vec<V
     }
 }
 
-fn create_table_for_record(headers: &[String], items: &[Value]) -> Vec<Vec<Value>> {
+fn create_table_for_record(headers: &[NuString], items: &[Value]) -> Vec<Vec<Value>> {
     let mut data = vec![Vec::new(); items.len()];
 
     for (i, item) in items.iter().enumerate() {
@@ -152,7 +151,7 @@ fn create_table_for_record(headers: &[String], items: &[Value]) -> Vec<Vec<Value
     data
 }
 
-fn record_create_row(headers: &[String], item: &Value) -> Vec<Value> {
+fn record_create_row(headers: &[NuString], item: &Value) -> Vec<Value> {
     if let Value::Record { val, .. } = item {
         headers
             .iter()
@@ -165,7 +164,7 @@ fn record_create_row(headers: &[String], item: &Value) -> Vec<Value> {
     }
 }
 
-pub fn create_map(value: &Value) -> Option<HashMap<String, Value>> {
+pub fn create_map(value: &Value) -> Option<HashMap<NuString, Value>> {
     Some(
         value
             .as_record()
@@ -176,10 +175,10 @@ pub fn create_map(value: &Value) -> Option<HashMap<String, Value>> {
     )
 }
 
-pub fn map_into_value(hm: HashMap<String, Value>) -> Value {
+pub fn map_into_value(hm: HashMap<NuString, Value>) -> Value {
     Value::record(hm.into_iter().collect(), NuSpan::unknown())
 }
 
 fn unknown_error_value() -> Value {
-    Value::string(String::from("❎"), NuSpan::unknown())
+    Value::string("❎", NuSpan::unknown())
 }

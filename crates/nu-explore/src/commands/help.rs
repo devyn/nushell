@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::io::{self, Result};
 
 use crossterm::event::KeyEvent;
-use nu_protocol::NuString;
 use nu_protocol::{
     engine::{EngineState, Stack},
-    record, Value,
+    record, NuString, Value,
 };
 use ratatui::layout::Rect;
 
@@ -21,7 +20,7 @@ use super::{HelpExample, HelpManual, ViewCommand};
 pub struct HelpCmd {
     input_command: String,
     supported_commands: Vec<HelpManual>,
-    aliases: HashMap<String, Vec<String>>,
+    aliases: HashMap<NuString, Vec<NuString>>,
 }
 
 impl HelpCmd {
@@ -60,13 +59,13 @@ You also can do a reverse search by using "?" instead of "/".
     }
 }
 
-fn collect_aliases(aliases: &[(&str, &str)]) -> HashMap<String, Vec<String>> {
-    let mut out_aliases: HashMap<String, Vec<String>> = HashMap::new();
-    for (name, cmd) in aliases {
+fn collect_aliases(aliases: &[(&str, &str)]) -> HashMap<NuString, Vec<NuString>> {
+    let mut out_aliases: HashMap<NuString, Vec<NuString>> = HashMap::new();
+    for &(name, cmd) in aliases {
         out_aliases
-            .entry(cmd.to_string())
-            .and_modify(|list| list.push(name.to_string()))
-            .or_insert_with(|| vec![name.to_string()]);
+            .entry(cmd.into())
+            .and_modify(|list| list.push(name.into()))
+            .or_insert_with(|| vec![name.into()]);
     }
     out_aliases
 }
@@ -154,8 +153,8 @@ impl ViewCommand for HelpCmd {
 
 fn help_frame_data(
     supported_commands: &[HelpManual],
-    aliases: &HashMap<String, Vec<String>>,
-) -> (Vec<String>, Vec<Vec<Value>>) {
+    aliases: &HashMap<NuString, Vec<NuString>>,
+) -> (Vec<NuString>, Vec<Vec<Value>>) {
     let commands = supported_commands
         .iter()
         .map(|manual| {
@@ -174,7 +173,7 @@ fn help_frame_data(
     collect_input(commands)
 }
 
-fn help_manual_data(manual: &HelpManual, aliases: &[String]) -> (Vec<NuString>, Vec<Vec<Value>>) {
+fn help_manual_data(manual: &HelpManual, aliases: &[NuString]) -> (Vec<NuString>, Vec<Vec<Value>>) {
     fn nu_str(s: &impl ToString) -> Value {
         Value::string(s.to_string(), NuSpan::unknown())
     }

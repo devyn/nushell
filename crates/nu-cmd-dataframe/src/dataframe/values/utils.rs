@@ -3,12 +3,12 @@ use nu_protocol::{span as span_join, ShellError, Span, Spanned, Value};
 // Default value used when selecting rows from dataframe
 pub const DEFAULT_ROWS: usize = 5;
 
-// Converts a Vec<Value> to a Vec<Spanned<String>> with a Span marking the whole
+// Converts a Vec<Value> to a Vec<Spanned<NuString>> with a Span marking the whole
 // location of the columns for error referencing
 pub(crate) fn convert_columns(
     columns: Vec<Value>,
     span: Span,
-) -> Result<(Vec<Spanned<String>>, Span), ShellError> {
+) -> Result<(Vec<Spanned<NuString>>, Span), ShellError> {
     // First column span
     let mut col_span = columns
         .first()
@@ -39,7 +39,7 @@ pub(crate) fn convert_columns(
                 }),
             }
         })
-        .collect::<Result<Vec<Spanned<String>>, _>>()?;
+        .collect::<Result<Vec<Spanned<NuString>>, _>>()?;
 
     Ok((res, col_span))
 }

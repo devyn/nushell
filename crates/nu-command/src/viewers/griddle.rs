@@ -4,6 +4,7 @@ use lscolors::Style;
 use nu_engine::env_to_string;
 use nu_engine::CallExt;
 use nu_protocol::NuString;
+use nu_protocol::ToNuString;
 use nu_protocol::{
     ast::Call,
     engine::{Command, EngineState, Stack},
@@ -168,15 +169,15 @@ prints out the list properly."#
 }
 
 fn create_grid_output(
-    items: Vec<(usize, String, String)>,
+    items: Vec<(usize, NuString, NuString)>,
     call: &Call,
     width_param: Option<i64>,
     use_color: bool,
-    separator_param: Option<String>,
-    env_str: Option<String>,
+    separator_param: Option<NuString>,
+    env_str: Option<NuString>,
     use_grid_icons: bool,
 ) -> Result<PipelineData, ShellError> {
-    let ls_colors = get_ls_colors(env_str);
+    let ls_colors = get_ls_colors(env_str.as_deref());
 
     let cols = if let Some(col) = width_param {
         col as u16
@@ -185,10 +186,10 @@ fn create_grid_output(
     } else {
         80u16
     };
-    let sep = if let Some(separator) = separator_param {
-        separator
+    let sep: String = if let Some(separator) = separator_param {
+        separator.into()
     } else {
-        " │ ".to_string()
+        " │ ".into()
     };
 
     let mut grid = Grid::new(GridOptions {
@@ -232,7 +233,7 @@ fn create_grid_output(
                     grid.add(cell);
                 }
             } else {
-                let mut cell = Cell::from(value);
+                let mut cell = Cell::from(value.as_str());
                 cell.alignment = Alignment::Left;
                 grid.add(cell);
             }
@@ -253,11 +254,11 @@ fn create_grid_output(
 fn convert_to_list(
     iter: impl IntoIterator<Item = Value>,
     config: &Config,
-) -> Result<Option<Vec<(usize, String, String)>>, ShellError> {
+) -> Result<Option<Vec<(usize, NuString, NuString)>>, ShellError> {
     let mut iter = iter.into_iter().peekable();
 
     if let Some(first) = iter.peek() {
-        let mut headers: Vec<String> = first.columns().cloned().collect();
+        let mut headers: Vec<NuString> = first.columns().cloned().collect();
 
         if !headers.is_empty() {
             headers.insert(0, "#".into());
@@ -270,7 +271,7 @@ fn convert_to_list(
                 return Err(*error);
             }
 
-            let mut row = vec![row_num.to_string()];
+            let mut row = vec![row_num.to_nu_string()];
 
             if headers.is_empty() {
                 row.push(item.to_expanded_string(", ", config))
@@ -288,7 +289,7 @@ fn convert_to_list(
                             }
                             row.push(value.to_expanded_string(", ", config));
                         }
-                        None => row.push(String::new()),
+                        None => row.push(NuString::new()),
                     }
                 }
             }
@@ -296,13 +297,13 @@ fn convert_to_list(
             data.push(row);
         }
 
-        let mut h: Vec<String> = headers.into_iter().collect();
+        let mut h: Vec<NuString> = headers.into_iter().collect();
 
         // This is just a list
         if h.is_empty() {
             // let's fake the header
-            h.push("#".to_string());
-            h.push("name".to_string());
+            h.push("#".into());
+            h.push("name".into());
         }
 
         // this tuple is (row_index, header_name, value)

@@ -10,7 +10,7 @@ use nu_protocol::{Example, PipelineData, ShellError, Signature, Span, SyntaxShap
 use nu_utils::IgnoreCaseExt;
 
 struct Arguments {
-    substring: String,
+    substring: NuString,
     cell_paths: Option<Vec<CellPath>>,
     case_insensitive: bool,
 }
@@ -115,7 +115,7 @@ fn action(
             let starts_with = if *case_insensitive {
                 s.to_folded_case().starts_with(&substring.to_folded_case())
             } else {
-                s.starts_with(substring)
+                s.starts_with(substring.as_str())
             };
             Value::bool(starts_with, head)
         }

@@ -2,7 +2,7 @@ use super::definitions::{
     db_column::DbColumn, db_constraint::DbConstraint, db_foreignkey::DbForeignKey,
     db_index::DbIndex, db_table::DbTable,
 };
-use nu_protocol::{CustomValue, PipelineData, Record, ShellError, Span, Spanned, Value, NuString};
+use nu_protocol::{CustomValue, NuString, PipelineData, Record, ShellError, Span, Spanned, Value};
 use rusqlite::{
     types::ValueRef, Connection, DatabaseName, Error as SqliteError, OpenFlags, Row, Statement,
 };
@@ -161,7 +161,7 @@ impl SQLiteDatabase {
     pub fn export_in_memory_database_to_file(
         &self,
         conn: &Connection,
-        filename: String,
+        filename: &str,
     ) -> Result<(), SqliteError> {
         //vacuum main into 'c:\\temp\\foo.db'
         conn.execute(&format!("vacuum main into '{}'", filename), [])?;
@@ -172,7 +172,7 @@ impl SQLiteDatabase {
     pub fn backup_database_to_file(
         &self,
         conn: &Connection,
-        filename: String,
+        filename: &str,
     ) -> Result<(), SqliteError> {
         conn.backup(DatabaseName::Main, Path::new(&filename), None)?;
         Ok(())
@@ -181,7 +181,7 @@ impl SQLiteDatabase {
     pub fn restore_database_from_file(
         &self,
         conn: &mut Connection,
-        filename: String,
+        filename: &str,
     ) -> Result<(), SqliteError> {
         conn.restore(
             DatabaseName::Main,

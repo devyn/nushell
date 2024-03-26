@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use nu_color_config::{Alignment, StyleComputer};
-use nu_protocol::{ShellError, Value};
+use nu_protocol::{NuString, ShellError, Value};
 use nu_table::{string_width, TextStyle};
 use ratatui::{
     buffer::Buffer,
@@ -121,7 +121,7 @@ pub fn text_style_to_tui_style(style: TextStyle) -> ratatui::style::Style {
 // This is identical to the same function in nu-explore/src/nu_common
 pub fn make_styled_string(
     style_computer: &StyleComputer,
-    text: String,
+    text: NuString,
     value: Option<&Value>, // None represents table holes.
     float_precision: usize,
 ) -> NuText {

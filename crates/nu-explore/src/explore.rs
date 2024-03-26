@@ -184,7 +184,7 @@ fn style_from_config(config: &HashMap<NuString, Value>) -> StyleConfig {
     style
 }
 
-fn prepare_default_config(config: &mut HashMap<String, Value>) {
+fn prepare_default_config(config: &mut HashMap<NuString, Value>) {
     const STATUS_BAR: Style = color(
         Some(Color::Rgb(29, 31, 33)),
         Some(Color::Rgb(196, 201, 198)),
@@ -227,7 +227,7 @@ fn prepare_default_config(config: &mut HashMap<String, Value>) {
         insert_style(&mut hm, "warn", STATUS_WARN);
         insert_style(&mut hm, "error", STATUS_ERROR);
 
-        config.insert(String::from("status"), map_into_value(hm));
+        config.insert("status".into(), map_into_value(hm));
     }
 
     {
@@ -241,11 +241,11 @@ fn prepare_default_config(config: &mut HashMap<String, Value>) {
         insert_style(&mut hm, "selected_row", TABLE_SELECT_ROW);
         insert_style(&mut hm, "selected_column", TABLE_SELECT_COLUMN);
 
-        config.insert(String::from("table"), map_into_value(hm));
+        config.insert("table".into(), map_into_value(hm));
     }
 }
 
-fn parse_hash_map(value: &Value) -> Option<HashMap<String, Value>> {
+fn parse_hash_map(value: &Value) -> Option<HashMap<NuString, Value>> {
     value.as_record().ok().map(|val| {
         val.iter()
             .map(|(col, val)| (col.clone(), val.clone()))
@@ -269,7 +269,7 @@ const fn color(foreground: Option<Color>, background: Option<Color>) -> Style {
     }
 }
 
-fn insert_style(map: &mut HashMap<String, Value>, key: &str, value: Style) {
+fn insert_style(map: &mut HashMap<NuString, Value>, key: &str, value: Style) {
     if map.contains_key(key) {
         return;
     }
@@ -280,16 +280,16 @@ fn insert_style(map: &mut HashMap<String, Value>, key: &str, value: Style) {
 
     let value = nu_color_config::NuStyle::from(value);
     if let Ok(val) = nu_json::to_string_raw(&value) {
-        map.insert(String::from(key), Value::string(val, Span::unknown()));
+        map.insert(key.into(), Value::string(val, Span::unknown()));
     }
 }
 
-fn insert_bool(map: &mut HashMap<String, Value>, key: &str, value: bool) {
+fn insert_bool(map: &mut HashMap<NuString, Value>, key: &str, value: bool) {
     if map.contains_key(key) {
         return;
     }
 
-    map.insert(String::from(key), Value::bool(value, Span::unknown()));
+    map.insert(key.into(), Value::bool(value, Span::unknown()));
 }
 
 fn include_nu_config(config: &mut HashMap<NuString, Value>, style_computer: &StyleComputer) {
@@ -300,7 +300,7 @@ fn include_nu_config(config: &mut HashMap<NuString, Value>, style_computer: &Sty
             .and_then(parse_hash_map)
             .unwrap_or_default();
         insert_style(&mut map, "split_line", line_color);
-        config.insert(String::from("table"), map_into_value(map));
+        config.insert("table".into(), map_into_value(map));
     }
 }
 

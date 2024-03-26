@@ -242,7 +242,7 @@ mod tests {
         Value::test_record(
             cols.into_iter()
                 .zip(vals)
-                .map(|(col, val)| (col.to_owned(), Value::test_string(val)))
+                .map(|(col, val)| (col.into(), Value::test_string(val)))
                 .collect(),
         )
     }

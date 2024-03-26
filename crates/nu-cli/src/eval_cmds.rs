@@ -4,15 +4,15 @@ use nu_engine::{convert_env_values, eval_block};
 use nu_parser::parse;
 use nu_protocol::debugger::WithoutDebug;
 use nu_protocol::engine::Stack;
-use nu_protocol::report_error;
 use nu_protocol::{
     engine::{EngineState, StateWorkingSet},
     PipelineData, Spanned, Value,
 };
+use nu_protocol::{report_error, NuString};
 
 /// Run a command (or commands) given to us by the user
 pub fn evaluate_commands(
-    commands: &Spanned<String>,
+    commands: &Spanned<NuString>,
     engine_state: &mut EngineState,
     stack: &mut Stack,
     input: PipelineData,

@@ -3,6 +3,7 @@ use std::path::Path;
 use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{EngineState, Stack, StateWorkingSet};
+use nu_protocol::NuString;
 use nu_protocol::{
     engine::Command, Category, Example, PipelineData, Record, ShellError, Signature, Span, Spanned,
     SyntaxShape, Type, Value,
@@ -11,7 +12,7 @@ use nu_protocol::{
 use super::PathSubcommandArguments;
 
 struct Arguments {
-    extension: Option<Spanned<String>>,
+    extension: Option<Spanned<NuString>>,
 }
 
 impl PathSubcommandArguments for Arguments {}

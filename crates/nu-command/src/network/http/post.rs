@@ -2,7 +2,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    Category, Example, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type, Value,
+    Category, Example, NuString, PipelineData, ShellError, Signature, Spanned, SyntaxShape, Type,
+    Value,
 };
 
 use crate::network::http::client::{
@@ -146,7 +147,7 @@ struct Arguments {
     timeout: Option<Value>,
     full: bool,
     allow_errors: bool,
-    redirect: Option<Spanned<String>>,
+    redirect: Option<Spanned<NuString>>,
 }
 
 fn run_post(

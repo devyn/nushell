@@ -4,13 +4,14 @@ use super::PathSubcommandArguments;
 use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{EngineState, Stack, StateWorkingSet};
+use nu_protocol::NuString;
 use nu_protocol::{
     engine::Command, Category, Example, PipelineData, ShellError, Signature, Span, Spanned,
     SyntaxShape, Type, Value,
 };
 
 struct Arguments {
-    replace: Option<Spanned<String>>,
+    replace: Option<Spanned<NuString>>,
 }
 
 impl PathSubcommandArguments for Arguments {}

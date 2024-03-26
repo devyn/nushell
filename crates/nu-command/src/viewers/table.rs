@@ -516,7 +516,9 @@ fn build_table_kv(
             flatten,
             flatten_separator,
         } => {
-            let sep = flatten_separator.unwrap_or_else(|| String::from(' '));
+            let sep = flatten_separator
+                .map(String::from)
+                .unwrap_or_else(|| ' '.into());
             ExpandedTable::new(limit, flatten, sep).build_map(&record, opts)
         }
         TableView::Collapsed => {
@@ -539,7 +541,9 @@ fn build_table_batch(
             flatten,
             flatten_separator,
         } => {
-            let sep = flatten_separator.unwrap_or_else(|| String::from(' '));
+            let sep = flatten_separator
+                .map(String::from)
+                .unwrap_or_else(|| ' '.into());
             ExpandedTable::new(limit, flatten, sep).build_list(&vals, opts)
         }
         TableView::Collapsed => {
@@ -573,7 +577,7 @@ fn handle_row_stream(
                 )?),
                 None => None,
             };
-            let ls_colors = get_ls_colors(&ls_colors_env_str);
+            let ls_colors = get_ls_colors(ls_colors_env_str.as_deref());
 
             ListStream::from_stream(
                 stream.map(move |mut x| match &mut x {
@@ -725,7 +729,7 @@ impl PagingTableCreator {
         batch: Vec<Value>,
         limit: Option<usize>,
         flatten: bool,
-        flatten_separator: Option<String>,
+        flatten_separator: Option<NuString>,
     ) -> StringResult {
         if batch.is_empty() {
             return Ok(None);
@@ -989,7 +993,7 @@ enum TableView {
     Expanded {
         limit: Option<usize>,
         flatten: bool,
-        flatten_separator: Option<String>,
+        flatten_separator: Option<NuString>,
     },
 }
 

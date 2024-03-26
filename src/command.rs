@@ -110,11 +110,11 @@ pub(crate) fn parse_commandline_args(
             let ide_complete: Option<Value> =
                 call.get_flag(engine_state, &mut stack, "ide-complete")?;
             let ide_check: Option<Value> = call.get_flag(engine_state, &mut stack, "ide-check")?;
-            let ide_ast: Option<Spanned<String>> = call.get_named_arg("ide-ast");
+            let ide_ast: Option<Spanned<NuString>> = call.get_named_arg("ide-ast");
 
             fn extract_contents(
                 expression: Option<&Expression>,
-            ) -> Result<Option<Spanned<String>>, ShellError> {
+            ) -> Result<Option<Spanned<NuString>>, ShellError> {
                 if let Some(expr) = expression {
                     let str = expr.as_string();
                     if let Some(str) = str {
@@ -211,29 +211,29 @@ pub(crate) fn parse_commandline_args(
 
 #[derive(Clone)]
 pub(crate) struct NushellCliArgs {
-    pub(crate) redirect_stdin: Option<Spanned<String>>,
-    pub(crate) login_shell: Option<Spanned<String>>,
-    pub(crate) interactive_shell: Option<Spanned<String>>,
-    pub(crate) commands: Option<Spanned<String>>,
-    pub(crate) testbin: Option<Spanned<String>>,
+    pub(crate) redirect_stdin: Option<Spanned<NuString>>,
+    pub(crate) login_shell: Option<Spanned<NuString>>,
+    pub(crate) interactive_shell: Option<Spanned<NuString>>,
+    pub(crate) commands: Option<Spanned<NuString>>,
+    pub(crate) testbin: Option<Spanned<NuString>>,
     #[cfg(feature = "plugin")]
-    pub(crate) plugin_file: Option<Spanned<String>>,
-    pub(crate) no_config_file: Option<Spanned<String>>,
-    pub(crate) no_history: Option<Spanned<String>>,
-    pub(crate) no_std_lib: Option<Spanned<String>>,
-    pub(crate) config_file: Option<Spanned<String>>,
-    pub(crate) env_file: Option<Spanned<String>>,
-    pub(crate) log_level: Option<Spanned<String>>,
-    pub(crate) log_target: Option<Spanned<String>>,
-    pub(crate) execute: Option<Spanned<String>>,
+    pub(crate) plugin_file: Option<Spanned<NuString>>,
+    pub(crate) no_config_file: Option<Spanned<NuString>>,
+    pub(crate) no_history: Option<Spanned<NuString>>,
+    pub(crate) no_std_lib: Option<Spanned<NuString>>,
+    pub(crate) config_file: Option<Spanned<NuString>>,
+    pub(crate) env_file: Option<Spanned<NuString>>,
+    pub(crate) log_level: Option<Spanned<NuString>>,
+    pub(crate) log_target: Option<Spanned<NuString>>,
+    pub(crate) execute: Option<Spanned<NuString>>,
     pub(crate) table_mode: Option<Value>,
-    pub(crate) include_path: Option<Spanned<String>>,
+    pub(crate) include_path: Option<Spanned<NuString>>,
     pub(crate) lsp: bool,
     pub(crate) ide_goto_def: Option<Value>,
     pub(crate) ide_hover: Option<Value>,
     pub(crate) ide_complete: Option<Value>,
     pub(crate) ide_check: Option<Value>,
-    pub(crate) ide_ast: Option<Spanned<String>>,
+    pub(crate) ide_ast: Option<Spanned<NuString>>,
 }
 
 #[derive(Clone)]

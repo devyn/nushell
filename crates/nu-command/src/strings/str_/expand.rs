@@ -201,7 +201,11 @@ impl Command for SubCommand {
                 let value_span = v.span();
                 match v.coerce_into_string() {
                     Ok(s) => {
-                        let contents = if is_path { s.replace('\\', "\\\\") } else { s };
+                        let contents = if is_path {
+                            s.replace('\\', "\\\\").into()
+                        } else {
+                            s
+                        };
                         str_expand(&contents, span, value_span)
                     }
                     Err(_) => Value::error(

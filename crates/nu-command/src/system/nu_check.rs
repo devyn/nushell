@@ -110,7 +110,7 @@ impl Command for NuCheck {
                                 path
                             } else {
                                 return Err(ShellError::FileNotFound {
-                                    file: path_str.item,
+                                    file: path_str.item.into(),
                                     span: path_span,
                                 });
                             }
@@ -332,7 +332,7 @@ fn check_path(
     working_set: &mut StateWorkingSet,
     path_span: Span,
     call_head: Span,
-) -> Result<String, ShellError> {
+) -> Result<NuString, ShellError> {
     let bytes = working_set.get_span_contents(path_span);
     let (filename, err) = unescape_unquote_string(bytes, path_span);
     if let Some(e) = err {

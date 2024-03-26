@@ -729,9 +729,7 @@ fn trim_expand_and_apply_arg(
         span: arg.span,
     };
     if !keep_raw {
-        arg.item = nu_path::expand_tilde(arg.item)
-            .to_string_lossy()
-            .to_string();
+        arg.item = nu_path::expand_tilde(arg.item).to_string_lossy().into();
     }
     let cwd = PathBuf::from(cwd);
     if arg.item.contains('*') && run_glob_expansion {
@@ -778,7 +776,7 @@ fn trim_expand_and_apply_arg(
 }
 
 /// Given an invalid command name, try to suggest an alternative
-fn suggest_command(attempted_command: &str, engine_state: &EngineState) -> Option<String> {
+fn suggest_command(attempted_command: &str, engine_state: &EngineState) -> Option<NuString> {
     let commands = engine_state.get_signatures(false);
     let command_folded_case = attempted_command.to_folded_case();
     let search_term_match = commands.iter().find(|sig| {
@@ -789,8 +787,8 @@ fn suggest_command(attempted_command: &str, engine_state: &EngineState) -> Optio
     match search_term_match {
         Some(sig) => Some(sig.name.clone()),
         None => {
-            let command_names: Vec<String> = commands.iter().map(|sig| sig.name.clone()).collect();
-            did_you_mean(&command_names, attempted_command)
+            let command_names: Vec<&str> = commands.iter().map(|sig| sig.name.as_str()).collect();
+            did_you_mean(&command_names, attempted_command).map(NuString::from)
         }
     }
 }
@@ -799,7 +797,7 @@ fn suggest_command(attempted_command: &str, engine_state: &EngineState) -> Optio
 /// 1st item: trimmed string.
 /// 2nd item: a boolean value indicate if it's ok to run glob expansion.
 /// 3rd item: a boolean value indicate if we need to keep raw string.
-fn trim_enclosing_quotes(input: &str) -> (String, bool, bool) {
+fn trim_enclosing_quotes(input: &NuString) -> (NuString, bool, bool) {
     let mut chars = input.chars();
 
     match (chars.next(), chars.next_back()) {
@@ -807,19 +805,20 @@ fn trim_enclosing_quotes(input: &str) -> (String, bool, bool) {
         (Some('\''), Some('\'')) => (chars.collect(), false, true),
         // We treat back-quoted strings as bare words, so there's no need to keep them as raw strings
         (Some('`'), Some('`')) => (chars.collect(), true, false),
-        _ => (input.to_string(), true, false),
+        _ => (input.clone(), true, false),
     }
 }
 
-fn remove_quotes(input: String) -> String {
+fn remove_quotes(input: NuString) -> NuString {
     let mut chars = input.chars();
 
     match (chars.next_back(), input.contains('=')) {
         (Some('"'), true) => chars
             .collect::<String>()
             .replacen('"', "", 1)
-            .replace(r#"\""#, "\""),
-        (Some('\''), true) => chars.collect::<String>().replacen('\'', "", 1),
+            .replace(r#"\""#, "\"")
+            .into(),
+        (Some('\''), true) => chars.collect::<String>().replacen('\'', "", 1).into(),
         _ => input,
     }
 }

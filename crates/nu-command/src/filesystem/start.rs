@@ -4,6 +4,7 @@ use nu_engine::CallExt;
 use nu_path::canonicalize_with;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
+use nu_protocol::NuString;
 use nu_protocol::{
     Category, Example, PipelineData, ShellError, Signature, Span, Spanned, SyntaxShape, Type,
 };
@@ -41,7 +42,7 @@ impl Command for Start {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        let path = call.req::<Spanned<String>>(engine_state, stack, 0)?;
+        let path = call.req::<Spanned<NuString>>(engine_state, stack, 0)?;
         let path = Spanned {
             item: nu_utils::strip_ansi_string_unlikely(path.item),
             span: path.span,

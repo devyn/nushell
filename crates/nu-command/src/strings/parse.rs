@@ -232,8 +232,8 @@ fn operate(
     }
 }
 
-fn build_regex(input: &str, span: Span) -> Result<String, ShellError> {
-    let mut output = "(?s)\\A".to_string();
+fn build_regex(input: &str, span: Span) -> Result<NuString, ShellError> {
+    let mut output = String::from("(?s)\\A");
 
     //let mut loop_input = input;
     let mut loop_input = input.chars().peekable();
@@ -283,17 +283,17 @@ fn build_regex(input: &str, span: Span) -> Result<String, ShellError> {
     }
 
     output.push_str("\\z");
-    Ok(output)
+    Ok(NuString::from(output))
 }
 
-fn column_names(regex: &Regex) -> Vec<String> {
+fn column_names(regex: &Regex) -> Vec<NuString> {
     regex
         .capture_names()
         .enumerate()
         .skip(1)
         .map(|(i, name)| {
-            name.map(String::from)
-                .unwrap_or_else(|| format!("capture{}", i - 1))
+            name.map(NuString::from)
+                .unwrap_or_else(|| format!("capture{}", i - 1).into())
         })
         .collect()
 }
@@ -302,7 +302,7 @@ pub struct ParseStreamer {
     span: Span,
     excess: Vec<Value>,
     regex: Regex,
-    columns: Vec<String>,
+    columns: Vec<NuString>,
     stream: Box<dyn Iterator<Item = Value> + Send + 'static>,
     ctrlc: Option<Arc<AtomicBool>>,
 }
@@ -356,7 +356,7 @@ pub struct ParseStreamerExternal {
     span: Span,
     excess: Vec<Value>,
     regex: Regex,
-    columns: Vec<String>,
+    columns: Vec<NuString>,
     stream: Box<dyn Iterator<Item = Result<Vec<u8>, ShellError>> + Send + 'static>,
 }
 
@@ -388,7 +388,7 @@ impl Iterator for ParseStreamerExternal {
             _ => return None,
         };
 
-        let Ok(chunk) = String::from_utf8(chunk) else {
+        let Ok(chunk) = NuString::from_utf8(chunk) else {
             return Some(Value::error(
                 ShellError::PipelineMismatch {
                     exp_input_type: "string".into(),
@@ -412,8 +412,8 @@ impl Iterator for ParseStreamerExternal {
 fn stream_helper(
     regex: Regex,
     span: Span,
-    s: String,
-    columns: Vec<String>,
+    s: NuString,
+    columns: Vec<NuString>,
     excess: &mut Vec<Value>,
 ) -> Option<Value> {
     let results = regex.captures_iter(&s);

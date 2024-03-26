@@ -3,7 +3,10 @@ use std::fs::symlink_metadata;
 use lscolors::LsColors;
 use nu_ansi_term::{Color, Style};
 use nu_engine::env_to_string;
-use nu_protocol::engine::{EngineState, Stack};
+use nu_protocol::{
+    engine::{EngineState, Stack},
+    NuString,
+};
 use nu_utils::get_ls_colors;
 
 use super::NuText;
@@ -13,10 +16,10 @@ pub fn create_lscolors(engine_state: &EngineState, stack: &Stack) -> LsColors {
         .get_env_var(engine_state, "LS_COLORS")
         .and_then(|v| env_to_string("LS_COLORS", &v, engine_state, stack).ok());
 
-    get_ls_colors(colors)
+    get_ls_colors(colors.as_deref())
 }
 
-pub fn lscolorize(header: &[String], data: &mut [Vec<NuText>], lscolors: &LsColors) {
+pub fn lscolorize(header: &[NuString], data: &mut [Vec<NuText>], lscolors: &LsColors) {
     for (col, col_name) in header.iter().enumerate() {
         if col_name != "name" {
             continue;

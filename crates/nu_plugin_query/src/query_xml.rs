@@ -1,5 +1,7 @@
 use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, SimplePluginCommand};
-use nu_protocol::{record, Category, PluginSignature, Record, Span, Spanned, SyntaxShape, Value, NuString};
+use nu_protocol::{
+    record, Category, NuString, PluginSignature, Record, Span, Spanned, SyntaxShape, Value,
+};
 use sxd_document::parser;
 use sxd_xpath::{Context, Factory};
 
@@ -73,9 +75,8 @@ pub fn execute_xpath_query(
     if query_string.len() >= 20 {
         key.truncate(17);
         key += "...";
-    } else {
-        key = query_string.to_string();
-    };
+        key = key.intern();
+    }
 
     match res {
         Ok(r) => {
@@ -137,7 +138,7 @@ fn build_xpath(xpath_str: &str, span: Span) -> Result<sxd_xpath::XPath, LabeledE
 mod tests {
     use super::execute_xpath_query as query;
     use nu_plugin::EvaluatedCall;
-    use nu_protocol::{record, Span, Spanned, Value};
+    use nu_protocol::{record, NuString, Span, Spanned, Value};
 
     #[test]
     fn position_function_in_predicate() {
@@ -152,8 +153,8 @@ mod tests {
             Span::test_data(),
         );
 
-        let spanned_str: Spanned<String> = Spanned {
-            item: "count(//a/*[position() = 2])".to_string(),
+        let spanned_str: Spanned<NuString> = Spanned {
+            item: "count(//a/*[position() = 2])".into(),
             span: Span::test_data(),
         };
 
@@ -181,8 +182,8 @@ mod tests {
             Span::test_data(),
         );
 
-        let spanned_str: Spanned<String> = Spanned {
-            item: "count(//*[contains(., true)])".to_string(),
+        let spanned_str: Spanned<NuString> = Spanned {
+            item: "count(//*[contains(., true)])".into(),
             span: Span::test_data(),
         };
 

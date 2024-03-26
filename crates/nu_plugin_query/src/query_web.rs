@@ -1,6 +1,8 @@
 use crate::{web_tables::WebTable, Query};
 use nu_plugin::{EngineInterface, EvaluatedCall, LabeledError, SimplePluginCommand};
-use nu_protocol::{Category, PluginExample, PluginSignature, Record, Span, SyntaxShape, Value, NuString};
+use nu_protocol::{
+    Category, NuString, PluginExample, PluginSignature, Record, Span, SyntaxShape, Value,
+};
 use scraper::{Html, Selector as ScraperSelector};
 
 pub struct QueryWeb;
@@ -263,13 +265,13 @@ fn retrieve_table(mut table: WebTable, columns: &Value, span: Span) -> Value {
             let record = cols
                 .iter()
                 .map(|col| {
-                    let val = row
-                        .get(col)
-                        .unwrap_or(&format!("Missing column: '{}'", col));
+                    let val = row.get(col).map(NuString::from);
 
-                    if !at_least_one_row_filled && val != format!("Missing column: '{}'", col) {
+                    if !at_least_one_row_filled && val.is_some() {
                         at_least_one_row_filled = true;
                     }
+
+                    let val = val.unwrap_or_else(|| format!("Missing column: '{}'", col).into());
                     (col.into(), Value::string(val, span))
                 })
                 .collect();

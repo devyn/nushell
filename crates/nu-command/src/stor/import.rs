@@ -67,7 +67,7 @@ impl Command for StorImport {
         let db = Box::new(SQLiteDatabase::new(std::path::Path::new(MEMORY_DB), None));
 
         if let Ok(mut conn) = db.open_connection() {
-            db.restore_database_from_file(&mut conn, file_name)
+            db.restore_database_from_file(&mut conn, &file_name)
                 .map_err(|err| ShellError::GenericError {
                     error: "Failed to open SQLite connection in memory from import".into(),
                     msg: err.to_string(),

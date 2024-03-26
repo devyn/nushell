@@ -21,7 +21,7 @@ const LOGINSHELL_FILE: &str = "login.nu";
 pub(crate) fn read_config_file(
     engine_state: &mut EngineState,
     stack: &mut Stack,
-    config_file: Option<Spanned<String>>,
+    config_file: Option<Spanned<NuString>>,
     is_env_config: bool,
 ) {
     // Load config startup file
@@ -191,9 +191,9 @@ fn eval_default_config(
 pub(crate) fn setup_config(
     engine_state: &mut EngineState,
     stack: &mut Stack,
-    #[cfg(feature = "plugin")] plugin_file: Option<Spanned<String>>,
-    config_file: Option<Spanned<String>>,
-    env_file: Option<Spanned<String>>,
+    #[cfg(feature = "plugin")] plugin_file: Option<Spanned<NuString>>,
+    config_file: Option<Spanned<NuString>>,
+    env_file: Option<Spanned<NuString>>,
     is_login_shell: bool,
 ) {
     let result = catch_unwind(AssertUnwindSafe(|| {
@@ -220,7 +220,7 @@ pub(crate) fn set_config_path(
     cwd: &Path,
     default_config_name: &str,
     key: &str,
-    config_file: Option<&Spanned<String>>,
+    config_file: Option<&Spanned<NuString>>,
 ) {
     let config_path = match config_file {
         Some(s) => canonicalize_with(&s.item, cwd).ok(),

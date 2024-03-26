@@ -6,8 +6,8 @@ use nu_engine::CallExt;
 use nu_protocol::ast::Call;
 use nu_protocol::engine::{Command, EngineState, Stack};
 use nu_protocol::{
-    record, Category, Example, IntoInterruptiblePipelineData, PipelineData, Range, Record,
-    ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
+    record, Category, Example, IntoInterruptiblePipelineData, NuString, PipelineData, Range,
+    Record, ShellError, Signature, Span, Spanned, SyntaxShape, Type, Value,
 };
 
 type Input<'t> = Peekable<CharIndices<'t>>;
@@ -123,7 +123,7 @@ fn detect_columns(
 
         if noheader {
             for header in headers.iter_mut().enumerate() {
-                header.1.item = format!("column{}", header.0);
+                header.1.item = format!("column{}", header.0).into();
             }
         }
 
@@ -246,7 +246,7 @@ fn detect_columns(
     }
 }
 
-pub fn find_columns(input: &str) -> Vec<Spanned<String>> {
+pub fn find_columns(input: &str) -> Vec<Spanned<NuString>> {
     let mut chars = input.char_indices().peekable();
     let mut output = vec![];
 
@@ -274,8 +274,8 @@ enum BlockKind {
     Bracket,
 }
 
-fn baseline(src: &mut Input) -> Spanned<String> {
-    let mut token_contents = String::new();
+fn baseline(src: &mut Input) -> Spanned<NuString> {
+    let mut token_contents = NuString::new();
 
     let start_offset = if let Some((pos, _)) = src.peek() {
         *pos
