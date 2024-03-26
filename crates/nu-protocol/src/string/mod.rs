@@ -290,7 +290,7 @@ impl<'de> Deserialize<'de> for NuString {
     where
         D: serde::Deserializer<'de>,
     {
-        <&'de str as Deserialize>::deserialize(deserializer).map(NuString::from)
+        <Cow<'de, str> as Deserialize>::deserialize(deserializer).map(NuString::from)
     }
 }
 
