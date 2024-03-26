@@ -2666,7 +2666,7 @@ pub fn unescape_unquote_string(bytes: &[u8], span: Span) -> (NuString, Option<Pa
         let (bytes, err) = unescape_string(bytes, span);
 
         if let Ok(token) = str::from_utf8(&bytes) {
-            (token.into(), err)
+            (NuString::interned(token), err)
         } else {
             (NuString::new(), Some(ParseError::Expected("string", span)))
         }
@@ -2674,7 +2674,7 @@ pub fn unescape_unquote_string(bytes: &[u8], span: Span) -> (NuString, Option<Pa
         let bytes = trim_quotes(bytes);
 
         if let Ok(token) = str::from_utf8(bytes.into()) {
-            (token.into(), None)
+            (NuString::interned(token), None)
         } else {
             (NuString::new(), Some(ParseError::Expected("string", span)))
         }
@@ -2753,7 +2753,7 @@ pub fn parse_string_strict(working_set: &mut StateWorkingSet, span: Span) -> Exp
 
         if quoted {
             Expression {
-                expr: Expr::String(token.into()),
+                expr: Expr::String(NuString::interned(token)),
                 span,
                 ty: Type::String,
                 custom_completion: None,
@@ -2764,7 +2764,7 @@ pub fn parse_string_strict(working_set: &mut StateWorkingSet, span: Span) -> Exp
             garbage(span)
         } else {
             Expression {
-                expr: Expr::String(token.into()),
+                expr: Expr::String(NuString::interned(token)),
                 span,
                 ty: Type::String,
                 custom_completion: None,
