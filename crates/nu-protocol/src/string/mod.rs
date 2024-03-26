@@ -42,6 +42,12 @@ impl NuString {
         NuString(Variant::Empty)
     }
 
+    /// Create an interned string from a string slice. The string will be shared, making clones
+    /// cheaper.
+    pub fn interned(s: &str) -> Self {
+        NuString(Variant::Shared(s.into()))
+    }
+
     /// Create a new empty string from UTF-8 encoded text. Returns `Err` if there was a problem with
     /// decoding.
     pub fn from_utf8(encoded: Vec<u8>) -> Result<NuString, FromUtf8Error> {
