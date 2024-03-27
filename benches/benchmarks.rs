@@ -10,6 +10,10 @@ use nu_std::load_standard_library;
 use nu_utils::{get_default_config, get_default_env};
 use std::path::{Path, PathBuf};
 
+// Allows profiling of allocations and deallocations.
+#[global_allocator]
+static ALLOC: divan::AllocProfiler = divan::AllocProfiler::system();
+
 fn main() {
     // Run registered benchmarks.
     divan::main();
