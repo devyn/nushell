@@ -39,12 +39,8 @@ pub fn eval_ir_block<D: DebugContext>(
         let args_base = stack.arguments.get_base();
         let error_handler_base = stack.error_handlers.get_base();
 
-        // Allocate and initialize registers. I've found that it's not really worth trying to avoid
-        // the heap allocation here by reusing buffers - our allocator is fast enough
-        let mut registers = Vec::with_capacity(ir_block.register_count as usize);
-        for _ in 0..ir_block.register_count {
-            registers.push(PipelineData::Empty);
-        }
+        // Allocate and initialize registers.
+        let mut registers = stack.register_buf_cache.acquire(ir_block.register_count);
 
         // Initialize file storage.
         let mut files = vec![None; ir_block.file_count as usize];
@@ -67,6 +63,7 @@ pub fn eval_ir_block<D: DebugContext>(
             input,
         );
 
+        stack.register_buf_cache.release(registers);
         stack.error_handlers.leave_frame(error_handler_base);
         stack.arguments.leave_frame(args_base);
 
@@ -1017,11 +1014,23 @@ fn eval_call<D: DebugContext>(
             head,
         )?;
 
+        // Swap the RegisterBufCache onto the new stack so that we can reuse the buffers
+        std::mem::swap(
+            &mut caller_stack.register_buf_cache,
+            &mut callee_stack.register_buf_cache,
+        );
+
         // Add one to the recursion count, so we don't recurse too deep. Stack overflows are not
         // recoverable in Rust.
         callee_stack.recursion_count += 1;
 
         result = eval_block_with_early_return::<D>(engine_state, &mut callee_stack, block, input);
+
+        // Recover the RegisterBufCache
+        std::mem::swap(
+            &mut caller_stack.register_buf_cache,
+            &mut callee_stack.register_buf_cache,
+        );
 
         // Move environment variables back into the caller stack scope if requested to do so
         if block.redirect_env {

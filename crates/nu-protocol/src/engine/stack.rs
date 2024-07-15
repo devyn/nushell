@@ -1,7 +1,7 @@
 use crate::{
     engine::{
-        ArgumentStack, EngineState, ErrorHandlerStack, Redirection, StackCallArgGuard,
-        StackCaptureGuard, StackIoGuard, StackOutDest, DEFAULT_OVERLAY_NAME,
+        ArgumentStack, EngineState, ErrorHandlerStack, Redirection, RegisterBufCache,
+        StackCallArgGuard, StackCaptureGuard, StackIoGuard, StackOutDest, DEFAULT_OVERLAY_NAME,
     },
     Config, OutDest, ShellError, Span, Value, VarId, ENV_VARIABLE_ID, NU_VARIABLE_ID,
 };
@@ -41,6 +41,8 @@ pub struct Stack {
     pub env_hidden: Arc<HashMap<String, HashSet<String>>>,
     /// List of active overlays
     pub active_overlays: Vec<String>,
+    /// Cached register buffers for IR evaluation
+    pub register_buf_cache: RegisterBufCache,
     /// Argument stack for IR evaluation
     pub arguments: ArgumentStack,
     /// Error handler stack for IR evaluation
@@ -76,6 +78,7 @@ impl Stack {
             env_vars: Vec::new(),
             env_hidden: Arc::new(HashMap::new()),
             active_overlays: vec![DEFAULT_OVERLAY_NAME.to_string()],
+            register_buf_cache: RegisterBufCache::new(),
             arguments: ArgumentStack::new(),
             error_handlers: ErrorHandlerStack::new(),
             use_ir: false,
@@ -97,6 +100,7 @@ impl Stack {
             env_vars: parent.env_vars.clone(),
             env_hidden: parent.env_hidden.clone(),
             active_overlays: parent.active_overlays.clone(),
+            register_buf_cache: RegisterBufCache::new(),
             arguments: ArgumentStack::new(),
             error_handlers: ErrorHandlerStack::new(),
             use_ir: parent.use_ir,
@@ -301,6 +305,7 @@ impl Stack {
             env_vars,
             env_hidden: self.env_hidden.clone(),
             active_overlays: self.active_overlays.clone(),
+            register_buf_cache: RegisterBufCache::new(),
             arguments: ArgumentStack::new(),
             error_handlers: ErrorHandlerStack::new(),
             use_ir: self.use_ir,
@@ -335,6 +340,7 @@ impl Stack {
             env_vars,
             env_hidden: self.env_hidden.clone(),
             active_overlays: self.active_overlays.clone(),
+            register_buf_cache: RegisterBufCache::new(),
             arguments: ArgumentStack::new(),
             error_handlers: ErrorHandlerStack::new(),
             use_ir: self.use_ir,
