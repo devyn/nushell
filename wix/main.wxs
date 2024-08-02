@@ -405,7 +405,7 @@
         <SetProperty
             Id="ReplacePathsInWindowsTerminalProfile"
             Sequence="execute"
-            Value="&quot;[#exe0]&quot; -c &quot;let doc = (open `[#WindowsTerminalProfileFile]` | update profiles.commandline `[#exe0]` | update profiles.icon `[#icon0]`); $doc | save -f `[#WindowsTerminalProfileFile]`&quot;"
+            Value="&quot;[#exe0]&quot; -c &quot;let doc = (open `[#WindowsTerminalProfileFile]` | update profiles.commandline ((char double_quote) ++ `[#exe0]` ++ (char double_quote)) | update profiles.icon `[#icon0]`); $doc | save -f `[#WindowsTerminalProfileFile]`&quot;"
             After='CostFinalize'/>
         <CustomAction
             Id="ReplacePathsInWindowsTerminalProfile"
